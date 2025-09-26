@@ -1,33 +1,34 @@
-import { axiosInstance } from "@/lib/axios";
+// src/stores/useAuthStore.ts
 import { create } from "zustand";
+import { axiosInstance } from "@/lib/axios";
 
-interface AuthStore {
-	isAdmin: boolean;
-	isLoading: boolean;
-	error: string | null;
-
-	checkAdminStatus: () => Promise<void>;
-	reset: () => void;
+interface AuthState {
+  token: string | null;
+  isAdmin: boolean;
+  setToken: (token: string | null) => void;
+  checkAdminStatus: () => Promise<void>;
 }
 
-export const useAuthStore = create<AuthStore>((set) => ({
-	isAdmin: false,
-	isLoading: false,
-	error: null,
+export const useAuthStore = create<AuthState>((set) => ({
+  token: null,
+  isAdmin: false,
 
-	checkAdminStatus: async () => {
-		set({ isLoading: true, error: null });
-		try {
-			const response = await axiosInstance.get("/admin/check");
-			set({ isAdmin: response.data.admin });
-		} catch (error: any) {
-			set({ isAdmin: false, error: error.response.data.message });
-		} finally {
-			set({ isLoading: false });
-		}
-	},
+  setToken: (token) => {
+    if (token) {
+      axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    } else {
+      delete axiosInstance.defaults.headers.common["Authorization"];
+    }
+    set({ token });
+  },
 
-	reset: () => {
-		set({ isAdmin: false, isLoading: false, error: null });
-	},
+  checkAdminStatus: async () => {
+    try {
+      const res = await axiosInstance.get("/admin/check");
+      set({ isAdmin: res.data?.isAdmin || false });
+    } catch (err) {
+      console.error("Failed to check admin status", err);
+      set({ isAdmin: false });
+    }
+  },
 }));

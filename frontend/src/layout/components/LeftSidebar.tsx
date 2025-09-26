@@ -4,7 +4,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { SignedIn } from "@clerk/clerk-react";
-import { HomeIcon, Library, MessageCircle } from "lucide-react";
+import { HomeIcon, Library, MessageCircle, Search, Heart  } from "lucide-react";
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 
@@ -50,8 +50,38 @@ const LeftSidebar = () => {
 							<span className='hidden md:inline'>Messages</span>
 						</Link>
 					</SignedIn>
+
+					{/* Search */}
+					<Link
+					to="/search"
+					className={cn(
+						buttonVariants({
+							variant: "ghost",
+							className: "w-full justify-start text-white hover:bg-zinc-800",
+						})
+					)}
+				>
+					<Search className="mr-2 size-5" />
+					<span className='hidden md:inline'>Search</span>
+					</Link>
+
+					<SignedIn>
+					<Link
+						to="/favorites"
+						className={cn(
+						buttonVariants({
+							variant: "ghost",
+							className: "w-full justify-start text-white hover:bg-zinc-800",
+						})
+						)}
+					>
+						<Heart className="mr-2 size-5" />
+						<span className="hidden md:inline">Favourites</span>
+					</Link>
+					</SignedIn>
 				</div>
 			</div>
+			
 
 			{/* Library section */}
 			<div className='flex-1 rounded-lg bg-zinc-900 p-2'>
@@ -81,7 +111,7 @@ const LeftSidebar = () => {
 
 									<div className='flex-1 min-w-0 hidden md:block'>
 										<p className='font-medium truncate'>{album.title}</p>
-										<p className='text-sm text-zinc-400 truncate'>Album • {album.artist}</p>
+										<p className='text-sm text-zinc-400 truncate'>Playlist • {album.artist}</p>
 									</div>
 								</Link>
 							))

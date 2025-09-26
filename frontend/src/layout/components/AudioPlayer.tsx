@@ -1,50 +1,101 @@
-import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useEffect, useRef } from "react";
+import { usePlayerStore } from "@/stores/usePlayerStore";
 
 const AudioPlayer = () => {
-	const audioRef = useRef<HTMLAudioElement>(null);
-	const prevSongRef = useRef<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
-	const { currentSong, isPlaying, playNext } = usePlayerStore();
+  const {
+    currentSong,
+    isPlaying,
+    playNext,
+    playPrevious,
+    setDuration,
+    setCurrentTime,
+    setIsPlaying,
+    volume,
+  } = usePlayerStore();
 
-	// handle play/pause logic
-	useEffect(() => {
-		if (isPlaying) audioRef.current?.play();
-		else audioRef.current?.pause();
-	}, [isPlaying]);
+  // keep volume in sync
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume / 100;
+    }
+  }, [volume]);
 
-	// handle song ends
-	useEffect(() => {
-		const audio = audioRef.current;
+  // load new song
+  useEffect(() => {
+    if (!audioRef.current || !currentSong) return;
+    const audio = audioRef.current;
 
-		const handleEnded = () => {
-			playNext();
-		};
+    // only reset src if it's a new song
+    if (audio.src !== currentSong.audioUrl) {
+      audio.src = currentSong.audioUrl;
+      audio.currentTime = 0;
+    }
 
-		audio?.addEventListener("ended", handleEnded);
+    // ✅ Media Session API for lockscreen/notification
+    if ("mediaSession" in navigator && currentSong) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: currentSong.title,
+        artist: currentSong.artist,
+        artwork: [
+          { src: currentSong.imageUrl, sizes: "512x512", type: "image/png" },
+        ],
+      });
 
-		return () => audio?.removeEventListener("ended", handleEnded);
-	}, [playNext]);
+      navigator.mediaSession.setActionHandler("play", () => {
+        audio.play();
+        setIsPlaying(true);
+      });
+      navigator.mediaSession.setActionHandler("pause", () => {
+        audio.pause();
+        setIsPlaying(false);
+      });
+      navigator.mediaSession.setActionHandler("previoustrack", () =>
+        playPrevious()
+      );
+      navigator.mediaSession.setActionHandler("nexttrack", () => playNext());
+    }
 
-	// handle song changes
-	useEffect(() => {
-		if (!audioRef.current || !currentSong) return;
+    if (isPlaying) audio.play().catch(() => {});
+  }, [currentSong, isPlaying, playNext, playPrevious, setIsPlaying]);
 
-		const audio = audioRef.current;
+  // play/pause state sync
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
 
-		// check if this is actually a new song
-		const isSongChange = prevSongRef.current !== currentSong?.audioUrl;
-		if (isSongChange) {
-			audio.src = currentSong?.audioUrl;
-			// reset the playback position
-			audio.currentTime = 0;
+    if (isPlaying) audio.play().catch(() => {});
+    else audio.pause();
+  }, [isPlaying]);
 
-			prevSongRef.current = currentSong?.audioUrl;
+  // attach listeners once
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
 
-			if (isPlaying) audio.play();
-		}
-	}, [currentSong, isPlaying]);
+    const handleTime = () => setCurrentTime(audio.currentTime);
+    const handleDuration = () => setDuration(audio.duration);
+    const handleEnded = () => playNext();
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
 
-	return <audio ref={audioRef} />;
+    audio.addEventListener("timeupdate", handleTime);
+    audio.addEventListener("loadedmetadata", handleDuration);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTime);
+      audio.removeEventListener("loadedmetadata", handleDuration);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+    };
+  }, [playNext, setDuration, setCurrentTime, setIsPlaying]);
+
+  return <audio ref={audioRef} />;
 };
+
 export default AudioPlayer;

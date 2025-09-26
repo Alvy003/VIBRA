@@ -173,18 +173,36 @@ const AddSongDialog = () => {
 							className='bg-zinc-800 border-zinc-700'
 						/>
 					</div>
-
-					<div className='space-y-2'>
-						<label className='text-sm font-medium'>Duration (seconds)</label>
+					<div className="space-y-2">
+					<label className="text-sm font-medium">Duration</label>
+					<div className="flex gap-2">
 						<Input
-							type='number'
-							min='0'
-							value={newSong.duration}
-							onChange={(e) => setNewSong({ ...newSong, duration: e.target.value || "0" })}
-							className='bg-zinc-800 border-zinc-700'
+						type="number"
+						min="0"
+						placeholder="Minutes"
+						value={Math.floor(Number(newSong.duration) / 60)}
+						onChange={(e) => {
+							const minutes = Number(e.target.value || "0");
+							const seconds = Number(newSong.duration) % 60;
+							setNewSong({ ...newSong, duration: String(minutes * 60 + seconds) });
+						}}
+						className="bg-zinc-800 border-zinc-700"
+						/>
+						<Input
+						type="number"
+						min="0"
+						max="59"
+						placeholder="Seconds"
+						value={Number(newSong.duration) % 60}
+						onChange={(e) => {
+							const seconds = Number(e.target.value || "0");
+							const minutes = Math.floor(Number(newSong.duration) / 60);
+							setNewSong({ ...newSong, duration: String(minutes * 60 + seconds) });
+						}}
+						className="bg-zinc-800 border-zinc-700"
 						/>
 					</div>
-
+					</div>
 					<div className='space-y-2'>
 						<label className='text-sm font-medium'>Album (Optional)</label>
 						<Select

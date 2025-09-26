@@ -1,52 +1,68 @@
-import { axiosInstance } from "@/lib/axios";
-import { useAuthStore } from "@/stores/useAuthStore";
-import { useChatStore } from "@/stores/useChatStore";
+// src/providers/AuthProvider.tsx
+import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import { Loader } from "lucide-react";
-import { useEffect, useState } from "react";
-
-const updateApiToken = (token: string | null) => {
-	if (token) axiosInstance.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-	else delete axiosInstance.defaults.headers.common["Authorization"];
-};
+import { useAuthStore } from "@/stores/useAuthStore";
+import { useChatStore } from "@/stores/useChatStore";
+import { useMusicStore } from "@/stores/useMusicStore";
 
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-	const { getToken, userId } = useAuth();
-	const [loading, setLoading] = useState(true);
-	const { checkAdminStatus } = useAuthStore();
-	const { initSocket, disconnectSocket } = useChatStore();
+  const { getToken, userId, isSignedIn } = useAuth();
+  const [loading, setLoading] = useState(true);
 
-	useEffect(() => {
-		const initAuth = async () => {
-			try {
-				const token = await getToken();
-				updateApiToken(token);
-				if (token) {
-					await checkAdminStatus();
-					// init socket
-					if (userId) initSocket(userId);
-				}
-			} catch (error: any) {
-				updateApiToken(null);
-				console.log("Error in auth provider", error);
-			} finally {
-				setLoading(false);
-			}
-		};
+  const { setToken, checkAdminStatus } = useAuthStore();
+  const { initSocket, disconnectSocket } = useChatStore();
+  const { fetchLikedSongs, clearLikedSongs } = useMusicStore();
 
-		initAuth();
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (!isSignedIn) {
+          setToken(null);
+          clearLikedSongs(); // 🧹 reset likes on logout
+          return;
+        }
 
-		// clean up
-		return () => disconnectSocket();
-	}, [getToken, userId, checkAdminStatus, initSocket, disconnectSocket]);
+        const token = await getToken({ template: "api" }).catch(() => null);
+        setToken(token);
 
-	if (loading)
-		return (
-			<div className='h-screen w-full flex items-center justify-center'>
-				<Loader className='size-8 animate-spin' style={{ color: '#6A0DAD' }} />
-			</div>
-		);
+        if (token) {
+          await checkAdminStatus();
+          await fetchLikedSongs(); // ✅ preload liked songs
+          if (userId) initSocket(userId); // ✅ init chat socket
+        }
+      } catch (error) {
+        console.error("Error in auth provider", error);
+        setToken(null);
+        clearLikedSongs();
+      } finally {
+        setLoading(false);
+      }
+    };
 
-	return <>{children}</>;
+    initAuth();
+    return () => disconnectSocket();
+  }, [
+    isSignedIn,
+    userId,
+    getToken,
+    setToken,
+    checkAdminStatus,
+    initSocket,
+    disconnectSocket,
+    fetchLikedSongs,
+    clearLikedSongs,
+  ]);
+
+  if (loading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center">
+        <Loader className="size-8 animate-spin" style={{ color: "#6A0DAD" }} />
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 };
+
 export default AuthProvider;

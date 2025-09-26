@@ -78,7 +78,7 @@ const ChatPage = () => {
             <>
               <ChatHeader />
 
-              <ScrollArea className="h-[calc(100vh-340px)]">
+              <ScrollArea className="h-[calc(100vh-360px)]">
                 <div className="p-4 space-y-4">
                   {messages.map((message) => (
                     <div
@@ -116,7 +116,10 @@ const ChatPage = () => {
                 </div>
               </ScrollArea>
 
-              <MessageInput />
+              <div className="sm:mt-0 mt-14 px-2">
+  <MessageInput />
+</div>
+
             </>
           ) : (
             <NoConversationPlaceholder />

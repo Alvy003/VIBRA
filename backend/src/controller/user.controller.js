@@ -28,3 +28,50 @@ export const getMessages = async (req, res, next) => {
 		next(error);
 	}
 };
+
+// Like a song
+export const likeSong = async (req, res, next) => {
+	try {
+		const userId = req.auth().userId; // Clerk adds this
+		const { songId } = req.params;
+
+		const user = await User.findOneAndUpdate(
+			{ clerkId: userId },
+			{ $addToSet: { likedSongs: songId } }, // no duplicates
+			{ new: true }
+		).populate("likedSongs");
+
+		res.json(user.likedSongs);
+	} catch (err) {
+		next(err);
+	}
+};
+
+// Unlike a song
+export const unlikeSong = async (req, res, next) => {
+	try {
+		const userId = req.auth().userId;
+		const { songId } = req.params;
+
+		const user = await User.findOneAndUpdate(
+			{ clerkId: userId },
+			{ $pull: { likedSongs: songId } },
+			{ new: true }
+		).populate("likedSongs");
+
+		res.json(user.likedSongs);
+	} catch (err) {
+		next(err);
+	}
+};
+
+// Get liked songs
+export const getLikedSongs = async (req, res, next) => {
+	try {
+		const userId = req.auth().userId;
+		const user = await User.findOne({ clerkId: userId }).populate("likedSongs");
+		res.json(user.likedSongs);
+	} catch (err) {
+		next(err);
+	}
+};
