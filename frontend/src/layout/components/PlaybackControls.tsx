@@ -24,6 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { motion, AnimatePresence } from "framer-motion";
 
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return "0:00";
@@ -187,8 +188,19 @@ export const PlaybackControls = () => {
         flex flex-col sm:flex-row sm:justify-between items-center
         max-w-[1800px] mx-auto w-full`}
     >
+
+      <AnimatePresence initial={false}>
       {/* MOBILE MINI PLAYER */}
       {!isExpanded && currentSong && (
+        <motion.div
+        key="mini"
+        initial={{ opacity: 0, y: 40 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 40 }}
+        transition={{ duration: 0.3 }}
+        className="relative flex sm:hidden items-center gap-3 w-full h-16 cursor-pointer rounded-md overflow-hidden"
+        onClick={toggleExpand}
+      >
         <div
           className="relative flex sm:hidden items-center gap-3 w-full h-16 cursor-pointer rounded-md overflow-hidden"
           onClick={toggleExpand}
@@ -224,14 +236,14 @@ export const PlaybackControls = () => {
                   e.stopPropagation();
                   playPrevious();
                 }}
-                className="text-zinc-300 hover:text-white"
+                className="text-zinc-300 lg:hover:text-white"
               >
                 <SkipBack className="h-5 w-5" />
               </Button>
 
               <Button
                 size="icon"
-                className="bg-white hover:bg-white/80 text-black rounded-full h-9 w-9"
+                className="bg-white lg:hover:bg-white/80 text-black rounded-full h-9 w-9"
                 onClick={(e) => {
                   e.stopPropagation();
                   togglePlay();
@@ -247,17 +259,26 @@ export const PlaybackControls = () => {
                   e.stopPropagation();
                   playNext();
                 }}
-                className="text-zinc-300 hover:text-white"
+                className="text-zinc-300 lg:hover:text-white"
               >
                 <SkipForward className="h-5 w-5" />
               </Button>
             </div>
           </div>
         </div>
+        </motion.div>
       )}
 
       {/* MOBILE EXPANDED VIEW */}
       {isExpanded && currentSong && (
+        <motion.div
+        key="expanded"
+        initial={{ opacity: 0, y: "100%" }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: "100%" }}
+        transition={{ duration: 0.40, ease: "easeInOut" }}
+        className="sm:hidden relative flex flex-col h-screen w-full overflow-hidden pt-safe"
+      >
         <div className="sm:hidden relative flex flex-col h-full w-full overflow-hidden">
           <div
             className="absolute inset-0 bg-cover bg-center blur-2xl opacity-30"
@@ -266,11 +287,16 @@ export const PlaybackControls = () => {
           <div className="absolute inset-0 bg-gradient-to-t from-black via-zinc-900/80 to-transparent" />
 
           <div className="relative flex flex-col h-full px-6 py-4 text-white">
-            <div className="flex justify-start">
-              <Button size="icon" variant="ghost" className="text-zinc-300 hover:text-white" onClick={toggleExpand}>
-                <ChevronDown className="h-7 w-7 mt-1" />
-              </Button>
-            </div>
+              <div className="flex justify-start">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="text-zinc-300 sm:hover:text-white"
+                  onClick={toggleExpand}
+                >
+                  <ChevronDown className="h-7 w-7 mt-1" />
+                </Button>
+              </div>
 
             <div className="flex justify-center mt-12">
               <img
@@ -297,15 +323,15 @@ export const PlaybackControls = () => {
             </div>
 
             <div className="mt-9 flex items-center justify-center gap-12">
-              <Button size="icon" variant="ghost" className="text-zinc-400 hover:text-white" onClick={playPrevious}>
+              <Button size="icon" variant="ghost" className="text-zinc-400 lg:hover:text-white" onClick={playPrevious}>
                 <SkipBack className="h-9 w-9" />
               </Button>
 
-              <Button size="icon" className="bg-white hover:bg-white/80 text-black rounded-full h-16 w-16 shadow-lg" onClick={togglePlay}>
+              <Button size="icon" className="bg-white lg:hover:bg-white/80 text-black rounded-full h-16 w-16 shadow-lg" onClick={togglePlay}>
                 {isPlaying ? <Pause className="h-9 w-9" /> : <Play className="h-9 w-9" />}
               </Button>
 
-              <Button size="icon" variant="ghost" className="text-zinc-400 hover:text-white" onClick={playNext}>
+              <Button size="icon" variant="ghost" className="text-zinc-400 lg:hover:text-white" onClick={playNext}>
                 <SkipForward className="h-9 w-9" />
               </Button>
             </div>
@@ -326,7 +352,7 @@ export const PlaybackControls = () => {
             </div>
 
             <div className="mt-8 flex items-center justify-center gap-2">
-              <Button size="icon" variant="ghost" className="hover:text-white text-zinc-400">
+              <Button size="icon" variant="ghost" className="lg:hover:text-white text-zinc-400">
                 <Volume1 className="h-6 w-6" />
               </Button>
 
@@ -334,7 +360,9 @@ export const PlaybackControls = () => {
             </div>
           </div>
         </div>
+        </motion.div>
       )}
+      </AnimatePresence>
 
       {/* DESKTOP SONG INFO + LIKE */}
       <div className="hidden sm:flex items-center gap-4 min-w-[180px] w-[30%] pl-4">

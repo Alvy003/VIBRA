@@ -24,7 +24,7 @@ const MainLayout = () => {
       setShowHint(true);
       localStorage.setItem("swipeHintShown", "true");
 
-      setTimeout(() => setShowHint(false), 2500); // auto-hide after 2.5s
+      setTimeout(() => setShowHint(false), 5500); // auto-hide after 2.5s
     }
   }, [isMobile]);
 
@@ -38,9 +38,9 @@ const MainLayout = () => {
 
         {/* ✅ Left Sidebar */}
         <ResizablePanel
-          defaultSize={isMobile ? 0 : 20}
-          minSize={isMobile ? 0 : 12}
-          maxSize={28}
+          defaultSize={isMobile ? 20 : 20}
+          minSize={isMobile ? 0 : 0}
+          maxSize={isMobile ? 20 : 25}
           collapsible
         >
           <LeftSidebar />
@@ -76,9 +76,9 @@ const MainLayout = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -30 }}
             transition={{ duration: 0.5 }}
-            className="absolute top-1/2 left-2 -translate-y-1/2 bg-black text-white px-3 py-1 rounded-lg text-sm shadow-lg"
+            className="absolute top-1/2 left-10 -translate-y-1/2 bg-black text-white px-3 py-1 rounded-lg text-sm shadow-lg"
           >
-            → Swipe
+            ← Drag to resize the sidebar
           </motion.div>
         )}
       </AnimatePresence>

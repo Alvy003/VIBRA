@@ -22,18 +22,17 @@ const AudioPlayer = () => {
     }
   }, [volume]);
 
-  // load new song
+  // load new song + setup media session
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
     const audio = audioRef.current;
 
-    // only reset src if it's a new song
     if (audio.src !== currentSong.audioUrl) {
       audio.src = currentSong.audioUrl;
       audio.currentTime = 0;
     }
 
-    // ✅ Media Session API for lockscreen/notification
+    // ✅ Media Session API
     if ("mediaSession" in navigator && currentSong) {
       navigator.mediaSession.metadata = new MediaMetadata({
         title: currentSong.title,
@@ -60,13 +59,18 @@ const AudioPlayer = () => {
     if (isPlaying) audio.play().catch(() => {});
   }, [currentSong, isPlaying, playNext, playPrevious, setIsPlaying]);
 
-  // play/pause state sync
+  // keep play/pause in sync
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
     if (isPlaying) audio.play().catch(() => {});
     else audio.pause();
+
+    // ✅ Update playbackState for system controls
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    }
   }, [isPlaying]);
 
   // attach listeners once
@@ -74,7 +78,23 @@ const AudioPlayer = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const handleTime = () => setCurrentTime(audio.currentTime);
+    const handleTime = () => {
+      setCurrentTime(audio.currentTime);
+
+      // ✅ Update positionState so slider works
+      if ("mediaSession" in navigator && "setPositionState" in navigator.mediaSession) {
+        try {
+          navigator.mediaSession.setPositionState({
+            duration: audio.duration || 0,
+            position: audio.currentTime,
+            playbackRate: audio.playbackRate,
+          });
+        } catch (e) {
+          // some browsers may throw if not supported
+        }
+      }
+    };
+
     const handleDuration = () => setDuration(audio.duration);
     const handleEnded = () => playNext();
     const handlePlay = () => setIsPlaying(true);
