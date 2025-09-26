@@ -179,11 +179,11 @@ export const PlaybackControls = () => {
 
   return (
     <footer
-      className={`bg-zinc-900 border-t border-zinc-800 px-4
-        fixed bottom-0 left-0 right-0 z-50
+      className={`bg-zinc-900 border-t border-zinc-800 
+        fixed bottom-1.5 left-0 right-0 z-50
         sm:static sm:border-none sm:px-0
         transition-all duration-300 ease-in-out
-        ${isExpanded ? "h-screen sm:h-24" : "h-16 sm:h-24"}
+        ${isExpanded ? "h-screen sm:h-24" : "h-19 sm:h-24"}
         flex flex-col sm:flex-row sm:justify-between items-center
         max-w-[1800px] mx-auto w-full`}
     >
@@ -280,7 +280,7 @@ export const PlaybackControls = () => {
               />
             </div>
             {/* Song Info + Like */}
-            <div className="mt-12 text-center flex flex-row justify-between items-center gap-2 w-full">
+            <div className="mt-9 text-center flex flex-row justify-between items-center gap-2 w-80 mx-auto">
               <div className="flex flex-col items-start">
                 <div className="text-2xl font-semibold truncate">{currentSong.title}</div>
                 <div className="text-sm text-zinc-400">{currentSong.artist}</div>
@@ -296,7 +296,7 @@ export const PlaybackControls = () => {
               <div className="text-xs text-zinc-400">{formatTime(duration)}</div>
             </div>
 
-            <div className="mt-10 flex items-center justify-center gap-12">
+            <div className="mt-9 flex items-center justify-center gap-12">
               <Button size="icon" variant="ghost" className="text-zinc-400 hover:text-white" onClick={playPrevious}>
                 <SkipBack className="h-9 w-9" />
               </Button>
@@ -310,8 +310,8 @@ export const PlaybackControls = () => {
               </Button>
             </div>
 
-            <div className="mt-8 flex items-center justify-center gap-14">
-              <Button size="icon" variant="ghost" className={`${isShuffle ? "text-white" : "text-zinc-400"} hover:text-white`} onClick={toggleShuffle}>
+            <div className="mt-10 flex items-center justify-center gap-10">
+              <Button size="icon" variant="ghost" className={`${isShuffle ? "text-white" : "text-zinc-400"} `} onClick={toggleShuffle}>
                 <Shuffle className="h-6 w-6" />
               </Button>
 
@@ -320,12 +320,12 @@ export const PlaybackControls = () => {
                 <SleepTimer />
               </div>
 
-              <Button size="icon" variant="ghost" className={`${isRepeat ? "text-white" : "text-zinc-400"} hover:text-white`} onClick={toggleRepeat}>
+              <Button size="icon" variant="ghost" className={`${isRepeat ? "text-white" : "text-zinc-400"} `} onClick={toggleRepeat}>
                 <Repeat className="h-6 w-6" />
               </Button>
             </div>
 
-            <div className="mt-10 flex items-center justify-center gap-2">
+            <div className="mt-8 flex items-center justify-center gap-2">
               <Button size="icon" variant="ghost" className="hover:text-white text-zinc-400">
                 <Volume1 className="h-6 w-6" />
               </Button>
@@ -355,7 +355,7 @@ export const PlaybackControls = () => {
       {/* Desktop Player Controls */}
       <div className="hidden sm:flex flex-col items-center gap-2 flex-1 max-w-[45%]">
         <div className="flex items-center gap-6">
-          <Button size="icon" variant="ghost" className={`${isShuffle ? "text-blue-500" : "text-zinc-400"} hover:text-white`} onClick={toggleShuffle}>
+          <Button size="icon" variant="ghost" className={`${isShuffle ? "text-white" : "text-zinc-400"} hover:text-white`} onClick={toggleShuffle}>
             <Shuffle className="h-4 w-4" />
           </Button>
 
@@ -371,7 +371,7 @@ export const PlaybackControls = () => {
             <SkipForward className="h-4 w-4" />
           </Button>
 
-          <Button size="icon" variant="ghost" className={`${isRepeat ? "text-blue-500" : "text-zinc-400"} hover:text-white`} onClick={toggleRepeat}>
+          <Button size="icon" variant="ghost" className={`${isRepeat ? "text-white" : "text-zinc-400"} hover:text-white`} onClick={toggleRepeat}>
             <Repeat className="h-4 w-4" />
           </Button>
         </div>
