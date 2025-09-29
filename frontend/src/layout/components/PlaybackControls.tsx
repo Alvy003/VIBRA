@@ -181,7 +181,7 @@ export const PlaybackControls = () => {
   return (
     <footer
       className={`bg-zinc-900 border-t border-zinc-800 
-        fixed bottom-1.5 left-0 right-0 z-50
+        fixed bottom-1 left-0 right-0 z-50
         sm:static sm:border-none sm:px-0
         transition-all duration-300 ease-in-out
         ${isExpanded ? "h-screen sm:h-24" : "h-19 sm:h-24"}

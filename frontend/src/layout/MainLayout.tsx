@@ -38,9 +38,9 @@ const MainLayout = () => {
 
         {/* ✅ Left Sidebar */}
         <ResizablePanel
-          defaultSize={isMobile ? 20 : 20}
+          defaultSize={isMobile ? 22 : 20}
           minSize={isMobile ? 0 : 0}
-          maxSize={isMobile ? 20 : 25}
+          maxSize={isMobile ? 24 : 25}
           collapsible
         >
           <LeftSidebar />
