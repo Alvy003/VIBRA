@@ -31,7 +31,7 @@ const SongOptions: React.FC<Props> = ({ song }) => {
       reorderQueue([song, ...upcoming]);
 
       toast.custom(
-        (t) => (
+        () => (
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -66,7 +66,7 @@ const SongOptions: React.FC<Props> = ({ song }) => {
       reorderQueue(newQueue);
 
       toast.custom(
-        (t) => (
+        () => (
           <motion.div
             initial={{ y: 30, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}

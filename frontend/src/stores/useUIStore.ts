@@ -9,7 +9,7 @@ interface UIStore {
   setSidePanelView: (view: SidePanelView) => void;
 }
 
-export const useUIStore = create<UIStore>((set, get) => ({
+export const useUIStore = create<UIStore>((set) => ({
   sidePanelView: "friends",
   toggleSidePanelView: () => {
     set((state) => ({

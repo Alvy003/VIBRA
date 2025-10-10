@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, Heart, ListPlus } from "lucide-react";
+import { Heart, ListPlus } from "lucide-react";
 
 type ToastKind = "success" | "like" | "remove";
 type ToastItem = { id: string; message: string; kind?: ToastKind };
