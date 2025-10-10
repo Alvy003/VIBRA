@@ -98,3 +98,24 @@ export const searchSongs = async (req, res, next) => {
 	}
 };
 
+export const getRandomSongs = async (req, res, next) => {
+	try {
+	  const limit = parseInt(req.query.limit) || 10;
+	  const songs = await Song.aggregate([
+		{ $sample: { size: limit } },
+		{
+		  $project: {
+			_id: 1,
+			title: 1,
+			artist: 1,
+			imageUrl: 1,
+			audioUrl: 1,
+		  },
+		},
+	  ]);
+	  res.json(songs);
+	} catch (error) {
+	  next(error);
+	}
+  };
+  

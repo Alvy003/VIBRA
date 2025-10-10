@@ -1,11 +1,12 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Outlet } from "react-router-dom";
 import LeftSidebar from "./components/LeftSidebar";
-import FriendsActivity from "./components/FriendsActivity";
+//import FriendsActivity from "./components/FriendsActivity";
 import AudioPlayer from "./components/AudioPlayer";
 import { PlaybackControls } from "./components/PlaybackControls";
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import RightPanel from "./components/RightPanel";
 
 const MainLayout = () => {
   const [isMobile, setIsMobile] = useState(false);
@@ -18,13 +19,13 @@ const MainLayout = () => {
     return () => window.removeEventListener("resize", checkMobile);
   }, []);
 
-  // 👉 Show swipe hint only once on mobile
+  // Show swipe hint only once on mobile
   useEffect(() => {
     if (isMobile && !localStorage.getItem("swipeHintShown")) {
       setShowHint(true);
       localStorage.setItem("swipeHintShown", "true");
 
-      setTimeout(() => setShowHint(false), 5500); // auto-hide after 2.5s
+      setTimeout(() => setShowHint(false), 4500); // auto-hide after 4.5s
     }
   }, [isMobile]);
 
@@ -36,7 +37,7 @@ const MainLayout = () => {
       >
         <AudioPlayer />
 
-        {/* ✅ Left Sidebar */}
+        {/* Left Sidebar */}
         <ResizablePanel
           defaultSize={isMobile ? 22 : 20}
           minSize={isMobile ? 0 : 0}
@@ -48,7 +49,7 @@ const MainLayout = () => {
 
         <ResizableHandle className="w-2 bg-black rounded-lg transition-colors" />
 
-        {/* ✅ Main Content */}
+        {/* Main Content */}
         <ResizablePanel defaultSize={isMobile ? 100 : 60} minSize={40}>
           <Outlet />
         </ResizablePanel>
@@ -57,18 +58,18 @@ const MainLayout = () => {
           <>
             <ResizableHandle className="w-2 bg-black rounded-lg transition-colors" />
             <ResizablePanel defaultSize={20} minSize={0} maxSize={25}>
-              <FriendsActivity />
-            </ResizablePanel>
+            <RightPanel /> 
+          </ResizablePanel>
           </>
         )}
       </ResizablePanelGroup>
 
-      {/* ✅ Sticky playback controls */}
+      {/* Sticky playback controls */}
       <div className="border-t border-neutral-800 bg-black">
         <PlaybackControls />
       </div>
 
-      {/* 👇 One-time swipe hint overlay (mobile only) */}
+      {/* One-time swipe hint overlay (mobile only) */}
       <AnimatePresence>
         {showHint && (
           <motion.div

@@ -15,9 +15,9 @@ const Topbar = () => {
 		className="flex items-center justify-between p-4 sticky top-0 bg-zinc-900/75 backdrop-blur-md z-10 text-white"
 		>
 		  <div className="flex items-center gap-3">
-			<img src="/spotify.png" className="w-9 h-9" alt="Vibra logo" />
+			<img src="/vibra.png" className="w-9 h-9" alt="Vibra logo" />
 			<span
-			  className="text-lg font-semibold tracking-wide font-[Poppins,sans-serif] hover:text-purple-400 transition-colors duration-300"
+			  className="text-lg font-semibold tracking-wide font-[Poppins,sans-serif] hover:text-violet-400 transition-colors duration-300"
 			>
 			  VIBRA
 			</span>

@@ -10,18 +10,19 @@ import {
 import { useMusicStore } from "@/stores/useMusicStore";
 import { Trash2 } from "lucide-react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
-import LikeButton from "@/pages/home/components/LikeButton";
+import SongOptions from "../../album/components/SongOptions";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 
 interface SongsTableProps {
-  songs?: any[]; // if provided, override store songs (e.g. Favorites)
-  hideActions?: boolean; // optional flag to hide delete button (for user-facing lists)
+  songs?: any[];
+  hideActions?: boolean;
 }
 
 const SongsTable = ({ songs: overrideSongs, hideActions = false }: SongsTableProps) => {
   const { songs, isLoading, error, deleteSong } = useMusicStore();
   const { initializeQueue } = usePlayerStore();
+  const isMobile = useMediaQuery("(max-width: 768px)");
 
-  // decide which songs to render
   const renderSongs = overrideSongs ?? songs;
 
   if (isLoading && !overrideSongs) {
@@ -40,6 +41,45 @@ const SongsTable = ({ songs: overrideSongs, hideActions = false }: SongsTablePro
     );
   }
 
+  // ✅ MOBILE VERSION (like album page layout)
+  if (isMobile) {
+    return (
+      <div className="flex flex-col divide-y divide-white/5">
+        {renderSongs.map((song, idx) => (
+          <div
+            key={song._id}
+            onClick={() => initializeQueue(renderSongs, idx, true)}
+            className="group flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/5 cursor-pointer"
+          >
+            {/* Left side: image + title + artist */}
+            <div className="flex items-center gap-3 min-w-0">
+              <img
+                src={song.imageUrl}
+                alt={song.title}
+                className="w-12 h-12 rounded-md object-cover flex-shrink-0"
+              />
+              <div className="flex flex-col min-w-0">
+                <div className="text-sm font-medium text-white truncate">
+                  {song.title}
+                </div>
+                <div className="text-xs text-zinc-400 truncate">{song.artist}</div>
+              </div>
+            </div>
+
+            {/* Right side: song options */}
+            <div
+              className="flex items-center justify-end flex-shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SongOptions song={song} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ✅ DESKTOP VERSION (table layout stays as is)
   return (
     <Table>
       <TableHeader>
@@ -47,9 +87,11 @@ const SongsTable = ({ songs: overrideSongs, hideActions = false }: SongsTablePro
           <TableHead className="w-[50px]"></TableHead>
           <TableHead>Title</TableHead>
           <TableHead>Artist</TableHead>
-          <TableHead className="text-right"></TableHead>
+          <TableHead className="text-right w-[80px]"></TableHead>
           {!hideActions && (
-            <TableHead className="hidden sm:table-cell text-right">Actions</TableHead>
+            <TableHead className="hidden sm:table-cell text-right">
+              Actions
+            </TableHead>
           )}
         </TableRow>
       </TableHeader>
@@ -59,7 +101,7 @@ const SongsTable = ({ songs: overrideSongs, hideActions = false }: SongsTablePro
           <TableRow
             key={song._id}
             className="hover:bg-zinc-800/50 cursor-pointer"
-            onClick={() => initializeQueue(renderSongs, idx, true)} // autoplay requested
+            onClick={() => initializeQueue(renderSongs, idx, true)}
           >
             <TableCell>
               <img
@@ -69,36 +111,32 @@ const SongsTable = ({ songs: overrideSongs, hideActions = false }: SongsTablePro
               />
             </TableCell>
 
-            <TableCell className="font-medium max-w-[120px] sm:max-w-[200px] truncate">
-  {song.title}
-</TableCell>
-<TableCell className="max-w-[100px] sm:max-w-[160px] truncate text-zinc-400">
-  {song.artist}
-</TableCell>
+            <TableCell className="font-medium max-w-[200px] truncate">
+              {song.title}
+            </TableCell>
 
+            <TableCell className="max-w-[160px] truncate text-zinc-400">
+              {song.artist}
+            </TableCell>
 
-            {/* Like button cell */}
+            {/* Song Options (3 dots) */}
             <TableCell className="text-right">
-              <div className="flex items-center justify-end gap-2">
-                <LikeButton songId={song._id} />
-              </div>
+              <SongOptions song={song} />
             </TableCell>
 
             {!hideActions && (
               <TableCell className="hidden sm:table-cell text-right">
-                <div className="flex gap-2 justify-end">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
-                    onClick={(e) => {
-                      e.stopPropagation(); // prevent play on delete click
-                      deleteSong(song._id);
-                    }}
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    deleteSong(song._id);
+                  }}
+                >
+                  <Trash2 className="size-4" />
+                </Button>
               </TableCell>
             )}
           </TableRow>

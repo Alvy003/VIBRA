@@ -17,7 +17,7 @@ const HomePage = () => {
 		trendingSongs,
 	} = useMusicStore();
 
-	// 👉 Time-based greeting using useMemo
+	// Time-based greeting using useMemo
 	const greeting = useMemo(() => {
 		const hour = new Date().getHours();
 		if (hour < 12) return "Good morning";
@@ -26,7 +26,7 @@ const HomePage = () => {
 	}, []);
 
 	const { initializeQueue, currentSong  } = usePlayerStore();
-
+	
 	useEffect(() => {
 		if (!currentSong && madeForYouSongs.length && featuredSongs.length && trendingSongs.length) {
 		  const allSongs = [...featuredSongs, ...madeForYouSongs, ...trendingSongs];

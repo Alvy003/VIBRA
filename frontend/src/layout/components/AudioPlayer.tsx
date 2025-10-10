@@ -59,6 +59,39 @@ const AudioPlayer = () => {
     if (isPlaying) audio.play().catch(() => {});
   }, [currentSong, isPlaying, playNext, playPrevious, setIsPlaying]);
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInput =
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement 
+  
+      if (isInput) return;
+  
+      // Prevent default space behavior like page scroll
+      if (e.code === "Space") {
+        e.preventDefault();
+        setIsPlaying(!isPlaying);
+      }
+  
+      // Shift+P for previous track
+      if (e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        playPrevious();
+      }
+  
+      // Shift+N for next track
+      if (e.shiftKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        playNext();
+      }
+    };
+  
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isPlaying, setIsPlaying, playPrevious, playNext]);
+  
+  
+  
   // keep play/pause in sync
   useEffect(() => {
     const audio = audioRef.current;

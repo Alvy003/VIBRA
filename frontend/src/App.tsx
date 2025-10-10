@@ -12,7 +12,7 @@ import AdminPage from "./pages/admin/AdminPage";
 import SearchPage from "@/pages/search/SearchPage";
 import FavoritesPage from "@/pages/favorites/FavoritesPage";
 import NotFoundPage from "./pages/404/NotFoundPage";
-
+import { AccentToastProvider } from "@/components/AccentToast";
 import { useAxiosAuth } from "@/hooks/useAxiosAuth";
 import AuthProvider from "@/providers/AuthProvider"; 
 
@@ -22,6 +22,7 @@ function App() {
 
   return (
     <AuthProvider>
+      <AccentToastProvider>
       <Routes>
         <Route
           path="/sso-callback"
@@ -41,6 +42,7 @@ function App() {
         </Route>
       </Routes>
       <Toaster />
+      </AccentToastProvider>
     </AuthProvider>
   );
 }

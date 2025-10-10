@@ -5,7 +5,7 @@ import { usePlayerStore } from "@/stores/usePlayerStore";
 import { Clock, Pause, Play } from "lucide-react";
 import { useEffect } from "react";
 import { useParams } from "react-router-dom";
-import LikeButton from "@/pages/home/components/LikeButton";
+import SongOptions from "./components/SongOptions";
 
 export const formatDuration = (seconds: number) => {
   const minutes = Math.floor(seconds / 60);
@@ -86,7 +86,7 @@ const AlbumPage = () => {
             <div className="bg-black/20 backdrop-blur-sm">
               {/* Table Header */}
               <div
-                className="grid grid-cols-[16px_1fr_auto] md:grid-cols-[16px_4.5fr_2.4fr_1fr_auto] 
+                className="grid grid-cols-[16px_1fr_auto] md:grid-cols-[16px_3fr_1.6fr_1fr_auto] 
                   gap-4 px-10 py-2 text-sm text-zinc-400 border-b border-white/5">
                 <div>#</div>
                 <div>Title</div>
@@ -94,7 +94,7 @@ const AlbumPage = () => {
                 <div className="hidden md:block">
                   <Clock className="h-4 w-4" />
                 </div>
-                <div className="text-right">Like</div>
+                <div className="text-right"></div>
               </div>
               {/* Songs List */}
               <div className="px-5">
@@ -148,10 +148,15 @@ const AlbumPage = () => {
                             {formatDuration(song.duration)}
                           </div>
 
-                          {/* Like Button */}
+                          {/* Song Options */}
                           <div className="flex items-center justify-end">
-                            <LikeButton songId={song._id} />
+                            <SongOptions song={song} />
                           </div>
+
+                          {/* <div className="flex items-center justify-end">
+                            <LikeButton songId={song._id} />
+                          </div> */}
+
                         </div>
 
                     );

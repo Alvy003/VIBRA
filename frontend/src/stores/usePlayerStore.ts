@@ -2,27 +2,42 @@
 import { create } from "zustand";
 import { Song } from "@/types";
 import { useChatStore } from "./useChatStore";
+import { axiosInstance } from "@/lib/axios";
 
 interface PlayerStore {
   currentSong: Song | null;
   isPlaying: boolean;
-  queue: Song[];
-  currentIndex: number;
+
+  // public-facing fields (kept for compatibility)
+  queue: Song[]; // full derived queue (same as displayQueue)
+  displayQueue: Song[]; // derived full queue used in UI
+  currentIndex: number; // index of currentSong inside displayQueue (keeps UI code working)
+
+  // internal split queues (not part of original interface, but helpful)
+  // we keep them in the store for determinism (not exported in the dev interface)
+  // mainQueue: original playlist order (history + remaining)
+  // nextUpQueue: songs added via "Play Next" (FIFO)
+  // laterQueue: songs added via "Add to queue" (appended)
+
   duration: number;
   currentTime: number;
   volume: number;
   isShuffle: boolean;
-  isRepeat: boolean; // repeat one
+  isRepeat: boolean;
 
-  // polymorphic: second param can be (index:number) OR (Song)
   initializeQueue: (songs: Song[], startIndexOrSong?: number | Song, autoplay?: boolean) => void;
   playAlbum: (songs: Song[], startIndex?: number) => void;
   setCurrentSong: (song: Song | null) => void;
   togglePlay: () => void;
-  playNext: () => void;
+  playNext: () => Promise<void>;
   playPrevious: () => void;
+  removeFromQueue: (id: string) => void;
+  playSong: (song: Song) => void;
+  addSongToQueue: (song: Song) => void;
+  reorderQueue: (newOrder: Song[]) => void;
+  addSongNext: (song: Song) => void;
+  _rebuildDisplay: () => void;
 
-  // sync helpers used by AudioPlayer
   setDuration: (d: number) => void;
   setCurrentTime: (t: number) => void;
   setIsPlaying: (b: boolean) => void;
@@ -30,212 +45,564 @@ interface PlayerStore {
 
   toggleShuffle: () => void;
   toggleRepeat: () => void;
+
+  // internal helpers (kept on store so cross-component calls can use them)
+  autoRefillQueue: () => Promise<void>;
 }
 
 const clamp = (n: number, min: number, max: number) => Math.max(min, Math.min(max, n));
 
-export const usePlayerStore = create<PlayerStore>((set, get) => ({
-  currentSong: null,
-  isPlaying: false,
-  queue: [],
-  currentIndex: -1,
-  duration: 0,
-  currentTime: 0,
-  volume: 100,
-  isShuffle: false,
-  isRepeat: false,
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+};
 
-  initializeQueue: (songs: Song[], startIndexOrSong = 0, autoplay = false) => {
-    if (!Array.isArray(songs) || songs.length === 0) return;
+export const usePlayerStore = create<PlayerStore>((set, get) => {
+  // Internal state variables will live inside the store as closures/fields:
+  // mainQueue, nextUpQueue, laterQueue. We'll keep them on the store object
+  // but they are considered internal implementation detail.
+  return {
+    currentSong: null,
+    isPlaying: false,
 
-    const socket = useChatStore.getState().socket;
+    // derived/public
+    queue: [],
+    displayQueue: [],
+    currentIndex: -1,
 
-    // determine startIndex from either number or Song object
-    let startIndex = 0;
-    if (typeof startIndexOrSong === "number") {
-      startIndex = clamp(startIndexOrSong, 0, songs.length - 1);
-    } else if (typeof startIndexOrSong === "object" && startIndexOrSong !== null) {
-      const idx = songs.findIndex((s) => s._id === (startIndexOrSong as Song)._id);
-      startIndex = idx === -1 ? 0 : idx;
-    } else {
-      startIndex = 0;
-    }
+    // audio meta
+    duration: 0,
+    currentTime: 0,
+    volume: 100,
+    isShuffle: false,
+    isRepeat: false,
 
-    const existingCurrent = get().currentSong;
-    const existingIndexInNewQueue = existingCurrent
-      ? songs.findIndex((s) => s._id === existingCurrent._id)
-      : -1;
+    mainQueue: [] as Song[],
+    // @ts-ignore
+    nextUpQueue: [] as Song[],
+    // @ts-ignore
+    laterQueue: [] as Song[],
 
-    if (autoplay) {
-      const songToPlay = songs[startIndex];
+    _rebuildDisplay: () => {
+      // This function will be replaced at runtime below; placeholder for TS
+      (function attachRebuild() {
+        const store = usePlayerStore;
+        store.setState({
+          // @ts-ignore
+          _rebuildDisplay: function () {
+            const s: any = store.getState();
+            const currentSong: Song | null = s.currentSong || null;
+            const mainQueue: Song[] = s.mainQueue || [];
+            const nextUpQueue: Song[] = s.nextUpQueue || [];
+            const laterQueue: Song[] = s.laterQueue || [];
+      
+            const filterOutCurrent = (songs: Song[]) =>
+              currentSong ? songs.filter((s) => s._id !== currentSong._id) : songs;
+      
+            const cleanedMainQueue = filterOutCurrent(mainQueue);
+            const cleanedNextUp = filterOutCurrent(nextUpQueue);
+            const cleanedLater = filterOutCurrent(laterQueue);
+      
+            let display: Song[] = [];
+      
+            if (currentSong) {
+              display = [currentSong, ...cleanedNextUp, ...cleanedMainQueue, ...cleanedLater];
+              store.setState({
+                displayQueue: display,
+                queue: display.slice(),
+                currentIndex: 0,
+              } as any);
+            } else {
+              display = [...cleanedNextUp, ...cleanedMainQueue, ...cleanedLater];
+              store.setState({
+                displayQueue: display,
+                queue: display.slice(),
+                currentIndex: -1,
+              } as any);
+            }
+          },
+        } as any);
+      })();      
+      
+    },
+
+    initializeQueue: (songs: Song[], startIndexOrSong: number | Song = 0, autoplay = false) => {
+      if (!Array.isArray(songs) || songs.length === 0) return;
+      const socket = useChatStore.getState().socket;
+
+      let startIndex = 0;
+      if (typeof startIndexOrSong === "number") {
+        startIndex = clamp(startIndexOrSong, 0, songs.length - 1);
+      } else if (startIndexOrSong && typeof startIndexOrSong === "object") {
+        const idx = songs.findIndex((s) => s._id === (startIndexOrSong as Song)._id);
+        startIndex = idx === -1 ? 0 : idx;
+      }
+
+      // Setup main queue and clear nextUp/later
+      set((state: any) => {
+        state.mainQueue = [...songs];
+        state.nextUpQueue = [];
+        state.laterQueue = [];
+        state.currentSong = songs[startIndex];
+        // currentIndex refers to index inside mainQueue (not displayQueue). We'll keep it as main index.
+        state.currentIndex = startIndex;
+
+        // build display via helper below (we'll implement helper after store creation)
+        return {};
+      });
+
+      // send update activity if needed
+      if (socket?.auth) {
+        const cs = songs[startIndex];
+        socket.emit("update_activity", {
+          userId: socket.auth.userId,
+          activity: `Playing ${cs.title} by ${cs.artist}`,
+        });
+      }
+
+      // rebuild display after state sets
+      get()._rebuildDisplay();
+
+      if (autoplay) {
+        set({ isPlaying: true });
+      } else {
+        set({ isPlaying: false });
+      }
+    },
+
+    playAlbum: (songs: Song[], startIndex = 0) => {
+      if (!Array.isArray(songs) || songs.length === 0) return;
+      const idx = clamp(startIndex, 0, songs.length - 1);
+      const song = songs[idx];
+      const socket = useChatStore.getState().socket;
+
+      set((state: any) => {
+        state.mainQueue = [...songs];
+        state.nextUpQueue = [];
+        state.laterQueue = [];
+        state.currentSong = song;
+        state.currentIndex = idx;
+        return {};
+      });
+
+      get()._rebuildDisplay();
+
       if (socket?.auth) {
         socket.emit("update_activity", {
           userId: socket.auth.userId,
-          activity: `Playing ${songToPlay.title} by ${songToPlay.artist}`,
+          activity: `Playing ${song.title} by ${song.artist}`,
         });
       }
+
+      set({ isPlaying: true });
+    },
+
+    setCurrentSong: (song: Song | null) => {
+      if (!song) {
+        set({ currentSong: null, isPlaying: false, currentIndex: -1 });
+        return;
+      }
+      const socket = useChatStore.getState().socket;
+      if (socket?.auth) {
+        socket.emit("update_activity", {
+          userId: socket.auth.userId,
+          activity: `Playing ${song.title} by ${song.artist}`,
+        });
+      }
+
+      // If song exists in mainQueue, update currentIndex accordingly
+      set((state: any) => {
+        const mainIdx = (state.mainQueue || []).findIndex((s: Song) => s._id === song._id);
+        if (mainIdx !== -1) {
+          state.currentIndex = mainIdx;
+        } else {
+          // keep currentIndex as-is (song might be from nextUp/later)
+        }
+        state.currentSong = song;
+        return {};
+      });
+
+      get()._rebuildDisplay();
+      set({ isPlaying: true });
+    },
+
+    togglePlay: () => {
+      const willStart = !get().isPlaying;
+      const current = get().currentSong;
+      const socket = useChatStore.getState().socket;
+      if (socket?.auth) {
+        socket.emit("update_activity", {
+          userId: socket.auth.userId,
+          activity: willStart && current
+            ? `Playing ${current.title} by ${current.artist}`
+            : "Idle",
+        });
+      }
+      set({ isPlaying: willStart });
+    },
+
+    // playNext consumes from: nextUpQueue -> remaining mainQueue -> laterQueue
+    playNext: async () => {
+      const state: any = get();
+
+      // if no queues at all, nothing to do
+      if (
+        (!state.mainQueue || state.mainQueue.length === 0)
+        && (!state.nextUpQueue || state.nextUpQueue.length === 0)
+        && (!state.laterQueue || state.laterQueue.length === 0)
+      ) {
+        return;
+      }
+
+      // repeat handling
+      if (state.isRepeat && state.displayQueue && state.displayQueue[state.currentIndex]) {
+        const song = state.displayQueue[state.currentIndex];
+        set({ currentSong: song, isPlaying: true });
+        return;
+      }
+
+      // If remaining upcoming is low, attempt auto-refill
+      // Count upcoming songs after current position in displayQueue
+      const upcomingCount = Math.max(0, state.displayQueue.length - (state.currentIndex + 1));
+      if (upcomingCount < 5) {
+        await get().autoRefillQueue();
+      }
+
+      let nextSong: Song | null = null;
+
+      // Priority 1: nextUpQueue (FIFO)
+      if (state.nextUpQueue && state.nextUpQueue.length > 0) {
+        const shifted = [...state.nextUpQueue];
+        nextSong = shifted.shift();
+        set((s: any) => {
+          s.nextUpQueue = shifted;
+          return {};
+        });
+      } else {
+        // Priority 2: mainQueue (advance currentIndex if possible)
+        const main = state.mainQueue || [];
+        const mainIdx = state.currentIndex;
+        if (main && mainIdx >= 0 && mainIdx + 1 < main.length) {
+          const nextIdx = mainIdx + 1;
+          nextSong = main[nextIdx];
+          // update currentIndex to next index inside mainQueue
+          set((s: any) => {
+            s.currentIndex = nextIdx;
+            return {};
+          });
+        } else {
+          // Priority 3: laterQueue (FIFO)
+          if (state.laterQueue && state.laterQueue.length > 0) {
+            const later = [...state.laterQueue];
+            nextSong = later.shift();
+            set((s: any) => {
+              s.laterQueue = later;
+              return {};
+            });
+          }
+        }
+      }
+
+      // If still no nextSong, try auto-refill and retry once
+      if (!nextSong) {
+        await get().autoRefillQueue();
+        const st2: any = get();
+        if (st2.nextUpQueue && st2.nextUpQueue.length > 0) {
+          nextSong = st2.nextUpQueue.shift();
+          set((s: any) => {
+            s.nextUpQueue = st2.nextUpQueue;
+            return {};
+          });
+        } else if (st2.laterQueue && st2.laterQueue.length > 0) {
+          nextSong = st2.laterQueue.shift();
+          set((s: any) => {
+            s.laterQueue = st2.laterQueue;
+            return {};
+          });
+        } else if (st2.mainQueue && st2.currentIndex + 1 < st2.mainQueue.length) {
+          nextSong = st2.mainQueue[st2.currentIndex + 1];
+          set((s: any) => {
+            s.currentIndex = st2.currentIndex + 1;
+            return {};
+          });
+        }
+      }
+
+      if (!nextSong) {
+        // still nothing
+        return;
+      }
+
+      // set currentSong and rebuild display
       set({
-        queue: songs,
-        currentSong: songToPlay,
-        currentIndex: startIndex,
+        currentSong: nextSong,
         isPlaying: true,
       });
-      return;
-    }
 
-    // preserve current song if it exists in the new queue
-    if (existingIndexInNewQueue !== -1) {
-      set({
-        queue: songs,
-        currentIndex: existingIndexInNewQueue,
-      });
-      return;
-    }
+      get()._rebuildDisplay();
 
-    // if there's no current song, set one but don't autoplay
-    if (!existingCurrent) {
-      set({
-        queue: songs,
-        currentSong: songs[startIndex],
-        currentIndex: startIndex,
-        isPlaying: false,
-      });
-      return;
-    }
-
-    // default: set queue and keep playback paused
-    set({
-      queue: songs,
-      currentSong: songs[startIndex],
-      currentIndex: startIndex,
-      isPlaying: false,
-    });
-  },
-
-  playAlbum: (songs: Song[], startIndex = 0) => {
-    if (!Array.isArray(songs) || songs.length === 0) return;
-    const idx = clamp(startIndex, 0, songs.length - 1);
-    const song = songs[idx];
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${song.title} by ${song.artist}`,
-      });
-    }
-    set({ queue: songs, currentSong: song, currentIndex: idx, isPlaying: true });
-  },
-
-  setCurrentSong: (song: Song | null) => {
-    if (!song) {
-      set({ currentSong: null, isPlaying: false, currentIndex: -1 });
-      return;
-    }
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${song.title} by ${song.artist}`,
-      });
-    }
-    const songIndex = get().queue.findIndex((s) => s._id === song._id);
-    set({ currentSong: song, isPlaying: true, currentIndex: songIndex !== -1 ? songIndex : get().currentIndex });
-  },
-
-  togglePlay: () => {
-    const willStartPlaying = !get().isPlaying;
-    const currentSong = get().currentSong;
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: willStartPlaying && currentSong ? `Playing ${currentSong.title} by ${currentSong.artist}` : "Idle",
-      });
-    }
-    set({ isPlaying: willStartPlaying });
-  },
-
-  playNext: () => {
-    const { currentIndex, queue, isShuffle, isRepeat } = get();
-    if (!queue || queue.length === 0) return;
-
-    // repeat one: replay current song
-    if (isRepeat && queue[currentIndex]) {
-      const song = queue[currentIndex];
-      set({ currentSong: song, currentIndex, isPlaying: true });
-      return;
-    }
-
-    let nextIndex = currentIndex + 1;
-
-    if (isShuffle) {
-      // pick a random index that's not the current (if possible)
-      if (queue.length === 1) nextIndex = 0;
-      else {
-        let attempts = 0;
-        do {
-          nextIndex = Math.floor(Math.random() * queue.length);
-          attempts++;
-        } while (nextIndex === currentIndex && attempts < 10);
+      // emit activity
+      const socket = useChatStore.getState().socket;
+      if (socket?.auth) {
+        socket.emit("update_activity", {
+          userId: socket.auth.userId,
+          activity: `Playing ${nextSong.title} by ${nextSong.artist}`,
+        });
       }
-    } else {
-      if (nextIndex >= queue.length) nextIndex = 0;
-    }
+    },
 
-    const nextSong = queue[nextIndex];
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${nextSong.title} by ${nextSong.artist}`,
-      });
-    }
-    set({ currentSong: nextSong, currentIndex: nextIndex, isPlaying: true });
-  },
-
-  playPrevious: () => {
-    const { currentIndex, queue, isShuffle, isRepeat } = get();
-    if (!queue || queue.length === 0) return;
-
-    // repeat one: replay current
-    if (isRepeat && queue[currentIndex]) {
-      const song = queue[currentIndex];
-      set({ currentSong: song, currentIndex, isPlaying: true });
-      return;
-    }
-
-    let prevIndex = currentIndex - 1;
-
-    if (isShuffle) {
-      if (queue.length === 1) prevIndex = 0;
-      else {
-        let attempts = 0;
-        do {
-          prevIndex = Math.floor(Math.random() * queue.length);
-          attempts++;
-        } while (prevIndex === currentIndex && attempts < 10);
+    playPrevious: () => {
+      const state: any = get();
+      // If we have a history in mainQueue, go back there.
+      if (state.mainQueue && state.currentIndex > 0) {
+        const prevIdx = state.currentIndex - 1;
+        const prev = state.mainQueue[prevIdx];
+        set((s: any) => {
+          s.currentIndex = prevIdx;
+          s.currentSong = prev;
+          return {};
+        });
+        get()._rebuildDisplay();
+        set({ isPlaying: true });
+        return;
       }
-    } else {
-      if (prevIndex < 0) prevIndex = queue.length - 1;
-    }
 
-    const prevSong = queue[prevIndex];
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${prevSong.title} by ${prevSong.artist}`,
+      // Otherwise, you can choose to ignore or pop from a history list (not implemented).
+      // For now, do nothing.
+    },
+
+    removeFromQueue: (id: string) => {
+      // remove from all lists and rebuild
+      set((state: any) => {
+        state.mainQueue = (state.mainQueue || []).filter((s: Song) => s._id !== id);
+        state.nextUpQueue = (state.nextUpQueue || []).filter((s: Song) => s._id !== id);
+        state.laterQueue = (state.laterQueue || []).filter((s: Song) => s._id !== id);
+
+        // If removed song is the currentSong, try to set next song as current
+        if (state.currentSong && state.currentSong._id === id) {
+          // pick next from nextUp/main/later (simple approach)
+          if (state.nextUpQueue && state.nextUpQueue.length > 0) {
+            state.currentSong = state.nextUpQueue.shift();
+          } else if (state.mainQueue && state.currentIndex + 1 < state.mainQueue.length) {
+            state.currentIndex = Math.min(state.currentIndex, state.mainQueue.length - 1);
+            state.currentSong = state.mainQueue[state.currentIndex];
+          } else if (state.laterQueue && state.laterQueue.length > 0) {
+            state.currentSong = state.laterQueue.shift();
+          } else {
+            state.currentSong = null;
+            state.currentIndex = -1;
+            state.isPlaying = false;
+          }
+        }
+
+        return {};
       });
-    }
-    set({ currentSong: prevSong, currentIndex: prevIndex, isPlaying: true });
-  },
 
-  toggleShuffle: () => set({ isShuffle: !get().isShuffle }),
-  toggleRepeat: () => set({ isRepeat: !get().isRepeat }),
+      get()._rebuildDisplay();
+    },
 
-  // sync helpers used by the <audio> element hook
-  setDuration: (d: number) => set({ duration: d }),
-  setCurrentTime: (t: number) => set({ currentTime: t }),
-  setIsPlaying: (b: boolean) => set({ isPlaying: b }),
-  setVolume: (v: number) => set({ volume: Math.min(100, Math.max(0, v)) }),
-}));
+    playSong: (song: Song) => {
+      // If the song is in mainQueue, set currentIndex accordingly, else treat it as one-off play
+      set((state: any) => {
+        const idx = (state.mainQueue || []).findIndex((s: Song) => s._id === song._id);
+        if (idx !== -1) {
+          state.currentIndex = idx;
+          state.currentSong = state.mainQueue[idx];
+        } else {
+          // If not in main queue, push it to laterQueue and set as current
+          if (!state.laterQueue.some((s: Song) => s._id === song._id)) {
+            state.laterQueue.push(song);
+          }
+          state.currentSong = song;
+        }
+        return {};
+      });
+
+      get()._rebuildDisplay();
+      set({ isPlaying: true });
+
+      const socket = useChatStore.getState().socket;
+      if (socket?.auth) {
+        socket.emit("update_activity", {
+          userId: socket.auth.userId,
+          activity: `Playing ${song.title} by ${song.artist}`,
+        });
+      }
+    },
+
+    addSongToQueue: (song: Song) => {
+      // Append to laterQueue but avoid duplicates anywhere
+      set((state: any) => {
+        const exists =
+          (state.mainQueue || []).some((s: Song) => s._id === song._id) ||
+          (state.nextUpQueue || []).some((s: Song) => s._id === song._id) ||
+          (state.laterQueue || []).some((s: Song) => s._id === song._id) ||
+          (state.currentSong && state.currentSong._id === song._id);
+
+        if (exists) return {}; // nothing to do
+
+        state.laterQueue = [...(state.laterQueue || []), song];
+        return {};
+      });
+
+      get()._rebuildDisplay();
+    },
+
+    reorderQueue: (newUpcomingSongs: Song[]) => {
+      set((state: any) => {
+        state.nextUpQueue = [...newUpcomingSongs];
+        state.laterQueue = [];
+        return {};
+      });
+
+      get()._rebuildDisplay();
+    },
+
+    addSongNext: (song: Song) => {
+      // Insert into nextUpQueue (FIFO), avoid duplicates globally
+      set((state: any) => {
+        const exists =
+          (state.mainQueue || []).some((s: Song) => s._id === song._id) ||
+          (state.nextUpQueue || []).some((s: Song) => s._id === song._id) ||
+          (state.laterQueue || []).some((s: Song) => s._id === song._id) ||
+          (state.currentSong && state.currentSong._id === song._id);
+
+        if (exists) return {};
+
+        state.nextUpQueue = [...(state.nextUpQueue || []), song];
+        return {};
+      });
+
+      get()._rebuildDisplay();
+    },
+
+    // autoRefillQueue: fetch random songs and append to laterQueue if duplicates are filtered out
+    autoRefillQueue: async () => {
+      const state: any = get();
+      const totalUpcoming =
+        (state.nextUpQueue?.length || 0) +
+        Math.max(0, (state.mainQueue?.length || 0) - (state.currentIndex + 1)) +
+        (state.laterQueue?.length || 0);
+
+      if (totalUpcoming >= 5) return;
+
+      try {
+        const res = await axiosInstance.get("/songs/random?limit=10");
+        const newSongs: Song[] = res.data;
+
+        if (!Array.isArray(newSongs) || newSongs.length === 0) return;
+
+        const existingIds = new Set<string>();
+        if (state.currentSong) existingIds.add(state.currentSong._id);
+        (state.mainQueue || []).forEach((s: Song) => existingIds.add(s._id));
+        (state.nextUpQueue || []).forEach((s: Song) => existingIds.add(s._id));
+        (state.laterQueue || []).forEach((s: Song) => existingIds.add(s._id));
+
+        const unique = newSongs.filter((s: Song) => !existingIds.has(s._id));
+
+        if (unique.length > 0) {
+          set((st: any) => {
+            st.laterQueue = [...(st.laterQueue || []), ...unique];
+            return {};
+          });
+          get()._rebuildDisplay();
+          console.log("✅ Auto-refilled queue with random songs");
+        }
+      } catch (err) {
+        console.error("Auto-refill failed:", err);
+      }
+    },
+
+    toggleShuffle: () => {
+      const { isShuffle, queue, currentSong, currentIndex } = get();
+      if (!queue.length) {
+        set({ isShuffle: !isShuffle });
+        return;
+      }
+  
+      let newDisplay: Song[];
+      if (!isShuffle) {
+        newDisplay = shuffleArray(queue);
+        if (currentSong) {
+          const idx = newDisplay.findIndex((s) => s._id === currentSong._id);
+          if (idx !== -1) {
+            const [cur] = newDisplay.splice(idx, 1);
+            newDisplay.splice(currentIndex, 0, cur);
+          }
+        }
+      } else {
+        newDisplay = [...queue];
+      }
+  
+      set({
+        isShuffle: !isShuffle,
+        displayQueue: newDisplay,
+      });
+    },
+
+    toggleRepeat: () => set((state: any) => ({ isRepeat: !state.isRepeat })),
+
+    setDuration: (d: number) => set({ duration: d }),
+    setCurrentTime: (t: number) => set({ currentTime: t }),
+    setIsPlaying: (b: boolean) => set({ isPlaying: b }),
+    setVolume: (v: number) => set({ volume: Math.min(100, Math.max(0, v)) }),
+  } as any;
+});
+
+// After creating store, attach the _rebuildDisplay implementation to ensure types line up
+// (we update the store object directly)
+(function attachRebuild() {
+  const store = usePlayerStore;
+  store.setState({
+    // @ts-ignore
+    _rebuildDisplay: function () {
+      // read internal lists (we used dynamic keys on the store object)
+      const s: any = store.getState();
+      const mainQueue: Song[] = s.mainQueue || [];
+      const nextUpQueue: Song[] = s.nextUpQueue || [];
+      const laterQueue: Song[] = s.laterQueue || [];
+      const currentSong: Song | null = s.currentSong || null;
+      const mainCurrentIndex: number = typeof s.currentIndex === "number" ? s.currentIndex : -1;
+
+      // Build history (mainQueue before current)
+      const historyBeforeCurrent = mainQueue.slice(0, Math.max(0, mainCurrentIndex));
+      // Build remaining main after current
+      const remainingMainAfter = mainQueue.slice(Math.max(0, mainCurrentIndex + 1));
+
+      let display: Song[] = [];
+
+      // If currentSong exists and is part of mainQueue, keep it at mainCurrentIndex position
+      if (currentSong) {
+        // build display preserving history length such that currentSong index == historyBeforeCurrent.length
+        display = [
+          ...historyBeforeCurrent,
+          currentSong,
+          ...nextUpQueue,
+          ...remainingMainAfter,
+          ...laterQueue,
+        ];
+
+        // Determine display index of currentSong
+        const displayIndex = historyBeforeCurrent.length;
+        store.setState({
+          displayQueue: display,
+          queue: display.slice(), // keep queue as alias for display
+          currentIndex: displayIndex,
+        } as any);
+      } else {
+        // No currentSong: display is nextUp + main + later
+        display = [...nextUpQueue, ...mainQueue, ...laterQueue];
+        store.setState({
+          displayQueue: display,
+          queue: display.slice(),
+          currentIndex: -1,
+        } as any);
+      }
+    },
+  } as any);
+})();
+

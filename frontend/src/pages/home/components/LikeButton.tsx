@@ -1,8 +1,9 @@
 // src/pages/home/components/LikeButton.tsx
-import { useAuth, RedirectToSignIn } from "@clerk/clerk-react";
+import { useAuth, useClerk } from "@clerk/clerk-react";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { Heart } from "lucide-react";
 import { useState } from "react";
+import {toast} from "react-hot-toast";
 
 interface LikeButtonProps {
   songId: string;
@@ -12,17 +13,20 @@ const LikeButton = ({ songId }: LikeButtonProps) => {
   const { isSignedIn } = useAuth();
   const { likedSongs, likeSong, unlikeSong } = useMusicStore();
   const [loading, setLoading] = useState(false);
+  const { redirectToSignIn } = useClerk();
 
   const isLiked = likedSongs.some((s) => s._id === songId);
 
   const handleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    // 🔑 If not signed in → trigger Clerk sign-in flow
     if (!isSignedIn) {
-      RedirectToSignIn({});
+      toast("Please sign in to like songs");
+      setTimeout(() => {
+        redirectToSignIn({ redirectUrl: window.location.href });
+      }, 1000);
       return;
-    }
+    }    
 
     try {
       setLoading(true);
