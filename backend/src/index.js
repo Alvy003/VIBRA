@@ -8,7 +8,6 @@ import fs from "fs";
 import { createServer } from "http";
 import cron from "node-cron";
 
-
 import { initializeSocket } from "./lib/socket.js";
 
 import { connectDB } from "./lib/db.js";
@@ -19,6 +18,9 @@ import songRoutes from "./routes/song.route.js";
 import albumRoutes from "./routes/album.route.js";
 import statRoutes from "./routes/stat.route.js";
 import playlistRoutes from "./routes/playlist.route.js";
+import pushSubscriptionRoutes from "./routes/pushSubscription.route.js";
+import chatRoutes from "./routes/chat.route.js";
+import miscRoutes from "./routes/misc.route.js";
 
 dotenv.config();
 
@@ -29,42 +31,65 @@ const PORT = process.env.PORT;
 const httpServer = createServer(app);
 initializeSocket(httpServer);
 
+// CORS (dev: allow all; tighten for prod)
 app.use(
-	cors({
-		origin: "http://localhost:3000",
-		credentials: true,
+cors({
+origin: (origin, cb) => cb(null, true),
+credentials: true,
+})
+);
+
+app.use(express.json());
+app.use(clerkMiddleware());
+
+// File upload
+app.use(
+fileUpload({
+useTempFiles: true,
+tempFileDir: path.join(__dirname, "tmp"),
+createParentPath: true,
+limits: { fileSize: 10 * 1024 * 1024 },
+})
+);
+
+// Serve voice uploads with proper headers (do this BEFORE routes and SPA fallback)
+app.use(
+	"/uploads/voice",
+	cors({ origin: (origin, cb) => cb(null, true) }),
+	express.static(path.join(process.cwd(), "uploads", "voice"), {
+	setHeaders(res, filePath) {
+	const ext = path.extname(filePath).toLowerCase();
+	if (ext === ".webm") res.setHeader("Content-Type", "audio/webm;codecs=opus");
+	if (ext === ".ogg") res.setHeader("Content-Type", "audio/ogg;codecs=opus");
+	if (ext === ".m4a" || ext === ".mp4") res.setHeader("Content-Type", "audio/mp4");
+	res.setHeader("Accept-Ranges", "bytes");
+	res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+	res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+	},
 	})
 );
 
-app.use(express.json()); // to parse req.body
-app.use(clerkMiddleware()); // this will add auth to req obj => req.auth
+// (optional) serve other /uploads assets if you have any
 app.use(
-	fileUpload({
-		useTempFiles: true,
-		tempFileDir: path.join(__dirname, "tmp"),
-		createParentPath: true,
-		limits: {
-			fileSize: 10 * 1024 * 1024, // 10MB  max file size
-		},
-	})
+	"/uploads",
+	cors({ origin: (origin, cb) => cb(null, true) }),
+	express.static(path.join(process.cwd(), "uploads"))
 );
 
 // cron jobs
 const tempDir = path.join(process.cwd(), "tmp");
 cron.schedule("0 * * * *", () => {
-	if (fs.existsSync(tempDir)) {
-		fs.readdir(tempDir, (err, files) => {
-			if (err) {
-				console.log("error", err);
-				return;
-			}
-			for (const file of files) {
-				fs.unlink(path.join(tempDir, file), (err) => {});
-			}
-		});
-	}
+if (fs.existsSync(tempDir)) {
+fs.readdir(tempDir, (err, files) => {
+if (err) return;
+for (const file of files) {
+fs.unlink(path.join(tempDir, file), () => {});
+}
+});
+}
 });
 
+// API routes
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
@@ -72,20 +97,27 @@ app.use("/api/songs", songRoutes);
 app.use("/api/albums", albumRoutes);
 app.use("/api/stats", statRoutes);
 app.use("/api/playlists", playlistRoutes);
+app.use("/api/push", pushSubscriptionRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/misc", miscRoutes);
 
+// Production static (place AFTER /uploads so SPA doesn’t eat /uploads/voice)
 if (process.env.NODE_ENV === "production") {
-	app.use(express.static(path.join(__dirname, "../frontend/dist")));
-	app.get("*", (req, res) => {
-		res.sendFile(path.resolve(__dirname, "../frontend", "dist", "index.html"));
-	});
+app.use(express.static(path.join(__dirname, "../frontend/dist")));
+app.get("*", (req, res) => {
+res.sendFile(path.resolve(__dirname, "../frontend", "dist", "index.html"));
+});
 }
 
 // error handler
 app.use((err, req, res, next) => {
-	res.status(500).json({ message: process.env.NODE_ENV === "production" ? "Internal server error" : err.message });
+res.status(500).json({
+message:
+process.env.NODE_ENV === "production" ? "Internal server error" : err.message,
+});
 });
 
 httpServer.listen(PORT, () => {
-	console.log("Server is running on port " + PORT);
-	connectDB();
+console.log("Server is running on port " + PORT);
+connectDB();
 });

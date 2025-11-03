@@ -1,7 +1,6 @@
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { Outlet } from "react-router-dom";
 import LeftSidebar from "./components/LeftSidebar";
-//import FriendsActivity from "./components/FriendsActivity";
 import AudioPlayer from "./components/AudioPlayer";
 import { PlaybackControls } from "./components/PlaybackControls";
 import { useEffect, useState } from "react";
@@ -77,7 +76,7 @@ const MainLayout = () => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -30 }}
             transition={{ duration: 0.5 }}
-            className="absolute top-1/2 left-10 -translate-y-1/2 bg-black text-white px-3 py-1 rounded-lg text-sm shadow-lg"
+            className="absolute top-1/2 left-1/4 -translate-y-1/2 bg-black text-white px-3 py-1 rounded-lg text-sm shadow-lg"
           >
             ← Drag to resize the sidebar
           </motion.div>

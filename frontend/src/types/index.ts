@@ -8,6 +8,7 @@ export interface Song {
 	duration: number;
 	createdAt: string;
 	updatedAt: string;
+	audioBlob?: Blob; 
 }
 
 export interface Album {
@@ -40,6 +41,10 @@ export interface User {
 	clerkId: string;
 	fullName: string;
 	imageUrl: string;
+	email: string;
+	profileImage?: string;
+	lastMessage?: string;
+	lastMessageTime?: string;
 }
 
 export interface Playlist {

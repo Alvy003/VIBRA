@@ -8,24 +8,21 @@ import { buttonVariants } from "./ui/button";
 
 const Topbar = () => {
 	const { isAdmin } = useAuthStore();
-	/*console.log({ isAdmin });*/
-
+	
 	return (
-		<div
-		className="flex items-center justify-between p-4 sticky top-0 bg-zinc-900/75 backdrop-blur-md z-10 text-white"
-		>
-		  <div className="flex items-center gap-3">
-			<img src="/vibra.png" className="w-9 h-9" alt="Vibra logo" />
-			<span
-			  className="text-lg font-semibold tracking-wide font-[Poppins,sans-serif] hover:text-violet-400 transition-colors duration-300"
+			<div
+			className="flex items-center justify-between p-4 sticky top-0 bg-zinc-900/75 backdrop-blur-md z-10 text-white"
 			>
-			  VIBRA
-			</span>
-		  </div>
+			<Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity duration-300">
+				<img src="/vibra.png" className="w-9 h-9" alt="Vibra logo" />
+				<span className="text-lg font-semibold tracking-wide font-[Poppins,sans-serif] hover:text-violet-100 transition-colors duration-300">
+				VIBRA
+				</span>
+			</Link>
 
 			<div className='flex items-center gap-2'>
 				{isAdmin && (
-					<Link to={"/admin"} className={cn(buttonVariants({ variant: "outline" }))}>
+					<Link to={"/admin"} className={cn(buttonVariants({ variant: "outline" }),"lg:hover:bg-white/10 transition-colors duration-200")}>
 						<LayoutDashboardIcon className='size-4  mr-1' />
 						AdminDB
 					</Link>

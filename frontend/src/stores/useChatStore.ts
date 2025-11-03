@@ -20,9 +20,11 @@ interface ChatStore {
   initSocket: (userId: string) => void;
   disconnectSocket: () => void;
   sendMessage: (receiverId: string, senderId: string, content: string) => void;
-  fetchMessages: (userId: string) => Promise<void>;
+  fetchMessages: (userId: string, force?: boolean) => Promise<void>;
   setSelectedUser: (user: User | null) => void;
 
+  fetchUnreadCounts: () => Promise<void>;
+  markConversationRead: (otherUserId: string) => Promise<void>;
   clearUnreadMessages: (userId: string) => void;
   incrementUnreadMessages: (userId: string) => void;
 }
@@ -39,7 +41,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   users: [],
   isLoading: false,
   error: null,
-  socket: socket,
+  socket,
   isConnected: false,
   onlineUsers: new Set(),
   userActivities: new Map(),
@@ -51,7 +53,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setSelectedUser: (user) => {
     set({ selectedUser: user });
     if (user) {
+      const { currentUserId, socket, markConversationRead } = get();
+      // Clear locally
       get().clearUnreadMessages(user.clerkId);
+      // Mark read via socket
+      if (currentUserId) {
+        socket.emit("mark_messages_read", {
+          userId: currentUserId,
+          otherUserId: user.clerkId,
+        });
+      }
+      // Mark read via REST (belt-and-suspenders)
+      markConversationRead(user.clerkId).catch(() => {});
     }
   },
 
@@ -67,6 +80,28 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  markConversationRead: async (otherUserId: string) => {
+    try {
+      await axiosInstance.post("/users/messages/mark-read", { otherUserId });
+    } catch (e) {
+      console.warn("Failed to mark conversation read", e);
+    }
+  },
+
+  fetchUnreadCounts: async () => {
+    try {
+      const res = await axiosInstance.get("/users/unread-counts");
+      const counts = res.data || {};
+      const { selectedUser } = get();
+      if (selectedUser?.clerkId) {
+        delete counts[selectedUser.clerkId];
+      }
+      set({ unreadMessagesByUser: counts });
+    } catch (err) {
+      console.warn("Failed to fetch unread counts", err);
+    }
+  },
+
   initSocket: (userId: string) => {
     if (!get().isConnected) {
       (socket as any).auth = { userId };
@@ -75,26 +110,40 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       socket.emit("user_connected", userId);
       set({ currentUserId: userId });
 
+      socket.on("connect", async () => {
+        await get().fetchUnreadCounts();
+        socket.emit("user_connected", userId);
+      });
+
+      // Optional: you can ignore offline_messages to avoid double writes,
+      // or set them directly (not merge) if you trust server counts:
+      socket.on("offline_messages", (counts: Record<string, number>) => {
+        const { selectedUser } = get();
+        const next = { ...counts };
+        if (selectedUser?.clerkId) delete next[selectedUser.clerkId];
+        set({ unreadMessagesByUser: next });
+      });
+
       socket.on("users_online", (users: string[]) => {
         set({ onlineUsers: new Set(users) });
       });
 
-      socket.on("activities", (activities: [string, string][]) => {
-        set({ userActivities: new Map(activities) });
-      });
-
-      socket.on("user_connected", (userId: string) => {
+      socket.on("user_connected", (uid: string) => {
         set((state) => ({
-          onlineUsers: new Set([...state.onlineUsers, userId]),
+          onlineUsers: new Set([...state.onlineUsers, uid]),
         }));
       });
 
-      socket.on("user_disconnected", (userId: string) => {
+      socket.on("user_disconnected", (uid: string) => {
         set((state) => {
-          const newOnlineUsers = new Set(state.onlineUsers);
-          newOnlineUsers.delete(userId);
-          return { onlineUsers: newOnlineUsers };
+          const next = new Set(state.onlineUsers);
+          next.delete(uid);
+          return { onlineUsers: next };
         });
+      });
+
+      socket.on("activities", (activities: [string, string][]) => {
+        set({ userActivities: new Map(activities) });
       });
 
       socket.on("receive_message", (message: Message) => {
@@ -102,40 +151,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (!currentUserId) return;
 
         const otherUserId =
-          message.senderId === currentUserId ? message.receiverId : message.senderId;
+          message.senderId === currentUserId
+            ? message.receiverId
+            : message.senderId;
 
         set((state) => {
-          const updatedMessages = [
+          const updated = [
             ...(state.messagesByUser[otherUserId] || []),
             message,
           ];
 
           const isChatOpen = state.selectedUser?.clerkId === otherUserId;
 
-          // If the chat is not open, play notification sound.
           if (!isChatOpen) {
             const audio = new Audio("/notification.mp3");
-            audio.play().catch((err) => {
-              console.warn("Notification sound failed to play:", err);
+            audio.play().catch(() => {});
+          } else {
+            // Mark read both ways immediately
+            socket.emit("mark_messages_read", {
+              userId: currentUserId,
+              otherUserId,
             });
-
-            // If user is offline, persist unread message count in localStorage
-            if (!state.onlineUsers.has(currentUserId)) {
-              const unreadCount = state.unreadMessagesByUser[otherUserId] || 0;
-              localStorage.setItem(
-                `unreadMessages_${currentUserId}`,
-                JSON.stringify({
-                  ...state.unreadMessagesByUser,
-                  [otherUserId]: unreadCount + 1,
-                })
-              );
-            }
+            axiosInstance
+              .post("/users/messages/mark-read", { otherUserId })
+              .catch(() => {});
           }
 
           return {
             messagesByUser: {
               ...state.messagesByUser,
-              [otherUserId]: updatedMessages,
+              [otherUserId]: updated,
             },
             unreadMessagesByUser: isChatOpen
               ? state.unreadMessagesByUser
@@ -150,42 +195,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
       socket.on("message_sent", (message: Message) => {
         set((state) => {
-          const updatedMessages = [
+          const updated = [
             ...(state.messagesByUser[message.receiverId] || []),
             message,
           ];
-
           return {
             messagesByUser: {
               ...state.messagesByUser,
-              [message.receiverId]: updatedMessages,
+              [message.receiverId]: updated,
             },
           };
         });
       });
 
-      socket.on("activity_updated", ({ userId, activity }) => {
+      socket.on("activity_updated", ({ userId: uid, activity }) => {
         set((state) => {
-          const newActivities = new Map(state.userActivities);
-          newActivities.set(userId, activity);
-          return { userActivities: newActivities };
+          const next = new Map(state.userActivities);
+          next.set(uid, activity);
+          return { userActivities: next };
         });
       });
-
-      // Fetch messages after socket connection is established
-      get().fetchMessages(userId);
-
-      // Handle restoring unread messages from localStorage
-      const storedUnreadMessages = localStorage.getItem(
-        `unreadMessages_${userId}`
-      );
-      if (storedUnreadMessages) {
-        set({
-          unreadMessagesByUser: JSON.parse(storedUnreadMessages),
-        });
-        // Clear unread messages from localStorage after they are loaded
-        localStorage.removeItem(`unreadMessages_${userId}`);
-      }
 
       set({ isConnected: true });
     }
@@ -199,17 +228,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   sendMessage: async (receiverId, senderId, content) => {
-    const socket = get().socket;
-    if (!socket) return;
-
-    socket.emit("send_message", { receiverId, senderId, content });
+    const s = get().socket;
+    if (!s) return;
+    s.emit("send_message", { receiverId, senderId, content });
   },
 
-  fetchMessages: async (userId: string) => {
+  fetchMessages: async (userId: string, force = false) => {
     const { messagesByUser } = get();
-
-    // Skip fetching if messages are already loaded
-    if (messagesByUser[userId]) return;
+    if (messagesByUser[userId] && !force) return;
 
     set({ isLoading: true, error: null });
     try {
@@ -220,9 +246,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           [userId]: response.data,
         },
       }));
-
-      // Clear unread messages after loading
-      get().clearUnreadMessages(userId);
     } catch (error: any) {
       set({
         error: error.response?.data?.message || "Failed to fetch messages",
@@ -234,19 +257,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   clearUnreadMessages: (userId: string) => {
     set((state) => {
-      const newUnread = { ...state.unreadMessagesByUser };
-      delete newUnread[userId];
-      return { unreadMessagesByUser: newUnread };
+      const next = { ...state.unreadMessagesByUser };
+      delete next[userId];
+      return { unreadMessagesByUser: next };
     });
   },
 
   incrementUnreadMessages: (userId: string) => {
     set((state) => {
-      const currentCount = state.unreadMessagesByUser[userId] || 0;
+      const current = state.unreadMessagesByUser[userId] || 0;
       return {
         unreadMessagesByUser: {
           ...state.unreadMessagesByUser,
-          [userId]: currentCount + 1,
+          [userId]: current + 1,
         },
       };
     });

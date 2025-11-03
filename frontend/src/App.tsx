@@ -1,7 +1,7 @@
-// App.tsx
-import { Route, Routes } from "react-router-dom";
-import { AuthenticateWithRedirectCallback } from "@clerk/clerk-react";
+import { Route, Routes, useNavigate, useLocation } from "react-router-dom";
+import { AuthenticateWithRedirectCallback, useUser } from "@clerk/clerk-react";
 import { Toaster } from "react-hot-toast";
+import { useEffect } from "react";
 
 import HomePage from "./pages/home/HomePage";
 import AuthCallbackPage from "./pages/auth-callback/AuthCallbackPage";
@@ -14,34 +14,69 @@ import FavoritesPage from "@/pages/favorites/FavoritesPage";
 import NotFoundPage from "./pages/404/NotFoundPage";
 import { AccentToastProvider } from "@/components/AccentToast";
 import { useAxiosAuth } from "@/hooks/useAxiosAuth";
-import AuthProvider from "@/providers/AuthProvider"; 
+import AuthProvider from "@/providers/AuthProvider";
+import DownloadsPage from "@/pages/downloads/DownloadsPage";
+
+import CallEngine from "@/components/CallEngine";
+import { CallScreen } from "@/components/CallScreen";
+import CallNav from "@/components/CallNav";
+import RequestNotificationPermission from "./components/RequestNotificationPermission";
+
+const LAST_PAGE_KEY = 'vibra_last_page';
+const PAGE_RESTORED_KEY = 'vibra_page_restored';
 
 function App() {
-  // sets up axios interceptor once
   useAxiosAuth();
+  const { user } = useUser();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  // ✅ Restore last page on app load (only once per session)
+  useEffect(() => {
+    const hasRestored = sessionStorage.getItem(PAGE_RESTORED_KEY);
+    
+    // Only restore if we haven't already and user is on home page
+    if (!hasRestored && location.pathname === '/') {
+      const lastPage = localStorage.getItem(LAST_PAGE_KEY);
+      
+      // Define which routes can be restored
+      const cacheableRoutes = ['/chat', '/search', '/favorites', '/downloads'];
+      
+      // If there's a saved page and it's cacheable, navigate to it
+      if (lastPage && cacheableRoutes.includes(lastPage)) {
+        navigate(lastPage, { replace: true });
+      }
+      
+      // Mark as restored for this session (prevents re-navigation)
+      sessionStorage.setItem(PAGE_RESTORED_KEY, 'true');
+    }
+  }, []); // Run only once on mount
 
   return (
     <AuthProvider>
       <AccentToastProvider>
-      <Routes>
-        <Route
-          path="/sso-callback"
-          element={<AuthenticateWithRedirectCallback signUpForceRedirectUrl={"/auth-callback"} />}
-        />
-        <Route path="/auth-callback" element={<AuthCallbackPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-
-        {/* Layout includes AudioPlayer, sidebar, topbar */}
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/albums/:albumId" element={<AlbumPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/favorites" element={<FavoritesPage />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Route>
-      </Routes>
-      <Toaster />
+        <RequestNotificationPermission />
+        <CallEngine myId={user?.id} />
+        <CallNav />
+        <CallScreen />
+        <Routes>
+          <Route
+            path="/sso-callback"
+            element={<AuthenticateWithRedirectCallback signUpForceRedirectUrl={"/auth-callback"} />}
+          />
+          <Route path="/auth-callback" element={<AuthCallbackPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/chat" element={<ChatPage />} />
+            <Route path="/albums/:albumId" element={<AlbumPage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/favorites" element={<FavoritesPage />} />
+            <Route path="/downloads" element={<DownloadsPage />} />
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
+        </Routes>
+        <Toaster />
       </AccentToastProvider>
     </AuthProvider>
   );

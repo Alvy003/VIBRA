@@ -1,5 +1,5 @@
 // src/pages/home/components/LikeButton.tsx
-import { useAuth, useClerk } from "@clerk/clerk-react";
+import { useAuth } from "@clerk/clerk-react";//useClerk
 import { useMusicStore } from "@/stores/useMusicStore";
 import { Heart } from "lucide-react";
 import { useState } from "react";
@@ -13,7 +13,7 @@ const LikeButton = ({ songId }: LikeButtonProps) => {
   const { isSignedIn } = useAuth();
   const { likedSongs, likeSong, unlikeSong } = useMusicStore();
   const [loading, setLoading] = useState(false);
-  const { redirectToSignIn } = useClerk();
+  // const { redirectToSignIn } = useClerk();
 
   const isLiked = likedSongs.some((s) => s._id === songId);
 
@@ -21,12 +21,14 @@ const LikeButton = ({ songId }: LikeButtonProps) => {
     e.stopPropagation();
 
     if (!isSignedIn) {
-      toast("Please sign in to like songs");
-      setTimeout(() => {
-        redirectToSignIn({ redirectUrl: window.location.href });
-      }, 1000);
-      return;
-    }    
+          toast.custom(
+            <div className="bg-red-800/95 text-white px-4 py-2 rounded-full shadow-lg border border-red-400/30">
+              <span className="text-sm">Please sign in to Like Songs</span>
+            </div>,
+            { duration: 1500 }
+          );
+          return;
+        }  
 
     try {
       setLoading(true);

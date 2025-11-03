@@ -2,15 +2,25 @@
 import { create } from "zustand";
 import { axiosInstance } from "@/lib/axios";
 
+interface User {
+  _id: string;
+  name: string;
+  email: string;
+  // Add more fields if needed
+}
+
 interface AuthState {
   token: string | null;
+  user: User | null; // ✅ added
   isAdmin: boolean;
   setToken: (token: string | null) => void;
+  setUser: (user: User | null) => void; // ✅ added
   checkAdminStatus: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   token: null,
+  user: null, // ✅ added
   isAdmin: false,
 
   setToken: (token) => {
@@ -21,6 +31,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
     set({ token });
   },
+
+  setUser: (user) => set({ user }), // ✅ added
 
   checkAdminStatus: async () => {
     try {

@@ -1,3 +1,4 @@
+// src/pages/home/HomePage.tsx
 import Topbar from "@/components/Topbar";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { useEffect, useMemo } from "react";
@@ -5,58 +6,89 @@ import FeaturedSection from "./components/FeaturedSection";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import SectionGrid from "./components/SectionGrid";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { motion } from "framer-motion";
 
 const HomePage = () => {
-	const {
-		fetchFeaturedSongs,
-		fetchMadeForYouSongs,
-		fetchTrendingSongs,
-		isLoading,
-		madeForYouSongs,
-		featuredSongs,
-		trendingSongs,
-	} = useMusicStore();
+  const {
+    fetchFeaturedSongs,
+    fetchMadeForYouSongs,
+    fetchTrendingSongs,
+    isLoading,
+    madeForYouSongs,
+    featuredSongs,
+    trendingSongs,
+  } = useMusicStore();
 
-	// Time-based greeting using useMemo
-	const greeting = useMemo(() => {
-		const hour = new Date().getHours();
-		if (hour < 12) return "Good morning";
-		if (hour < 18) return "Good afternoon";
-		return "Good evening";
-	}, []);
+  // Time-based greeting with icon
+  const greetingData = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return { text: "Good morning"};
+    if (hour < 18) return { text: "Good afternoon"};
+    return { text: "Good evening" };
+  }, []);
 
-	const { initializeQueue, currentSong  } = usePlayerStore();
-	
-	useEffect(() => {
-		if (!currentSong && madeForYouSongs.length && featuredSongs.length && trendingSongs.length) {
-		  const allSongs = [...featuredSongs, ...madeForYouSongs, ...trendingSongs];
-		  initializeQueue(allSongs);
-		}
-	  }, [initializeQueue, currentSong, madeForYouSongs, featuredSongs, trendingSongs]);
-	  
-	  useEffect(() => {
-		fetchFeaturedSongs();
-		fetchMadeForYouSongs();
-		fetchTrendingSongs();
-	  }, [fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs]);
-	  
+  const { initializeQueue, currentSong } = usePlayerStore();
 
-	return (
-		<main className='rounded-md overflow-hidden h-full bg-gradient-to-b from-zinc-800 to-zinc-900'>
-			<Topbar />
-			<ScrollArea className='h-[calc(100vh-150px)]'>
-				<div className='p-4 sm:p-6'>
-					<h1 className='text-2xl sm:text-3xl font-bold mb-6'>{greeting}</h1>
-					<FeaturedSection />
+  useEffect(() => {
+    if (!currentSong && madeForYouSongs.length && featuredSongs.length && trendingSongs.length) {
+      const allSongs = [...featuredSongs, ...madeForYouSongs, ...trendingSongs];
+      initializeQueue(allSongs);
+    }
+  }, [initializeQueue, currentSong, madeForYouSongs, featuredSongs, trendingSongs]);
 
-					<div className='space-y-8'>
-						<SectionGrid title='Made For You' songs={madeForYouSongs} isLoading={isLoading} />
-						<SectionGrid title='Trending' songs={trendingSongs} isLoading={isLoading} />
-					</div>
-				</div>
-			</ScrollArea>
-		</main>
-	);
+  useEffect(() => {
+    fetchFeaturedSongs();
+    fetchMadeForYouSongs();
+    fetchTrendingSongs();
+  }, [fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs]);
+
+  return (
+    <main className="rounded-md overflow-hidden h-full bg-gradient-to-b from-zinc-800 via-zinc-900/80 to-zinc-900">
+      <Topbar />
+      <ScrollArea className="h-[calc(100vh-130px)] sm:h-[calc(100vh-150px)]">
+        <div className="p-4 sm:p-6 space-y-6">
+          {/* Animated Greeting Header */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-6"
+          >
+            <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-white to-white/90 bg-clip-text text-transparent flex items-center gap-3">
+              {greetingData.text}
+            </h1>
+            <p className="text-sm text-zinc-400 mt-1">
+              {new Date().toLocaleDateString("en-US", {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+              })}
+            </p>
+          </motion.div>
+
+          {/* Featured Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.1 }}
+          >
+            <FeaturedSection />
+          </motion.div>
+
+          {/* Content Sections */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="space-y-8 pb-6"
+          >
+            <SectionGrid title="Made For You" songs={madeForYouSongs} isLoading={isLoading} />
+            <SectionGrid title="Trending" songs={trendingSongs} isLoading={isLoading} />
+          </motion.div>
+        </div>
+      </ScrollArea>
+    </main>
+  );
 };
 
 export default HomePage;

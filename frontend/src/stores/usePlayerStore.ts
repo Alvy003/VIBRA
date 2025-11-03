@@ -13,12 +13,6 @@ interface PlayerStore {
   displayQueue: Song[]; // derived full queue used in UI
   currentIndex: number; // index of currentSong inside displayQueue (keeps UI code working)
 
-  // internal split queues (not part of original interface, but helpful)
-  // we keep them in the store for determinism (not exported in the dev interface)
-  // mainQueue: original playlist order (history + remaining)
-  // nextUpQueue: songs added via "Play Next" (FIFO)
-  // laterQueue: songs added via "Add to queue" (appended)
-
   duration: number;
   currentTime: number;
   volume: number;
@@ -45,6 +39,7 @@ interface PlayerStore {
 
   toggleShuffle: () => void;
   toggleRepeat: () => void;
+  reset: () => void;
 
   // internal helpers (kept on store so cross-component calls can use them)
   autoRefillQueue: () => Promise<void>;
@@ -230,6 +225,28 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       set({ isPlaying: true });
     },
 
+    reset: () => {
+      const socket = useChatStore.getState().socket;
+      if (socket?.auth) {
+        socket.emit("update_activity", {
+          userId: socket.auth.userId,
+          activity: "Idle",
+        });
+      }
+      
+      set({
+        currentSong: null,
+        isPlaying: false,
+        queue: [],
+        displayQueue: [],
+        currentIndex: -1,
+        currentTime: 0,
+        mainQueue: [],
+        nextUpQueue: [],
+        laterQueue: [],
+      } as any);
+    },
+
     togglePlay: () => {
       const willStart = !get().isPlaying;
       const current = get().currentSong;
@@ -249,7 +266,55 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
     playNext: async () => {
       const state: any = get();
 
-      // if no queues at all, nothing to do
+      // ✅ If shuffle is enabled, use displayQueue instead of internal queues
+      if (state.isShuffle && state.displayQueue && state.displayQueue.length > 0) {
+        const currentIdx = state.currentIndex;
+        
+        // Repeat handling
+        if (state.isRepeat && state.displayQueue[currentIdx]) {
+          set({ currentSong: state.displayQueue[currentIdx], isPlaying: true });
+          return;
+        }
+
+        // Check if there's a next song in displayQueue
+        if (currentIdx + 1 < state.displayQueue.length) {
+          const nextSong = state.displayQueue[currentIdx + 1];
+          set({ 
+            currentSong: nextSong, 
+            currentIndex: currentIdx + 1,
+            isPlaying: true 
+          });
+
+          const socket = useChatStore.getState().socket;
+          if (socket?.auth) {
+            socket.emit("update_activity", {
+              userId: socket.auth.userId,
+              activity: `Playing ${nextSong.title} by ${nextSong.artist}`,
+            });
+          }
+          return;
+        } else {
+          // End of shuffled queue - auto refill if needed
+          const upcomingCount = Math.max(0, state.displayQueue.length - (currentIdx + 1));
+          if (upcomingCount < 5) {
+            await get().autoRefillQueue();
+            // After refill, try to play next again
+            const newState: any = get();
+            if (newState.displayQueue && currentIdx + 1 < newState.displayQueue.length) {
+              const nextSong = newState.displayQueue[currentIdx + 1];
+              set({ 
+                currentSong: nextSong, 
+                currentIndex: currentIdx + 1,
+                isPlaying: true 
+              });
+              return;
+            }
+          }
+          return; // No more songs
+        }
+      }
+
+      // ✅ Original non-shuffle logic (rest of the function stays the same)
       if (
         (!state.mainQueue || state.mainQueue.length === 0)
         && (!state.nextUpQueue || state.nextUpQueue.length === 0)
@@ -258,15 +323,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
         return;
       }
 
-      // repeat handling
       if (state.isRepeat && state.displayQueue && state.displayQueue[state.currentIndex]) {
         const song = state.displayQueue[state.currentIndex];
         set({ currentSong: song, isPlaying: true });
         return;
       }
 
-      // If remaining upcoming is low, attempt auto-refill
-      // Count upcoming songs after current position in displayQueue
       const upcomingCount = Math.max(0, state.displayQueue.length - (state.currentIndex + 1));
       if (upcomingCount < 5) {
         await get().autoRefillQueue();
@@ -274,7 +336,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
 
       let nextSong: Song | null = null;
 
-      // Priority 1: nextUpQueue (FIFO)
       if (state.nextUpQueue && state.nextUpQueue.length > 0) {
         const shifted = [...state.nextUpQueue];
         nextSong = shifted.shift();
@@ -283,19 +344,16 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
           return {};
         });
       } else {
-        // Priority 2: mainQueue (advance currentIndex if possible)
         const main = state.mainQueue || [];
         const mainIdx = state.currentIndex;
         if (main && mainIdx >= 0 && mainIdx + 1 < main.length) {
           const nextIdx = mainIdx + 1;
           nextSong = main[nextIdx];
-          // update currentIndex to next index inside mainQueue
           set((s: any) => {
             s.currentIndex = nextIdx;
             return {};
           });
         } else {
-          // Priority 3: laterQueue (FIFO)
           if (state.laterQueue && state.laterQueue.length > 0) {
             const later = [...state.laterQueue];
             nextSong = later.shift();
@@ -307,7 +365,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
         }
       }
 
-      // If still no nextSong, try auto-refill and retry once
       if (!nextSong) {
         await get().autoRefillQueue();
         const st2: any = get();
@@ -333,11 +390,9 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
       }
 
       if (!nextSong) {
-        // still nothing
         return;
       }
 
-      // set currentSong and rebuild display
       set({
         currentSong: nextSong,
         isPlaying: true,
@@ -345,7 +400,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
 
       get()._rebuildDisplay();
 
-      // emit activity
       const socket = useChatStore.getState().socket;
       if (socket?.auth) {
         socket.emit("update_activity", {
@@ -354,7 +408,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
         });
       }
     },
-
     playPrevious: () => {
       const state: any = get();
       // If we have a history in mainQueue, go back there.
@@ -454,11 +507,24 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
 
     reorderQueue: (newUpcomingSongs: Song[]) => {
       set((state: any) => {
-        state.nextUpQueue = [...newUpcomingSongs];
-        state.laterQueue = [];
+        const currentSong: Song | null = state.currentSong || null;
+    
+        // Remove currentSong if present and de-dupe by _id
+        const seen = new Set<string>();
+        const cleaned = (newUpcomingSongs || [])
+          .filter(Boolean)
+          .filter((s: Song) => !currentSong || s._id !== currentSong._id)
+          .filter((s: Song) => {
+            if (seen.has(s._id)) return false;
+            seen.add(s._id);
+            return true;
+          });
+    
+        state.nextUpQueue = cleaned;
+        // Keep laterQueue as-is; do NOT clear it
         return {};
       });
-
+    
       get()._rebuildDisplay();
     },
 
@@ -510,7 +576,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => {
             return {};
           });
           get()._rebuildDisplay();
-          console.log("✅ Auto-refilled queue with random songs");
+          // console.log("Auto-refilled queue with random songs");
         }
       } catch (err) {
         console.error("Auto-refill failed:", err);

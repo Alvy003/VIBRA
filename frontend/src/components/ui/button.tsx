@@ -9,7 +9,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow lg:hover:bg-primary/100",
+        default: "bg-primary text-primary-foreground shadow lg:hover:bg-violet-500/100",
         destructive: "bg-destructive text-destructive-foreground shadow-sm lg:hover:bg-destructive/90",
         outline: "border border-input bg-background text-foreground shadow-sm lg:hover:bg-accent lg:hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground shadow-sm lg:hover:bg-secondary/80",
