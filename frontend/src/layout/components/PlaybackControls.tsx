@@ -18,12 +18,13 @@ import {
   ChevronDown,
   Maximize2,
   Minimize2,
-  // Music2,
+  MoreHorizontal,
   Timer,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import LikeButton from "@/pages/home/components/LikeButton";
 import { motion, AnimatePresence, useMotionValue, PanInfo } from "framer-motion";
+import PlaybackControlsSongOptions from "./PlaybackControlsSongOptions";
 
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return "0:00";
@@ -307,7 +308,7 @@ const DraggableQueueSheet = ({
             }
           }}
           onDragEnd={handleDragEnd}
-          className="flex flex-col items-center py-4 cursor-grab active:cursor-grabbing select-none shrink-0"
+          className="flex flex-col items-center py-2 cursor-grab active:cursor-grabbing select-none shrink-0"
         >
           <div className="w-12 h-1.5 bg-zinc-600 rounded-full" />
         </motion.div>
@@ -358,6 +359,9 @@ export const PlaybackControls = () => {
   const toggleSidePanelView = useUIStore((s) => s.toggleSidePanelView);
   const sidePanelView = useUIStore((s) => s.sidePanelView);
 
+  const [songOptionsOpen, setSongOptionsOpen] = useState(false);
+  const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+
   // Toggle mute/unmute
   const toggleMute = () => {
     if (isMuted) {
@@ -371,6 +375,11 @@ export const PlaybackControls = () => {
       setIsMuted(true);
     }
   };
+
+  useEffect(() => {
+    setSongOptionsOpen(false);
+    setContextMenuPos(null);
+  }, [currentSong?._id]);
 
   // Update muted state when volume changes externally
   useEffect(() => {
@@ -516,7 +525,7 @@ export const PlaybackControls = () => {
 
                 <Button
                   size="icon"
-                  className="bg-white lg:hover:bg-white/80 text-black rounded-full h-9 w-9"
+                  className="bg-white/90 lg:hover:bg-white/80 text-black rounded-full h-9 w-9"
                   onClick={(e) => {
                     e.stopPropagation();
                     togglePlay();
@@ -561,48 +570,72 @@ export const PlaybackControls = () => {
             <div className="absolute inset-0 bg-gradient-to-t from-black via-zinc-900/80 to-transparent" />
 
             <div className="relative flex flex-col h-full px-6 pb-6 text-white overflow-y-auto">
-              <div className="flex justify-start sticky top-0 z-10 pt-6">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="text-zinc-300"
-                  onClick={toggleExpand}
-                >
-                  <ChevronDown className="h-7 w-7" />
-                </Button>
-              </div>
+            <div className="flex justify-between items-center sticky top-0 z-10 pt-6">
+              <Button size="icon" variant="ghost" className="text-zinc-300" onClick={toggleExpand}>
+                <ChevronDown className="h-7 w-7" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="text-zinc-300"
+                onClick={() => setSongOptionsOpen(true)}
+              >
+                <MoreHorizontal className="h-6 w-6" />
+              </Button>
+            </div>
 
-              <div className="flex justify-center mt-10">
-                <img
+              {/* Art */}
+              <div className="flex justify-center mt-12 mb-8">
+                <motion.img
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.3 }}
                   src={currentSong.imageUrl}
                   alt={currentSong.title}
-                  className="w-[80vw] max-w-[320px] aspect-square rounded-2xl shadow-lg object-cover"
+                  className="w-[85vw] max-w-[340px] aspect-square rounded-3xl shadow-2xl object-cover ring-1 ring-white/10"
                 />
               </div>
 
-              <div className="mt-9 flex items-center justify-between w-full max-w-[320px] mx-auto">
+            {/* Song Info */}
+            <div className="flex items-start justify-between gap-3 px-1 mb-8">
                 <div className="flex flex-col flex-1 min-w-0">
-                  <div className="text-2xl font-semibold truncate">{currentSong.title}</div>
-                  <div className="text-sm text-zinc-400 truncate">{currentSong.artist}</div>
+                  <h1 className="text-xl font-medium truncate leading-tight mb-1">
+                    {currentSong.title}
+                  </h1>
+                  <p className="text-base text-zinc-400 truncate">
+                    {currentSong.artist}
+                  </p>
                 </div>
-                <div className="ml-3 flex-shrink-0">
+                <div className="flex-shrink-0 mt-1">
                   <LikeButton songId={currentSong._id} />
                 </div>
               </div>
 
-              <div className="mt-10 flex items-center gap-2">
-                <div className="text-xs text-zinc-400">{formatTime(currentTime)}</div>
-                <Slider
-                  value={[currentTime]}
-                  max={duration || 100}
-                  step={1}
-                  className="w-full"
-                  onValueChange={handleSeek}
-                />
-                <div className="text-xs text-zinc-400">{formatTime(duration)}</div>
+              {/* Progress Section - Compact */}
+              <div className="px-1">
+                {/* Slider - with reduced width */}
+                <div className="px-1">
+                  <Slider
+                    value={[currentTime]}
+                    max={duration || 100}
+                    step={1}
+                    className="w-full"
+                    onValueChange={handleSeek}
+                  />
+                </div>
+                
+                {/* Time labels */}
+                <div className="flex items-center justify-between mt-2.5 px-1">
+                  <span className="text-xs font-medium text-zinc-400 tabular-nums">
+                    {formatTime(currentTime)}
+                  </span>
+                  <span className="text-xs font-medium text-zinc-400 tabular-nums">
+                    {formatTime(duration)}
+                  </span>
+                </div>
               </div>
 
-              <div className="mt-11 flex items-center justify-center gap-8">
+              <div className="mt-8 flex items-center justify-center gap-8">
                 <Button size="icon" variant="ghost" className={`${isShuffle ? "text-white" : "text-zinc-400"}`} onClick={toggleShuffle}>
                   <Shuffle className="h-6 w-6" />
                 </Button>
@@ -643,12 +676,70 @@ export const PlaybackControls = () => {
                 />
               )}
             </AnimatePresence>
+
+            {/* Song Options Bottom Sheet - Mobile */}
+            <AnimatePresence>
+              {songOptionsOpen && currentSong && (
+                <>
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 bg-black/50 z-[60] backdrop-blur-sm"
+                    onClick={() => setSongOptionsOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "100%" }}
+                    transition={{ type: "spring", damping: 30, stiffness: 300 }}
+                    className="fixed inset-x-0 bottom-0 z-[70] bg-gradient-to-b from-neutral-900 to-neutral-950 rounded-t-[28px] shadow-2xl max-h-[70vh] overflow-hidden"
+                  >
+                    {/* Handle */}
+                    <div className="flex justify-center pt-3 pb-4">
+                      <div className="w-12 h-1.5 bg-zinc-700 rounded-full" />
+                    </div>
+
+                    {/* Song Info Header */}
+                    <div className="flex items-center gap-3 px-5 pb-4 border-b border-zinc-800/50">
+                      <img
+                        src={currentSong.imageUrl}
+                        alt={currentSong.title}
+                        className="w-12 h-12 rounded-lg object-cover"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white font-medium truncate">{currentSong.title}</p>
+                        <p className="text-zinc-400 text-sm truncate">{currentSong.artist}</p>
+                      </div>
+                    </div>
+
+                    {/* Options */}
+                    <div className="p-3 pb-8 overflow-y-auto">
+                      <PlaybackControlsSongOptions
+                        song={currentSong}
+                        onClose={() => setSongOptionsOpen(false)}
+                        variant="mobile-sheet"
+                      />
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* DESKTOP SONG INFO + LIKE */}
-      <div className="hidden sm:flex items-center gap-4 min-w-[180px] w-[30%] pl-4">
+      <div
+          className="hidden sm:flex items-center gap-4 min-w-[180px] w-[30%] pl-4"
+          onContextMenu={(e) => {
+            if (!currentSong) return;
+            e.preventDefault();
+            setContextMenuPos({ x: e.clientX, y: e.clientY });
+            setSongOptionsOpen(true);
+          }}
+        >
         {currentSong && (
           <>
             <img src={currentSong.imageUrl} alt={currentSong.title} className="w-14 h-14 object-cover rounded-md" />
@@ -674,7 +765,7 @@ export const PlaybackControls = () => {
             <SkipBack className="h-4 w-4" />
           </Button>
 
-          <Button size="icon" className="bg-white lg:hover:bg-white/80 text-black rounded-full h-8 w-8" onClick={togglePlay} disabled={!currentSong}>
+          <Button size="icon" className="bg-white lg:hover:bg-white/80 px-5 py-5 text-black rounded-full h-8 w-8" onClick={togglePlay} disabled={!currentSong}>
             {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
           </Button>
 
@@ -874,6 +965,41 @@ export const PlaybackControls = () => {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* Desktop Context Menu */}
+      {songOptionsOpen && currentSong && contextMenuPos && (
+        <div
+          className="fixed inset-0 z-[9999]"
+          onClick={() => {
+            setSongOptionsOpen(false);
+            setContextMenuPos(null);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setSongOptionsOpen(false);
+            setContextMenuPos(null);
+          }}
+        >
+          <div
+            className="bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl p-1 w-48"
+            style={{
+              position: "fixed",
+              top: contextMenuPos.y,
+              left: contextMenuPos.x,
+              transform: "translate(-50%, -100%)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PlaybackControlsSongOptions
+              song={currentSong}
+              onClose={() => {
+                setSongOptionsOpen(false);
+                setContextMenuPos(null);
+              }}
+              variant="desktop"
+            />
+          </div>
+        </div>
+      )}
     </footer>
   );
 };

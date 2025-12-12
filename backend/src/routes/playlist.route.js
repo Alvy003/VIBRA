@@ -1,23 +1,26 @@
+// routes/playlist.route.js
 import express from "express";
 import {
   createPlaylist,
-  getAllPlaylists,
+  getUserPlaylists,
+  getFeaturedPlaylists,
   getPlaylistById,
   updatePlaylist,
   patchPlaylistSongs,
   deletePlaylist,
 } from "../controller/playlist.controller.js";
-import { protectRoute, requireAdmin } from "../middleware/auth.middleware.js";
+import { protectRoute } from "../middleware/auth.middleware.js";
 
 const router = express.Router();
 
 router.use(protectRoute);
 
-router.get("/", getAllPlaylists);
-router.post("/", requireAdmin, createPlaylist);
+router.get("/my-playlists", getUserPlaylists);
+router.get("/featured", getFeaturedPlaylists);
+router.post("/", createPlaylist);
 router.get("/:id", getPlaylistById);
-router.put("/:id", requireAdmin, updatePlaylist);
-router.patch("/:id/songs", requireAdmin, patchPlaylistSongs);
-router.delete("/:id", requireAdmin, deletePlaylist);
+router.put("/:id", updatePlaylist);
+router.patch("/:id/songs", patchPlaylistSongs);
+router.delete("/:id", deletePlaylist);
 
 export default router;

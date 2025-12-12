@@ -14,10 +14,6 @@ if (!vapidPublicKey || !vapidPrivateKey) {
     vapidPublicKey,
     vapidPrivateKey
   );
-
-  // Log public and private key (for debugging purposes)
-  console.log("VAPID Public Key:", vapidPublicKey);
-  console.log("VAPID Private Key:", vapidPrivateKey);
 }
 
 // Endpoint to send the VAPID Public Key to frontend

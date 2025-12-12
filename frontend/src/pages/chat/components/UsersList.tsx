@@ -4,7 +4,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useChatStore } from "@/stores/useChatStore";
 import { useEffect, useMemo, useState } from "react";
-import { Search, PhoneIncoming, PhoneOutgoing, PhoneMissed, Mic } from "lucide-react"; // ✅ Add call icons
+import { 
+  Search, 
+  PhoneIncoming, 
+  PhoneOutgoing, 
+  PhoneMissed, 
+  Mic,
+  Image as ImageIcon,
+  Film,
+  Music,
+  FileText,
+  Paperclip,
+} from "lucide-react";
 import type { User } from "@/types";
 
 // Human label for list (Today/Yesterday/Date)
@@ -18,17 +29,140 @@ function listTimeLabel(dateStr?: string) {
   const diffDays = Math.round((startOfToday - startOfDate) / oneDay);
 
   if (diffDays === 0) {
-    // Show time for today
     return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
   if (diffDays === 1) return "Yesterday";
 
-  // Show date as DD/MM/YY
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = String(d.getFullYear()).slice(-2);
-
   return `${day}/${month}/${year}`;
+}
+
+// ✅ Get message preview
+function getMessagePreview(lastMessage: any, otherUserClerkId: string): React.ReactNode {
+  if (!lastMessage) return "Start a conversation";
+
+  const messageType = lastMessage.type;
+  const files = lastMessage.files;
+  const isMine = lastMessage.senderId !== otherUserClerkId;
+
+  // Call types
+  if (messageType === "call_started") {
+    return (
+      <div className="flex items-center gap-1.5">
+        {isMine ? (
+          <PhoneOutgoing className="w-3 h-3 text-green-400" />
+        ) : (
+          <PhoneIncoming className="w-3 h-3 text-green-400" />
+        )}
+        <span>Voice call</span>
+      </div>
+    );
+  }
+  
+  if (messageType === "call_missed") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <PhoneMissed className="w-3 h-3 text-red-400" />
+        <span>Missed call</span>
+      </div>
+    );
+  }
+  
+  if (messageType === "call_declined") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <PhoneMissed className="w-3 h-3 text-orange-400" />
+        <span>Declined call</span>
+      </div>
+    );
+  }
+
+  // Voice message
+  if (messageType === "audio") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Mic className="w-3 h-3 text-violet-400" />
+        <span>Voice message</span>
+      </div>
+    );
+  }
+
+  // File messages
+  if (messageType === "file" && files && files.length > 0) {
+    const fileCount = files.length;
+    
+    const hasImages = files.some((f: any) => f.mimetype?.startsWith('image/'));
+    const hasVideos = files.some((f: any) => f.mimetype?.startsWith('video/'));
+    const hasAudio = files.some((f: any) => f.mimetype?.startsWith('audio/'));
+    const hasDocs = files.some((f: any) => 
+      f.mimetype?.includes('pdf') || 
+      f.mimetype?.includes('document') ||
+      f.mimetype?.includes('text')
+    );
+
+    // If there's caption with the file, show that
+    if (lastMessage.content && lastMessage.content.trim()) {
+      const Icon = hasImages ? ImageIcon : hasVideos ? Film : Paperclip;
+      return (
+        <div className="flex items-center gap-1.5">
+          <Icon className="w-3 h-3 text-zinc-400 shrink-0" />
+          <span className="truncate">{lastMessage.content}</span>
+        </div>
+      );
+    }
+
+    if (hasImages) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <ImageIcon className="w-3 h-3 text-violet-400" />
+          <span>{fileCount === 1 ? "Photo" : `${fileCount} Photos`}</span>
+        </div>
+      );
+    }
+    
+    if (hasVideos) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <Film className="w-3 h-3 text-violet-400" />
+          <span>{fileCount === 1 ? "Video" : `${fileCount} Videos`}</span>
+        </div>
+      );
+    }
+    
+    if (hasAudio) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <Music className="w-3 h-3 text-violet-400" />
+          <span>Audio file</span>
+        </div>
+      );
+    }
+    
+    if (hasDocs) {
+      return (
+        <div className="flex items-center gap-1.5">
+          <FileText className="w-3 h-3 text-violet-400" />
+          <span>{fileCount === 1 ? "Document" : `${fileCount} Documents`}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex items-center gap-1.5">
+        <Paperclip className="w-3 h-3 text-violet-400" />
+        <span>{fileCount === 1 ? "File" : `${fileCount} Files`}</span>
+      </div>
+    );
+  }
+
+  // Regular text message
+  if (lastMessage.content) {
+    return lastMessage.content;
+  }
+
+  return "Start a conversation";
 }
 
 const UsersList = () => {
@@ -118,50 +252,9 @@ const UsersList = () => {
                     const userMessages = messagesByUser[user.clerkId] || [];
                     const lastMessage = userMessages.length > 0 ? userMessages[userMessages.length - 1] : null;
                     const timeLabel = lastMessage ? listTimeLabel(lastMessage.createdAt) : "";
-
-                    // ✅ Last message preview with icons
-                    let preview: React.ReactNode = "Start a conversation";
                     
-                    if (lastMessage) {
-                      const messageType = (lastMessage as any).type;
-                      const isMine = (lastMessage as any).senderId === user.clerkId; // If false, I sent it
-                      
-                      if (messageType === "call_started") {
-                        preview = (
-                          <div className="flex items-center gap-1.5">
-                            {isMine ? (
-                              <PhoneIncoming className="w-3 h-3 text-green-300" />
-                            ) : (
-                              <PhoneOutgoing className="w-3 h-3 text-green-300" />
-                            )}
-                            <span>Voice call</span>
-                          </div>
-                        );
-                      } else if (messageType === "call_missed") {
-                        preview = (
-                          <div className="flex items-center gap-1.5">
-                            <PhoneMissed className="w-3 h-3 text-red-400" />
-                            <span>Missed call</span>
-                          </div>
-                        );
-                      } else if (messageType === "call_declined") {
-                        preview = (
-                          <div className="flex items-center gap-1.5">
-                            <PhoneMissed className="w-3 h-3 text-orange-400" />
-                            <span>Declined call</span>
-                          </div>
-                        );
-                      } else if (messageType === "audio") {
-                        preview = (
-                          <div className="flex items-center gap-1.5">
-                            <Mic className="w-3 h-3 text-violet-400" />
-                            <span>Voice message</span>
-                          </div>
-                        );
-                      } else {
-                        preview = lastMessage.content || "Start a conversation";
-                      }
-                    }
+                    // ✅ Use helper function for preview
+                    const preview = getMessagePreview(lastMessage, user.clerkId);
 
                     return (
                       <div

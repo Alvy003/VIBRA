@@ -25,6 +25,7 @@ const FeaturedSection = () => {
 
   return (
     <>
+     <h2 className="text-xl sm:text-xl font-semibold sm:font-bold mb-4">Quick Picks</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {featuredSongs.map((song) => (
           <div
@@ -54,36 +55,27 @@ const FeaturedSection = () => {
         ))}
       </div>
 
-      {/* Context Menu Overlay */}
-      {showOptions && contextSong && contextMenu && (
-        <>
-          <div
-            className="absolute z-[9999]"
-            style={{
-              top: contextMenu.y,
-              left: contextMenu.x,
-              transform: "translate(-50%, 0)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <SongOptions
-              song={contextSong}
-              forceOpen
-              onClose={closeContextMenu}
-              inlineTrigger={false}
-            />
+        {/* Context Menu Overlay */}
+        {showOptions && contextSong && contextMenu && (
+          <div className="fixed inset-0 z-[9998]" onClick={closeContextMenu}>
+            <div
+              className="absolute z-[9999]"
+              style={{
+                top: contextMenu.y,
+                left: contextMenu.x,
+                transform: "translate(-50%, 0)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SongOptions
+                song={contextSong}
+                forceOpen
+                onClose={closeContextMenu}
+                inlineTrigger={false}
+              />
+            </div>
           </div>
-
-          <div
-            className="fixed inset-0 z-[9998]"
-            onClick={closeContextMenu}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              closeContextMenu();
-            }}
-          />
-        </>
-      )}
+        )}
     </>
   );
 };

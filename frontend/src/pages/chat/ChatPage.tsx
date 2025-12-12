@@ -9,6 +9,7 @@ import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import MessageInput from "./components/MessageInput";
 import { ArrowDown, Play, Pause, PhoneIncoming, PhoneOutgoing, PhoneMissed, Trash2, AlertTriangle } from "lucide-react";
 import { axiosInstance } from "@/lib/axios";
+import { FileText, Image as ImageIcon, Film, Music, Download, X } from "lucide-react";
 
 const formatTime = (date: string) =>
   new Date(date).toLocaleTimeString("en-US", {
@@ -16,6 +17,30 @@ const formatTime = (date: string) =>
     minute: "2-digit",
     hour12: true,
   });
+
+  const downloadFile = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Download failed');
+      
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      // Clean up
+      URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback: open in new tab
+      window.open(url, '_blank');
+    }
+  };
 
 const API_ORIGIN =
   import.meta.env.MODE === "development"
@@ -42,6 +67,401 @@ function toAbsoluteVoiceUrl(url?: string | null) {
   if (url.startsWith("uploads")) return `${API_ORIGIN}/${url}`;
   
   return url;
+}
+
+function toAbsoluteFileUrl(url?: string | null) {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("/uploads")) return `${API_ORIGIN}${url}`;
+  if (url.startsWith("uploads")) return `${API_ORIGIN}/${url}`;
+  return url;
+}
+
+// ✅ Custom Audio Player for file audio messages (matches VoiceMessage style)
+function AudioFileMessage({
+  url,
+  filename,
+  mine,
+  timestamp,
+}: {
+  url: string;
+  filename: string;
+  mine: boolean;
+  timestamp: string;
+}) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [dur, setDur] = useState(0);
+  const [pos, setPos] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    const handleLoadStart = () => {
+      setLoading(true);
+      setError(null);
+    };
+
+    const handleLoadedMetadata = () => {
+      setLoading(false);
+      if (Number.isFinite(a.duration)) {
+        setDur(a.duration);
+      }
+    };
+
+    const handleCanPlay = () => {
+      setLoading(false);
+      if (Number.isFinite(a.duration)) {
+        setDur(a.duration);
+      }
+    };
+
+    const handleTimeUpdate = () => {
+      setPos(a.currentTime || 0);
+    };
+
+    const handleEnded = () => {
+      setPlaying(false);
+      a.currentTime = 0;
+      setPos(0);
+    };
+
+    const handleError = () => {
+      setLoading(false);
+      setPlaying(false);
+      setError("Failed to load");
+    };
+
+    a.addEventListener('loadstart', handleLoadStart);
+    a.addEventListener('loadedmetadata', handleLoadedMetadata);
+    a.addEventListener('canplay', handleCanPlay);
+    a.addEventListener('timeupdate', handleTimeUpdate);
+    a.addEventListener('ended', handleEnded);
+    a.addEventListener('error', handleError);
+
+    return () => {
+      a.removeEventListener('loadstart', handleLoadStart);
+      a.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      a.removeEventListener('canplay', handleCanPlay);
+      a.removeEventListener('timeupdate', handleTimeUpdate);
+      a.removeEventListener('ended', handleEnded);
+      a.removeEventListener('error', handleError);
+    };
+  }, [url]);
+
+  const toggle = async () => {
+    const a = audioRef.current;
+    if (!a) return;
+
+    if (a.paused) {
+      try {
+        setError(null);
+        await a.play();
+        setPlaying(true);
+      } catch (e: any) {
+        console.warn("Play failed:", e);
+        setError("Cannot play");
+        setPlaying(false);
+      }
+    } else {
+      a.pause();
+      setPlaying(false);
+    }
+  };
+
+  const pct = dur > 0 ? Math.min(100, (pos / dur) * 100) : 0;
+
+  const fmt = (s: number) => {
+    if (!Number.isFinite(s) || s < 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const ss = Math.floor(s % 60).toString().padStart(2, "0");
+    return `${m}:${ss}`;
+  };
+
+  return (
+    <div className="flex flex-col gap-1">
+      {/* Filename */}
+      <div className={`flex items-center gap-2 mb-1 ${mine ? "text-white/80" : "text-zinc-300"}`}>
+        <Music className="size-3.5" />
+        <span className="text-xs truncate max-w-[150px]">{filename}</span>
+      </div>
+      
+      {/* Player controls */}
+      <div className={`flex items-center gap-3 ${mine ? "text-white" : "text-zinc-100"}`}>
+        <button
+          onClick={toggle}
+          disabled={loading || !!error}
+          className={`p-2 rounded-full transition ${
+            mine
+              ? "bg-white/20 hover:bg-white/30 disabled:opacity-50"
+              : "bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50"
+          }`}
+          title={error ? error : playing ? "Pause" : "Play"}
+        >
+          {loading ? (
+            <div className="w-4 h-4 border-2 border-transparent border-t-current rounded-full animate-spin" />
+          ) : error ? (
+            <div className="w-4 h-4 text-red-400">!</div>
+          ) : playing ? (
+            <Pause className="w-4 h-4" />
+          ) : (
+            <Play className="w-4 h-4" />
+          )}
+        </button>
+
+        <div className="flex-1 min-w-[100px] lg:min-w-[150px]">
+          <div className={`h-1.5 rounded-full ${mine ? "bg-white/30" : "bg-zinc-700"}`}>
+            <div
+              className={`h-1.5 rounded-full transition-all duration-100 ${
+                mine ? "bg-white" : "bg-violet-500"
+              }`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+
+          <div className="mt-1 text-[10px] opacity-70">
+            {playing ? (
+              <span>
+                {fmt(pos)} / {error ? "--:--" : fmt(dur)}
+              </span>
+            ) : (
+              <span>{error ? "--:--" : fmt(dur)}</span>
+            )}
+          </div>
+        </div>
+
+        <audio
+          ref={audioRef}
+          src={url}
+          crossOrigin="anonymous"
+          preload="metadata"
+          playsInline
+          className="hidden"
+        />
+      </div>
+
+      <span className={`-mt-3 text-[10px] ${mine ? "text-white/60" : "text-zinc-400"} text-right`}>
+        {formatTime(timestamp)}
+      </span>
+    </div>
+  );
+}
+
+// ✅ Updated FileMessage component
+function FileMessage({
+  files,
+  mine,
+  timestamp,
+  content,
+  onImageClick,
+}: {
+  files: Array<{
+    url: string;
+    filename: string;
+    mimetype: string;
+    size: number;
+  }>;
+  mine: boolean;
+  timestamp: string;
+  content?: string;
+  onImageClick?: (url: string) => void;
+}) {
+  const getFileType = (mimetype: string) => {
+    if (mimetype.startsWith('image/')) return 'image';
+    if (mimetype.startsWith('video/')) return 'video';
+    if (mimetype.startsWith('audio/')) return 'audio';
+    return 'document';
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const getFileIcon = (mimetype: string) => {
+    const type = getFileType(mimetype);
+    switch (type) {
+      case 'image': return <ImageIcon className="size-5" />;
+      case 'video': return <Film className="size-5" />;
+      case 'audio': return <Music className="size-5" />;
+      default: return <FileText className="size-5" />;
+    }
+  };
+
+  const handleDownload = (e: React.MouseEvent, fileUrl: string, filename: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    downloadFile(fileUrl, filename);
+  };
+
+  // Check if all files are the same type for grid layout
+  const allImages = files.every(f => getFileType(f.mimetype) === 'image');
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className={`grid gap-2 ${allImages && files.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+        {files.map((file, index) => {
+          const fileType = getFileType(file.mimetype);
+          const fileUrl = toAbsoluteFileUrl(file.url);
+
+          if (fileType === 'image') {
+            return (
+              <button
+                key={index}
+                onClick={() => onImageClick?.(fileUrl)}
+                className="block rounded-lg overflow-hidden hover:opacity-90 transition-opacity cursor-zoom-in"
+              >
+                <img
+                  src={fileUrl}
+                  alt={file.filename}
+                  className="max-w-full max-h-52 object-cover rounded-lg"
+                  loading="lazy"
+                />
+              </button>
+            );
+          }
+
+          if (fileType === 'video') {
+            return (
+              <video
+                key={index}
+                src={fileUrl}
+                controls
+                className="max-w-full max-h-52 rounded-lg"
+                preload="metadata"
+              />
+            );
+          }
+
+          // ✅ Use custom audio player for audio files
+          if (fileType === 'audio') {
+            return (
+              <AudioFileMessage
+                key={index}
+                url={fileUrl}
+                filename={file.filename}
+                mine={mine}
+                timestamp={timestamp}
+              />
+            );
+          }
+
+          // Document/other files
+          return (
+            <button
+              key={index}
+              onClick={(e) => handleDownload(e, fileUrl, file.filename)}
+              className={`flex items-center gap-3 p-3 rounded-lg transition-colors text-left w-full ${
+                mine
+                  ? 'bg-white/10 hover:bg-white/20'
+                  : 'bg-zinc-700/50 hover:bg-zinc-700'
+              }`}
+            >
+              <div className={`p-2 rounded-lg ${mine ? 'bg-white/20' : 'bg-zinc-600'}`}>
+                {getFileIcon(file.mimetype)}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{file.filename}</p>
+                <p className={`text-xs ${mine ? 'text-white/60' : 'text-zinc-400'}`}>
+                  {formatFileSize(file.size)}
+                </p>
+              </div>
+              <Download className="size-4 opacity-60 shrink-0" />
+            </button>
+          );
+        })}
+      </div>
+
+      {content && <p className="mt-1">{content}</p>}
+
+      {/* Only show timestamp if not an audio file (audio shows its own) */}
+      {!files.some(f => getFileType(f.mimetype) === 'audio') && (
+        <span className={`text-[10px] ${mine ? "text-white/60" : "text-zinc-400"} text-right`}>
+          {formatTime(timestamp)}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function ImagePreviewModal({
+  imageUrl,
+  onClose,
+}: {
+  imageUrl: string | null;
+  onClose: () => void;
+}) {
+  if (!imageUrl) return null;
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // Extract filename from URL or use default
+    const filename = imageUrl.split('/').pop() || 'image.jpg';
+    downloadFile(imageUrl, filename);
+  };
+
+  return (
+    <AnimatePresence>
+      {imageUrl && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100]"
+            onClick={onClose}
+          />
+
+          {/* Image Container */}
+          <div className="fixed inset-0 z-[101] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              transition={{ type: "spring", duration: 0.3 }}
+              className="relative max-w-full max-h-full"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Top bar with buttons */}
+              <div className="absolute -top-12 right-0 flex items-center gap-2">
+                {/* Download button */}
+                <button
+                  onClick={handleDownload}
+                  className="p-2 text-white/70 hover:text-white transition-colors rounded-full hover:bg-white/10"
+                  title="Download"
+                >
+                  <Download className="size-6" />
+                </button>
+                
+                {/* Close button */}
+                <button
+                  onClick={onClose}
+                  className="p-2 text-white/70 hover:text-white transition-colors rounded-full hover:bg-white/10"
+                  title="Close"
+                >
+                  <X className="size-6" />
+                </button>
+              </div>
+
+              {/* Image */}
+              <img
+                src={imageUrl}
+                alt="Preview"
+                className="max-w-[90vw] max-h-[85vh] object-contain rounded-lg"
+              />
+            </motion.div>
+          </div>
+        </>
+      )}
+    </AnimatePresence>
+  );
 }
 
 // ✅ Custom Delete Dialog
@@ -433,6 +853,8 @@ const ChatPage = () => {
     messageId: string;
     position: { x: number; y: number };
   } | null>(null);
+
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   
   // ✅ State for delete dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -663,24 +1085,30 @@ const ChatPage = () => {
                             onContextMenu={(e) => handleContextMenu(e, message._id, mine)}
                             {...longPressProps}
                             style={{
-                              userSelect: 'none',
-                              WebkitUserSelect: 'none',
-                              WebkitTouchCallout: 'none',
                               touchAction: 'manipulation'
                             }}
                           >
+                            {/* Inside the message bubble div */}
                             {message.type === "audio" && message.audioUrl ? (
-                              <VoiceMessage 
-                                url={message.audioUrl} 
-                                mine={mine} 
+                              <VoiceMessage
+                                url={message.audioUrl}
+                                mine={mine}
                                 initialDur={message.audioDuration}
                                 messageId={message._id}
                                 timestamp={message.createdAt}
                               />
-                            ) : message.type === "call_started" || 
-                              message.type === "call_missed" || 
+                            ) : message.type === "call_started" ||
+                              message.type === "call_missed" ||
                               message.type === "call_declined" ? (
                               <CallMessage type={message.type} mine={mine} timestamp={message.createdAt} />
+                            ) : message.type === "file" && message.files?.length > 0 ? (
+                              <FileMessage
+                                files={message.files}
+                                mine={mine}
+                                timestamp={message.createdAt}
+                                content={message.content}
+                                onImageClick={(url) => setImagePreview(url)}
+                              />
                             ) : (
                               <>
                                 <p>{message.content}</p>
@@ -741,6 +1169,11 @@ const ChatPage = () => {
           />
         )}
       </AnimatePresence>
+
+      <ImagePreviewModal
+        imageUrl={imagePreview}
+        onClose={() => setImagePreview(null)}
+      />
 
       {/* ✅ Delete dialog */}
       <DeleteDialog

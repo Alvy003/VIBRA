@@ -4,15 +4,22 @@ import PushSubscription from "../models/PushSubscription.js";
 import webpush from "../config/webpush.js";
 import { User } from "../models/user.model.js";
 
+let io;
+let userSockets = new Map();
+
+// ✅ Export getters
+export const getIO = () => io;
+export const getUserSockets = () => userSockets;
+
 export const initializeSocket = (server) => {
-  const io = new Server(server, {
+  io = new Server(server, {
     cors: {
       origin: (origin, cb) => cb(null, true),
       credentials: true,
     },
   });
 
-  const userSockets = new Map(); // userId -> socketId
+ // const userSockets = new Map(); // userId -> socketId
   const userActivities = new Map();
   const callRings = new Map(); // callId -> { fromId, toId, timer }
 
@@ -59,7 +66,13 @@ export const initializeSocket = (server) => {
               icon: sender?.imageUrl || "/vibra.png",
               badge: "/vibra.png",
               tag: "message",
-              data: { url: `/chat`, senderId, senderName, type: "message" },
+              // renotify: true,
+              data: { url: `/chat`, senderId, receiverId, senderName, type: "message" },
+              actions: [
+                { action: "reply_thumbsup", title: "👍" },
+                { action: "reply_heart", title: "❤️" },
+                { action: "reply_ok", title: "OK" },
+              ],
             };
             for (const row of subs) {
               try {
@@ -74,6 +87,99 @@ export const initializeSocket = (server) => {
       } catch (error) {
         console.error("Message error:", error);
         socket.emit("message_error", error.message);
+      }
+    });
+
+    // FILE MESSAGE
+    socket.on("send_file", async (data) => {
+      try {
+        const { senderId, receiverId, files, content } = data;
+        
+        if (!files || files.length === 0) {
+          return socket.emit("message_error", "No files provided");
+        }
+
+        const message = await Message.create({
+          senderId,
+          receiverId,
+          type: "file",
+          files: files.map(f => ({
+            url: f.url,
+            filename: f.filename,
+            mimetype: f.mimetype,
+            size: f.size,
+          })),
+          content: content || "",
+          read: false,
+        });
+
+        const receiverSocketId = userSockets.get(receiverId);
+        if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", message);
+        socket.emit("message_sent", message);
+
+        // Push notification
+        try {
+          const subs = await PushSubscription.find({ userId: receiverId }).lean();
+          const sender = await User.findOne({ clerkId: senderId }).lean();
+          const senderName = sender?.fullName || "New message";
+          
+          if (subs?.length) {
+            // Determine notification body based on files
+            const fileCount = files.length;
+            const hasImages = files.some(f => f.mimetype?.startsWith('image/'));
+            const hasVideos = files.some(f => f.mimetype?.startsWith('video/'));
+            const hasDocs = files.some(f => 
+              f.mimetype?.includes('pdf') || 
+              f.mimetype?.includes('document') ||
+              f.mimetype?.includes('text')
+            );
+            
+            let body = "";
+            if (content) {
+              body = content;
+            } else if (hasImages && fileCount === 1) {
+              body = "📷 Sent a photo";
+            } else if (hasImages) {
+              body = `📷 Sent ${fileCount} photos`;
+            } else if (hasVideos) {
+              body = "🎥 Sent a video";
+            } else if (hasDocs) {
+              body = "📄 Sent a document";
+            } else {
+              body = `📎 Sent ${fileCount} file${fileCount > 1 ? 's' : ''}`;
+            }
+
+            const payload = {
+              title: senderName,
+              body,
+              icon: sender?.imageUrl || "/vibra.png",
+              badge: "/vibra.png",
+              tag: "message",
+              data: { 
+                url: `/chat`, 
+                senderId, 
+                senderName, 
+                type: "file_message" 
+              },
+            };
+            
+            for (const row of subs) {
+              try {
+                await webpush.sendNotification(row.subscription, JSON.stringify(payload));
+              } catch (e) {
+                const code = e?.statusCode;
+                if (code === 410 || code === 404) {
+                  await PushSubscription.deleteOne({ _id: row._id });
+                }
+              }
+            }
+          }
+        } catch (pushError) {
+          console.error("Push notification failed:", pushError);
+        }
+      } catch (e) {
+        console.error("send_file error:", e);
+        socket.emit("message_error", e.message);
       }
     });
 

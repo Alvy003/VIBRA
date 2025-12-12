@@ -3,32 +3,107 @@ import { buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useMusicStore } from "@/stores/useMusicStore";
-import { SignedIn } from "@clerk/clerk-react";
-import { HomeIcon, Library, MessageCircle, Search, Heart, Download, Play } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { usePlaylistStore } from "@/stores/usePlaylistStore";
+import { SignedIn, useUser } from "@clerk/clerk-react";
+import { HomeIcon, Library, MessageCircle, Search, Heart, Download, ListMusic, Disc3 } from "lucide-react";
+import { useEffect, useMemo } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useChatStore } from "@/stores/useChatStore";
+import { CreatePlaylistDialog } from "../../components/CreatePlaylistDialog";
+import { Song } from "@/types";
+import { useAppUpdate } from "@/hooks/useAppUpdate";
 
-const LAST_PAGE_KEY = 'vibra_last_page';
+// Shared Mosaic Thumbnail Component
+const MosaicThumbnail = ({ 
+  songs, 
+  imageUrl,
+  name,
+  type
+}: { 
+  songs?: Song[]; 
+  imageUrl?: string;
+  name: string;
+  type: 'playlist' | 'album';
+}) => {
+  const Icon = type === 'playlist' ? ListMusic : Disc3;
+  
+  // If has custom image, use it
+  if (imageUrl) {
+    return (
+      <div className="size-12 rounded-md ring-1 ring-white/5 overflow-hidden relative group/thumb">
+        <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-start p-1.5 md:opacity-0 md:group-hover/thumb:opacity-100 transition-opacity">
+          <div className="bg-black/50 backdrop-blur-sm rounded p-0.5">
+            <Icon className="size-3 text-white/80" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const covers = (songs || []).slice(0, 4).map((s) => s.imageUrl).filter(Boolean);
+
+  // No songs - show placeholder
+  if (covers.length === 0) {
+    const gradientClass = type === 'playlist' 
+      ? 'from-violet-600/30 to-fuchsia-600/30' 
+      : 'from-violet-500/30 to-purple-600/30';
+    
+    return (
+      <div className={`size-12 rounded-md bg-gradient-to-br ${gradientClass} ring-1 ring-white/5 flex items-center justify-center`}>
+        <Icon className="size-5 text-violet-400/70" />
+      </div>
+    );
+  }
+
+  // Less than 4 songs - show first cover
+  if (covers.length < 4) {
+    return (
+      <div className="size-12 rounded-md ring-1 ring-white/5 overflow-hidden relative group/thumb">
+        <img src={covers[0]} alt={name} className="w-full h-full object-cover" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-start p-1.5 md:opacity-0 md:group-hover/thumb:opacity-100 transition-opacity">
+          <div className="bg-black/50 backdrop-blur-sm rounded p-0.5">
+            <Icon className="size-3 text-white/80" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 4+ songs - show mosaic
+  return (
+    <div className="size-12 rounded-md ring-1 ring-white/5 overflow-hidden relative group/thumb">
+      <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-px bg-zinc-800">
+        {covers.slice(0, 4).map((cover, i) => (
+          <img key={i} src={cover} alt="" className="w-full h-full object-cover" />
+        ))}
+      </div>
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-start p-1.5 md:opacity-0 md:group-hover/thumb:opacity-100 transition-opacity">
+        <div className="bg-black/50 backdrop-blur-sm rounded p-0.5">
+          <Icon className="size-3 text-white/80" />
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const LeftSidebar = () => {
-  const { albums, fetchAlbums, isLoading } = useMusicStore();
+  const { albums, fetchAlbums, isLoading: isAlbumLoading } = useMusicStore();
+  const { playlists, fetchUserPlaylists, isLoading: isPlaylistLoading } = usePlaylistStore();
   const { unreadMessagesByUser } = useChatStore();
+  const { updateAvailable } = useAppUpdate(true);
+  const { isSignedIn, isLoaded } = useUser();
   const location = useLocation();
-  const [hoveredAlbum, setHoveredAlbum] = useState<string | null>(null);
 
   useEffect(() => {
     fetchAlbums();
   }, [fetchAlbums]);
 
   useEffect(() => {
-    const currentPath = location.pathname;
-    const cacheableRoutes = ['/', '/chat', '/search', '/favorites', '/downloads'];
-    
-    if (cacheableRoutes.includes(currentPath)) {
-      localStorage.setItem(LAST_PAGE_KEY, currentPath);
+    if (isLoaded && isSignedIn) {
+      fetchUserPlaylists();
     }
-  }, [location.pathname]);
+  }, [fetchUserPlaylists, isLoaded, isSignedIn]);
 
   const totalUnread = useMemo(
     () => Object.values(unreadMessagesByUser || {}).reduce((a, b) => a + b, 0),
@@ -44,6 +119,8 @@ const LeftSidebar = () => {
       }),
       isActive && "bg-zinc-800/70 border-l-2 border-violet-500"
     );
+
+  const isLoading = isAlbumLoading || isPlaylistLoading;
 
   return (
     <div className="h-full min-h-0 flex flex-col gap-2">
@@ -70,11 +147,6 @@ const LeftSidebar = () => {
                     )}
                   />
                   <span className="hidden md:inline">Messages</span>
-                  {/* {totalUnread > 0 && (
-                    <span className="ml-auto bg-violet-600 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
-                      {totalUnread}
-                    </span>
-                  )} */}
                 </>
               )}
             </NavLink>
@@ -103,7 +175,12 @@ const LeftSidebar = () => {
           <NavLink to="/downloads" className={navClass}>
             {({ isActive }) => (
               <>
-                <Download className={cn("mr-2 size-5 transition-colors", isActive && "text-violet-400")} />
+                <Download
+                  className={cn(
+                    "mr-2 size-5 transition-colors",
+                    isActive ? "text-violet-400" : updateAvailable ? "text-violet-400 animate-pulse" : ""
+                  )}
+                />
                 <span className="hidden md:inline">Downloads</span>
               </>
             )}
@@ -111,88 +188,114 @@ const LeftSidebar = () => {
         </div>
       </div>
 
-      {/* ✅ Polished Library section */}
-      <div className="flex-1 min-h-0 rounded-lg bg-zinc-900 p-3 flex flex-col">
-        <div className="flex items-center justify-between mb-3 px-2 shrink-0">
-          <div className="flex items-center text-white">
-            <Library className="size-5 mr-2 text-violet-400" />
-            <span className="hidden md:inline font-semibold">Playlists</span>
+       {/* Library section */}
+       <div className="flex-1 min-h-0 mb-12 sm:mb-0 rounded-lg bg-zinc-900 py-3 px-0 flex flex-col">
+        {/* Header row */}
+        <div className="flex items-center justify-between mb-2 px-2 shrink-0">
+          <div className="flex items-center ml-2 text-white">
+            <Library className="size-5 mr-2 ml-2 sm:ml-0 text-violet-400" />
+            <span className="hidden md:inline font-semibold">Library</span>
           </div>
-          {!isLoading && albums.length > 0 && (
-            <span className="hidden md:inline text-xs text-zinc-500">
-              {albums.length} {albums.length === 1 ? 'playlist' : 'playlists'}
-            </span>
-          )}
+
+          {/* Wide sidebar: circular + with subtle hover */}
+          <SignedIn>
+            <div className="hidden md:flex items-center justify-center">
+              <div className="rounded-xl bg-zinc-800/80 transition-colors duration-150 p-0.5">
+                <CreatePlaylistDialog />
+              </div>
+            </div>
+          </SignedIn>
         </div>
 
+        {/* Narrow sidebar: + aligned with list items, no hover change */}
+        <SignedIn>
+          <div className="md:hidden mb-3 px-2 ml-1 flex items-center">
+            <div className="rounded-lg bg-zinc-800/90 p-2 mt-3">
+              <CreatePlaylistDialog />
+            </div>
+          </div>
+        </SignedIn>
+
         <ScrollArea className="flex-1 h-full scrollarea-no-bar" type="hover">
-          <div className="space-y-2 pr-1 pb-2">
+          <div className="space-y-1 pb-2">
+            
+            {/* User Playlists */}
+            <SignedIn>
+              {playlists.map((playlist) => (
+                <Link
+                  to={`/playlists/${playlist._id}`}
+                  key={playlist._id}
+                  className="relative md:group block"
+                >
+                  <div className={cn(
+                    "p-2 rounded-lg flex items-center ml-1 gap-3 cursor-pointer transition-all duration-200",
+                    "md:hover:bg-zinc-800/70",
+                    location.pathname === `/playlists/${playlist._id}` && "bg-zinc-800/50 ring-1 ring-violet-500/20"
+                  )}>
+                    <div className="shrink-0">
+                      <MosaicThumbnail 
+                        songs={playlist.songs} 
+                        imageUrl={playlist.imageUrl}
+                        name={playlist.name}
+                        type="playlist"
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 hidden md:block">
+                      <p className={cn(
+                        "font-medium truncate text-sm", 
+                        location.pathname === `/playlists/${playlist._id}` ? "text-violet-300" : "text-white"
+                      )}>
+                        {playlist.name}
+                      </p>
+                      <p className="text-xs text-zinc-400 truncate">
+                        Playlist • {playlist.songs?.length || 0} songs
+                      </p>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </SignedIn>
+
+            {/* Separator if both exist */}
+            {playlists.length > 0 && albums.length > 0 && (
+              <div className="h-px bg-zinc-800 mx-2 my-2" />
+            )}
+
+            {/* Admin Albums - Now with Mosaic */}
             {isLoading ? (
               <PlaylistSkeleton />
-            ) : albums.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                <Library className="size-10 text-zinc-700 mb-3" />
-                <p className="text-sm text-zinc-500">No playlists yet</p>
-              </div>
             ) : (
               albums.map((album) => (
                 <Link
                   to={`/albums/${album._id}`}
                   key={album._id}
-                  onMouseEnter={() => setHoveredAlbum(album._id)}
-                  onMouseLeave={() => setHoveredAlbum(null)}
-                  className="relative group block"
+                  className="relative md:group block"
                 >
                   <div className={cn(
-                    "p-2 rounded-lg flex items-center gap-3 cursor-pointer transition-all duration-200",
-                    "hover:bg-zinc-800/70 hover:shadow-lg hover:shadow-violet-500/5",
+                    "p-2 rounded-lg flex items-center ml-1 gap-3 cursor-pointer transition-all duration-200",
+                    "md:hover:bg-zinc-800/70",
                     location.pathname === `/albums/${album._id}` && "bg-zinc-800/50 ring-1 ring-violet-500/20"
                   )}>
-                    {/* Album Art with Overlay */}
-                    <div className="relative shrink-0">
-                      <img
-                        src={album.imageUrl}
-                        alt={album.title}
-                        className="size-12 -ml-1 rounded-md object-cover ring-1 ring-white/5 transition-all duration-200 group-hover:ring-violet-500/30"
+                    <div className="shrink-0">
+                      {/* Use album.imageUrl if exists, otherwise create mosaic from songs */}
+                      <MosaicThumbnail 
+                        songs={album.songs} 
+                        imageUrl={album.imageUrl}
+                        name={album.title}
+                        type="album"
                       />
-                      
-                      {/* Gradient overlay on hover */}
-                      <div className={cn(
-                        "absolute inset-0 rounded-md bg-gradient-to-t from-black/60 via-black/0 to-black/0 opacity-0 transition-opacity duration-200",
-                        hoveredAlbum === album._id && "opacity-100"
-                      )} />
-                      
-                      {/* Play icon on hover */}
-                      {hoveredAlbum === album._id && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <div className="bg-violet-600 rounded-full p-1.5 shadow-lg transform scale-0 group-hover:scale-100 transition-transform duration-200">
-                            <Play className="size-3 text-white fill-white" />
-                          </div>
-                        </div>
-                      )}
                     </div>
-
-                    {/* Album Info */}
                     <div className="flex-1 min-w-0 hidden md:block">
                       <p className={cn(
-                        "font-medium truncate text-sm transition-colors",
-                        hoveredAlbum === album._id ? "text-violet-300" : "text-white"
+                        "font-medium truncate text-sm", 
+                        location.pathname === `/albums/${album._id}` ? "text-violet-300" : "text-white"
                       )}>
                         {album.title}
                       </p>
-                      <p className="text-xs text-zinc-400 truncate flex items-center gap-1">
-                        <span className="text-zinc-500">Playlist</span>
-                        <span className="text-zinc-600">•</span>
-                        <span>{album.artist}</span>
+                      <p className="text-xs text-zinc-400 truncate">
+                        Album • {album.artist}
                       </p>
                     </div>
-
-                    {/* Active indicator */}
-                    {location.pathname === `/albums/${album._id}` && (
-                      <div className="hidden md:block shrink-0">
-                        <div className="w-1 h-8 bg-violet-500 rounded-full" />
-                      </div>
-                    )}
                   </div>
                 </Link>
               ))

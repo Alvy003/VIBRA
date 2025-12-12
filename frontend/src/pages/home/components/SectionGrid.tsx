@@ -32,7 +32,7 @@ const SectionGrid = ({ songs, title, isLoading }: SectionGridProps) => {
     <>
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl sm:text-2xl font-bold">{title}</h2>
+          <h2 className="text-xl sm:text-xl font-semibold sm:font-bold">{title}</h2>
           <Button variant="link" className="text-sm text-zinc-400 hover:text-white">
             Show all
           </Button>
@@ -69,36 +69,27 @@ const SectionGrid = ({ songs, title, isLoading }: SectionGridProps) => {
         </div>
       </div>
 
-      {/* Context Menu Overlay */}
-      {showOptions && contextSong && contextMenu && (
-        <>
-          <div
-            className="absolute z-[9999]"
-            style={{
-              top: contextMenu.y,
-              left: contextMenu.x,
-              transform: "translate(-50%, 0)",
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <SongOptions
-              song={contextSong}
-              forceOpen
-              onClose={closeContextMenu}
-              inlineTrigger={false}
-            />
+        {/* Context Menu Overlay */}
+        {showOptions && contextSong && contextMenu && (
+          <div className="fixed inset-0 z-[9998]" onClick={closeContextMenu}>
+            <div
+              className="absolute z-[9999]"
+              style={{
+                top: contextMenu.y,
+                left: contextMenu.x,
+                transform: "translate(-50%, 0)",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <SongOptions
+                song={contextSong}
+                forceOpen
+                onClose={closeContextMenu}
+                inlineTrigger={false}
+              />
+            </div>
           </div>
-
-          <div
-            className="fixed inset-0 z-[9998]"
-            onClick={closeContextMenu}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              closeContextMenu();
-            }}
-          />
-        </>
-      )}
+        )}
     </>
   );
 };

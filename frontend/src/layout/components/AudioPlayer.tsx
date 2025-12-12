@@ -1,3 +1,4 @@
+// AudioPlayer.tsx - Enhanced version
 import { useEffect, useRef } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 
@@ -14,6 +15,8 @@ const AudioPlayer = () => {
     setCurrentTime,
     setIsPlaying,
     volume,
+    toggleShuffle,
+    toggleRepeat,
   } = usePlayerStore();
 
   // Helpers
@@ -31,7 +34,6 @@ const AudioPlayer = () => {
         position: 0,
         playbackRate: 1,
       });
-      // Optional: temporarily mark paused so notification UI doesn't show stale progress
       navigator.mediaSession.playbackState = "paused";
     } catch {
       // ignore
@@ -60,7 +62,7 @@ const AudioPlayer = () => {
     }
   }, [volume]);
 
-  // load new song + setup media session (supports audioBlob)
+  // load new song + setup media session
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
     const audio = audioRef.current;
@@ -71,7 +73,6 @@ const AudioPlayer = () => {
       blobUrlRef.current = null;
     }
 
-    // Immediately reset Media Session position for new track to avoid showing "end"
     resetMSPosition();
 
     // Pick source
@@ -86,16 +87,15 @@ const AudioPlayer = () => {
 
     // Swap src
     if (newSrc && audio.src !== newSrc) {
-      // Reset first to clear any cached media pipeline
       audio.pause();
       audio.currentTime = 0;
       audio.src = newSrc;
       try {
-        audio.load(); // ensure the browser commits to the new source
+        audio.load();
       } catch {}
     }
 
-    // Media Session metadata
+    // Media Session metadata + actions
     if (hasMS && currentSong) {
       try {
         navigator.mediaSession.metadata = new MediaMetadata({
@@ -106,36 +106,50 @@ const AudioPlayer = () => {
             : [],
         });
 
+        // Standard actions
         navigator.mediaSession.setActionHandler?.("play", () => {
           audio.play().catch(() => {});
           setIsPlaying(true);
           navigator.mediaSession.playbackState = "playing";
           setMSPositionFromAudio(audio);
         });
+
         navigator.mediaSession.setActionHandler?.("pause", () => {
           audio.pause();
           setIsPlaying(false);
           navigator.mediaSession.playbackState = "paused";
           setMSPositionFromAudio(audio);
         });
+
         navigator.mediaSession.setActionHandler?.("previoustrack", () => playPrevious());
         navigator.mediaSession.setActionHandler?.("nexttrack", () => playNext());
-        // Optional: hook seekto if you want OS seek from notification
+
         navigator.mediaSession.setActionHandler?.("seekto", (e: any) => {
           if (typeof e.seekTime === "number") {
             audio.currentTime = Math.max(0, Math.min(e.seekTime, audio.duration || e.seekTime));
             setMSPositionFromAudio(audio);
           }
         });
+
+        // ✅ Seek backward/forward (some platforms support this)
+        navigator.mediaSession.setActionHandler?.("seekbackward", (e: any) => {
+          const skipTime = e.seekOffset || 10;
+          audio.currentTime = Math.max(0, audio.currentTime - skipTime);
+          setMSPositionFromAudio(audio);
+        });
+
+        navigator.mediaSession.setActionHandler?.("seekforward", (e: any) => {
+          const skipTime = e.seekOffset || 10;
+          audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + skipTime);
+          setMSPositionFromAudio(audio);
+        });
       } catch {
         // ignore
       }
     }
 
-    // Auto-play if requested
     if (isPlaying) audio.play().catch(() => {});
 
-    // Cleanup blob URL on unmount / track change
     return () => {
       if (blobUrlRef.current) {
         URL.revokeObjectURL(blobUrlRef.current);
@@ -144,7 +158,7 @@ const AudioPlayer = () => {
     };
   }, [currentSong, isPlaying, playNext, playPrevious, setIsPlaying]);
 
-  // Keyboard shortcuts (unchanged)
+  // ✅ Enhanced keyboard shortcuts with shuffle/repeat
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isInput =
@@ -153,25 +167,67 @@ const AudioPlayer = () => {
 
       if (isInput) return;
 
+      // Space - Play/Pause
       if (e.code === "Space") {
         e.preventDefault();
         setIsPlaying(!isPlaying);
       }
 
+      // Shift + P - Previous
       if (e.shiftKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
         playPrevious();
       }
 
+      // Shift + N - Next
       if (e.shiftKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
         playNext();
+      }
+
+      // ✅ S - Toggle Shuffle
+      if (e.key.toLowerCase() === "s" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleShuffle();
+      }
+
+      // ✅ R - Toggle Repeat
+      if (e.key.toLowerCase() === "r" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        toggleRepeat();
+      }
+
+      // ✅ Arrow Left - Seek backward 5s
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        const audio = audioRef.current;
+        if (audio) {
+          audio.currentTime = Math.max(0, audio.currentTime - 5);
+        }
+      }
+
+      // ✅ Arrow Right - Seek forward 5s
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        const audio = audioRef.current;
+        if (audio) {
+          audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + 5);
+        }
+      }
+
+      // ✅ M - Mute/Unmute
+      if (e.key.toLowerCase() === "m" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        const audio = audioRef.current;
+        if (audio) {
+          audio.muted = !audio.muted;
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isPlaying, setIsPlaying, playPrevious, playNext]);
+  }, [isPlaying, setIsPlaying, playPrevious, playNext, toggleShuffle, toggleRepeat]);
 
   // keep play/pause in sync + playbackState
   useEffect(() => {
@@ -185,7 +241,6 @@ const AudioPlayer = () => {
       audio.pause();
       if (hasMS) navigator.mediaSession.playbackState = "paused";
     }
-    // Also keep position state aligned after toggles
     setMSPositionFromAudio(audio);
   }, [isPlaying]);
 
@@ -194,7 +249,6 @@ const AudioPlayer = () => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    // Throttle position updates to ~4/s to avoid spamming MS
     let lastPosUpdate = 0;
     const THROTTLE_MS = 250;
 
@@ -208,14 +262,12 @@ const AudioPlayer = () => {
     };
 
     const handleLoadStart = () => {
-      // New source is starting: zero everything in MS to avoid stale end
       resetMSPosition();
     };
 
     const handleDuration = () => {
       const dur = Number.isFinite(audio.duration) ? audio.duration : 0;
       setDuration(dur);
-      // Update MS once duration is known (position likely still 0)
       setMSPositionFromAudio(audio);
     };
 
@@ -224,7 +276,6 @@ const AudioPlayer = () => {
     };
 
     const handleEnded = () => {
-      // At end, make sure MS shows end-of-track before we move on
       setMSPositionFromAudio(audio);
       playNext();
     };
@@ -248,7 +299,6 @@ const AudioPlayer = () => {
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
-    // Some browsers emit 'emptied' when source is cleared; reset MS as well
     audio.addEventListener("emptied", resetMSPosition as any);
 
     return () => {

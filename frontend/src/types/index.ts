@@ -50,10 +50,10 @@ export interface User {
 export interface Playlist {
 	_id: string;
 	name: string;
-	description?: string;
-	imageUrl?: string;
-	isFeatured: boolean;
+	description: string;
+	imageUrl: string;
 	songs: Song[];
+	userId: string;
 	createdAt: string;
 	updatedAt: string;
-  }
+}

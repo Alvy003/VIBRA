@@ -9,7 +9,6 @@ import {
   } from "@/components/ui/dropdown-menu";
   import { MoreHorizontal } from "lucide-react";
   import { Button } from "@/components/ui/button";
-  import { usePlaylistStore } from "@/stores/usePlaylistStore";
   import { useMusicStore } from "@/stores/useMusicStore";
   import { Song } from "@/types";
   import { useEffect } from "react";
@@ -20,25 +19,13 @@ import {
   }
   
   const SongMenu = ({ song }: SongMenuProps) => {
-    const { playlists, fetchPlaylists, patchPlaylistSongs } = usePlaylistStore();
     const { albums, fetchAlbums, patchAlbumSongs } = useMusicStore();
   
     useEffect(() => {
-      fetchPlaylists();
       fetchAlbums();
-    }, [fetchPlaylists, fetchAlbums]);
+    }, [ fetchAlbums]);
   
-    const handleTogglePlaylist = async (playlistId: string, checked: boolean) => {
-      try {
-        await patchPlaylistSongs(playlistId, {
-          op: checked ? "add" : "remove",
-          songId: song._id,
-        });
-        toast.success(`Song ${checked ? "added to" : "removed from"} playlist`);
-      } catch {
-        toast.error("Failed to update playlist");
-      }
-    };
+
   
     const handleToggleAlbum = async (albumId: string, checked: boolean) => {
       try {
@@ -63,21 +50,7 @@ import {
           <DropdownMenuLabel>Manage Song</DropdownMenuLabel>
           <DropdownMenuSeparator />
   
-          <DropdownMenuLabel>Playlists</DropdownMenuLabel>
-          {playlists.map((pl) => {
-            const isInPlaylist = pl.songs.some((s) => s._id === song._id);
-            return (
-              <DropdownMenuCheckboxItem
-                key={pl._id}
-                checked={isInPlaylist}
-                onCheckedChange={(checked) =>
-                  handleTogglePlaylist(pl._id, checked)
-                }
-              >
-                {pl.name}
-              </DropdownMenuCheckboxItem>
-            );
-          })}
+
   
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Albums</DropdownMenuLabel>

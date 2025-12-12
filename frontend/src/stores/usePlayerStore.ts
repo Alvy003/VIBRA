@@ -18,6 +18,7 @@ interface PlayerStore {
   volume: number;
   isShuffle: boolean;
   isRepeat: boolean;
+  hasTrackedCurrentSong: boolean;
 
   initializeQueue: (songs: Song[], startIndexOrSong?: number | Song, autoplay?: boolean) => void;
   playAlbum: (songs: Song[], startIndex?: number) => void;
@@ -40,6 +41,7 @@ interface PlayerStore {
   toggleShuffle: () => void;
   toggleRepeat: () => void;
   reset: () => void;
+  setHasTrackedCurrentSong: (value: boolean) => void;
 
   // internal helpers (kept on store so cross-component calls can use them)
   autoRefillQueue: () => Promise<void>;

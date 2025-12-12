@@ -12,7 +12,7 @@ export const sendPushNotification = async (subscription, message) => {
   try {
     // Send the push notification
     await webpush.sendNotification(subscription, payload);
-    console.log("Push notification sent");
+    // console.log("Push notification sent");
   } catch (error) {
     console.error("Error sending push notification:", error);
   }

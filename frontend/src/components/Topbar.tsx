@@ -5,6 +5,7 @@ import SignInOAuthButtons from "./SignInOAuthButtons";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "./ui/button";
+import { clerkAppearance } from "@/lib/clerk-theme";
 
 const Topbar = () => {
 	const { isAdmin } = useAuthStore();
@@ -32,7 +33,9 @@ const Topbar = () => {
 					<SignInOAuthButtons />
 				</SignedOut>
 
-				<UserButton />
+				<UserButton 
+					appearance={clerkAppearance} 
+				/>
 			</div>
 		</div>
 	);

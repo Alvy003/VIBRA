@@ -57,6 +57,7 @@ const SongsTable = ({ songs: overrideSongs, hideActions = false }: SongsTablePro
                 src={song.imageUrl}
                 alt={song.title}
                 className="w-12 h-12 rounded-md object-cover flex-shrink-0"
+                loading="lazy"
               />
               <div className="flex flex-col min-w-0">
                 <div className="text-sm font-medium text-white max-w-[130px] truncate">
@@ -117,7 +118,7 @@ const SongsTable = ({ songs: overrideSongs, hideActions = false }: SongsTablePro
           </TableCell>
         
           <TableCell>
-            <img src={song.imageUrl} alt={song.title} className=" max-w-[40px] max-h-[50px] rounded object-cover" />
+            <img src={song.imageUrl} alt={song.title} loading="lazy" className=" max-w-[40px] max-h-[50px] rounded object-cover" />
           </TableCell>
         
           <TableCell className="font-medium max-w-[200px] truncate">{song.title}</TableCell>

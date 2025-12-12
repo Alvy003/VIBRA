@@ -97,26 +97,50 @@ export const createAlbum = async (req, res, next) => {
 		next(error);
 	}
 };
+
 export const patchAlbumSongs = async (req, res) => {
 	try {
 	  const { id } = req.params;
-	  const { op, songId, targetAlbumId } = req.body;
+	  const { op, songId, targetAlbumId, songs } = req.body;
   
 	  const album = await Album.findById(id);
 	  if (!album) return res.status(404).json({ message: "Album not found" });
   
 	  switch (op) {
 		case "add":
+		  // Add song to album
 		  await Album.findByIdAndUpdate(id, { $addToSet: { songs: songId } });
 		  await Song.findByIdAndUpdate(songId, { albumId: id });
 		  break;
   
 		case "remove":
+		  // Remove song from album
 		  await Album.findByIdAndUpdate(id, { $pull: { songs: songId } });
-		  await Song.findByIdAndUpdate(songId, { albumId: null });
+		  // Only clear albumId if this was the song's primary album
+		  const song = await Song.findById(songId);
+		  if (song && song.albumId?.toString() === id) {
+			await Song.findByIdAndUpdate(songId, { albumId: null });
+		  }
+		  break;
+  
+		case "replace":
+		  // Replace all songs in album
+		  if (songs) {
+			album.songs = songs;
+			await album.save();
+		  }
+		  break;
+  
+		case "reorder":
+		  // Reorder songs in album
+		  if (songs) {
+			album.songs = songs;
+			await album.save();
+		  }
 		  break;
   
 		case "move":
+		  // Move song to another album
 		  if (!targetAlbumId) {
 			return res.status(400).json({ message: "targetAlbumId required for move" });
 		  }
@@ -124,6 +148,9 @@ export const patchAlbumSongs = async (req, res) => {
 		  await Album.findByIdAndUpdate(targetAlbumId, { $addToSet: { songs: songId } });
 		  await Song.findByIdAndUpdate(songId, { albumId: targetAlbumId });
 		  break;
+  
+		default:
+		  return res.status(400).json({ message: "Invalid operation" });
 	  }
   
 	  const updatedAlbum = await Album.findById(id).populate("songs");
@@ -161,6 +188,162 @@ export const checkAdmin = async (req, res, next) => {
 	  return res.status(200).json({ isAdmin });
 	} catch (error) {
 	  console.error("Error in checkAdmin:", error);
+	  next(error);
+	}
+  };
+
+  export const updateSong = async (req, res, next) => {
+	try {
+	  const { id } = req.params;
+	  const { title, artist, duration } = req.body;
+  
+	  const song = await Song.findById(id);
+	  if (!song) {
+		return res.status(404).json({ message: "Song not found" });
+	  }
+  
+	  // Update fields if provided
+	  if (title !== undefined) song.title = title;
+	  if (artist !== undefined) song.artist = artist;
+	  if (duration !== undefined) song.duration = duration;
+  
+	  await song.save();
+  
+	  res.status(200).json(song);
+	} catch (error) {
+	  console.error("Error in updateSong:", error);
+	  next(error);
+	}
+  };
+  
+  // Change song's album (move/remove from album)
+  export const changeSongAlbum = async (req, res, next) => {
+	try {
+	  const { id } = req.params;
+	  const { albumId } = req.body; // null to remove from album, or new album ID
+  
+	  const song = await Song.findById(id);
+	  if (!song) {
+		return res.status(404).json({ message: "Song not found" });
+	  }
+  
+	  const oldAlbumId = song.albumId;
+  
+	  // Remove from old album if exists
+	  if (oldAlbumId) {
+		await Album.findByIdAndUpdate(oldAlbumId, {
+		  $pull: { songs: song._id },
+		});
+	  }
+  
+	  // Add to new album if provided
+	  if (albumId) {
+		const newAlbum = await Album.findById(albumId);
+		if (!newAlbum) {
+		  return res.status(404).json({ message: "Target album not found" });
+		}
+		
+		await Album.findByIdAndUpdate(albumId, {
+		  $addToSet: { songs: song._id },
+		});
+	  }
+  
+	  // Update song's albumId
+	  song.albumId = albumId || null;
+	  await song.save();
+  
+	  res.status(200).json({ 
+		message: albumId ? "Song moved to album" : "Song removed from album",
+		song 
+	  });
+	} catch (error) {
+	  console.error("Error in changeSongAlbum:", error);
+	  next(error);
+	}
+  };
+
+  // Update album details
+export const updateAlbum = async (req, res, next) => {
+	try {
+	  const { id } = req.params;
+	  const { title, artist, releaseYear } = req.body;
+  
+	  const album = await Album.findById(id);
+	  if (!album) {
+		return res.status(404).json({ message: "Album not found" });
+	  }
+  
+	  if (title !== undefined) album.title = title;
+	  if (artist !== undefined) album.artist = artist;
+	  if (releaseYear !== undefined) album.releaseYear = releaseYear;
+  
+	  await album.save();
+  
+	  res.status(200).json(album);
+	} catch (error) {
+	  console.error("Error in updateAlbum:", error);
+	  next(error);
+	}
+  };
+
+
+// Update song image
+export const updateSongImage = async (req, res, next) => {
+	try {
+	  const { id } = req.params;
+  
+	  if (!req.files || !req.files.imageFile) {
+		return res.status(400).json({ message: "Please upload an image file" });
+	  }
+  
+	  const song = await Song.findById(id);
+	  if (!song) {
+		return res.status(404).json({ message: "Song not found" });
+	  }
+  
+	  const imageFile = req.files.imageFile;
+	  const imageUrl = await uploadToCloudinary(imageFile);
+  
+	  song.imageUrl = imageUrl;
+	  await song.save();
+  
+	  res.status(200).json(song);
+	} catch (error) {
+	  console.error("Error in updateSongImage:", error);
+	  next(error);
+	}
+  };
+  
+  // Update song audio
+  export const updateSongAudio = async (req, res, next) => {
+	try {
+	  const { id } = req.params;
+  
+	  if (!req.files || !req.files.audioFile) {
+		return res.status(400).json({ message: "Please upload an audio file" });
+	  }
+  
+	  const song = await Song.findById(id);
+	  if (!song) {
+		return res.status(404).json({ message: "Song not found" });
+	  }
+  
+	  const audioFile = req.files.audioFile;
+	  const audioUrl = await uploadToCloudinary(audioFile);
+  
+	  song.audioUrl = audioUrl;
+  
+	  // Update duration if provided
+	  const { duration } = req.body;
+	  if (duration) {
+		song.duration = parseInt(duration);
+	  }
+  
+	  await song.save();
+  
+	  res.status(200).json(song);
+	} catch (error) {
+	  console.error("Error in updateSongAudio:", error);
 	  next(error);
 	}
   };

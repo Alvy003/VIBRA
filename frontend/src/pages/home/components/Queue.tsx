@@ -158,6 +158,7 @@ const SortableItem = ({
         <img
           src={song.imageUrl}
           alt={song.title}
+          loading="lazy"
           className={cn(
             "w-11 h-11 rounded object-cover ring-1 ring-white/5 transition-all",
             "group-hover:ring-violet-500/20",
@@ -292,7 +293,7 @@ const Queue = () => {
   return (
     <div className="text-white h-full flex flex-col bg-zinc-900/50 rounded-lg overflow-hidden">
       {/* ✅ Polished Header */}
-      <div className="p-4 border-b border-zinc-800/50 bg-gradient-to-b from-zinc-800/30 to-transparent shrink-0">
+      <div className="p-4 border-b border-zinc-800/50  shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xl font-bold text-white">Queue</h2>
           {queue.length > 0 && (
@@ -322,6 +323,7 @@ const Queue = () => {
                 <img
                   src={currentSong.imageUrl}
                   alt={currentSong.title}
+                  loading="lazy"
                   className="w-12 h-12 rounded-lg object-cover ring-1 ring-violet-500/30"
                 />
                 <div className="absolute -bottom-1 -right-1 bg-violet-500 rounded-full p-1">
@@ -433,6 +435,7 @@ const Queue = () => {
                       <img
                         src={song.imageUrl}
                         alt={song.title}
+                        loading="lazy"
                         className="w-11 h-11 rounded object-cover ring-1 ring-white/5 group-hover:ring-violet-500/20 transition-all"
                       />
 

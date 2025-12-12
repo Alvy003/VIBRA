@@ -37,6 +37,10 @@ interface MusicStore {
   searchSongs: (q: string) => Promise<void>;
   clearLikedSongs: () => void;
   patchAlbumSongs: (albumId: string, payload: PatchAlbumSongsPayload) => Promise<void>;
+  updateSong: (id: string, data: { title?: string; artist?: string; duration?: number }) => Promise<void>;
+  changeSongAlbum: (songId: string, albumId: string | null) => Promise<void>;
+  updateSongImage: (id: string, imageFile: File) => Promise<void>;
+  updateSongAudio: (id: string, audioFile: File, duration?: number) => Promise<void>;
 }
 
 export const useMusicStore = create<MusicStore>((set, get) => ({
@@ -56,6 +60,124 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     totalAlbums: 0,
     totalUsers: 0,
     totalArtists: 0,
+  },
+
+  updateSongImage: async (id, imageFile) => {
+    try {
+      const formData = new FormData();
+      formData.append('imageFile', imageFile);
+  
+      const response = await axiosInstance.patch(`/admin/songs/${id}/image`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+  
+      // Update song in local state
+      set((state) => ({
+        songs: state.songs.map((song) =>
+          song._id === id ? { ...song, imageUrl: response.data.imageUrl } : song
+        ),
+        currentAlbum: state.currentAlbum
+          ? {
+              ...state.currentAlbum,
+              songs: state.currentAlbum.songs.map((song: any) =>
+                song._id === id ? { ...song, imageUrl: response.data.imageUrl } : song
+              ),
+            }
+          : null,
+      }));
+  
+      toast.success("Song image updated successfully");
+    } catch (error: any) {
+      console.error("Error updating song image:", error);
+      toast.error(error.response?.data?.message || "Failed to update image");
+      throw error;
+    }
+  },
+  
+  updateSongAudio: async (id, audioFile, duration) => {
+    try {
+      const formData = new FormData();
+      formData.append('audioFile', audioFile);
+      if (duration) {
+        formData.append('duration', duration.toString());
+      }
+  
+      const response = await axiosInstance.patch(`/admin/songs/${id}/audio`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+  
+      // Update song in local state
+      set((state) => ({
+        songs: state.songs.map((song) =>
+          song._id === id ? { ...song, audioUrl: response.data.audioUrl, duration: response.data.duration } : song
+        ),
+        currentAlbum: state.currentAlbum
+          ? {
+              ...state.currentAlbum,
+              songs: state.currentAlbum.songs.map((song: any) =>
+                song._id === id ? { ...song, audioUrl: response.data.audioUrl, duration: response.data.duration } : song
+              ),
+            }
+          : null,
+      }));
+  
+      toast.success("Song audio updated successfully");
+    } catch (error: any) {
+      console.error("Error updating song audio:", error);
+      toast.error(error.response?.data?.message || "Failed to update audio");
+      throw error;
+    }
+  },
+
+  updateSong: async (id, data) => {
+    try {
+      const response = await axiosInstance.patch(`/admin/songs/${id}`, data);
+      
+      // Update song in local state
+      set((state) => ({
+        songs: state.songs.map((song) =>
+          song._id === id ? { ...song, ...response.data } : song
+        ),
+        // Also update in currentAlbum if viewing
+        currentAlbum: state.currentAlbum
+          ? {
+              ...state.currentAlbum,
+              songs: state.currentAlbum.songs.map((song) =>
+                song._id === id ? { ...song, ...response.data } : song
+              ),
+            }
+          : null,
+      }));
+      
+      toast.success("Song updated successfully");
+    } catch (error: any) {
+      console.error("Error updating song:", error);
+      toast.error(error.response?.data?.message || "Failed to update song");
+      throw error;
+    }
+  },
+
+  // Change song's album
+  changeSongAlbum: async (songId, albumId) => {
+    try {
+      await axiosInstance.patch(`/admin/songs/${songId}/album`, { albumId });
+      
+      // Refresh data
+      await get().fetchSongs();
+      await get().fetchAlbums();
+      
+      // Refresh current album if viewing one
+      const currentAlbum = get().currentAlbum;
+      if (currentAlbum) {
+        await get().fetchAlbumById(currentAlbum._id);
+      }
+      
+      toast.success(albumId ? "Song moved to album" : "Song removed from album");
+    } catch (error: any) {
+      console.error("Error changing song album:", error);
+      toast.error(error.response?.data?.message || "Failed to move song");
+      throw error;
+    }
   },
 
   patchAlbumSongs: async (albumId, payload) => {

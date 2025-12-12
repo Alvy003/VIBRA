@@ -21,6 +21,10 @@ import CallEngine from "@/components/CallEngine";
 import { CallScreen } from "@/components/CallScreen";
 import CallNav from "@/components/CallNav";
 import RequestNotificationPermission from "./components/RequestNotificationPermission";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
+// import { UpdateBanner } from "@/components/UpdateBanner";
+import { HistoryTracker } from "@/components/HistoryTracker";
+import PlaylistPage from "@/pages/playlist/PlaylistPage";
 
 const LAST_PAGE_KEY = 'vibra_last_page';
 const PAGE_RESTORED_KEY = 'vibra_page_restored';
@@ -52,9 +56,29 @@ function App() {
     }
   }, []); // Run only once on mount
 
+  useEffect(() => {
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data?.type === "navigation") {
+        const url = event.data.url;
+        if (url) {
+          navigate(url); // react-router navigation
+        }
+      }
+    };
+
+    navigator.serviceWorker?.addEventListener("message", handleServiceWorkerMessage);
+
+    return () => {
+      navigator.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
+    };
+  }, [navigate]);
+
   return (
     <AuthProvider>
       <AccentToastProvider>
+        <OfflineIndicator />
+        {/* <UpdateBanner /> */}
+        <HistoryTracker />
         <RequestNotificationPermission />
         <CallEngine myId={user?.id} />
         <CallNav />
@@ -70,6 +94,7 @@ function App() {
             <Route path="/" element={<HomePage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/albums/:albumId" element={<AlbumPage />} />
+            <Route path="/playlists/:id" element={<PlaylistPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />

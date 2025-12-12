@@ -54,7 +54,7 @@ const LikeButton = ({ songId }: LikeButtonProps) => {
         className={`size-5 transition ${
           isLiked
             ? "fill-violet-500 text-violet-500"
-            : "text-zinc-400 hover:text-white"
+            : "text-zinc-300 hover:text-white"
         }`}
       />
     </button>

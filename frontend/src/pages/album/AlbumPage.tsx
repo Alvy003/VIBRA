@@ -54,6 +54,7 @@ const AlbumPage = () => {
               <img
                 src={currentAlbum?.imageUrl}
                 alt={currentAlbum?.title}
+                loading="lazy"
                 className="w-[240px] h-[240px] shadow-xl rounded mx-auto md:mx-0 md:w-[180px] md:h-[180px] sm:w-[150px] sm:h-[150px]"
               />
               <div className="flex flex-col justify-end md:ml-6 text-center md:text-left">
@@ -127,6 +128,7 @@ const AlbumPage = () => {
                               src={song.imageUrl}
                               alt={song.title}
                               className="size-10 shrink-0"
+                              loading="lazy"
                             />
                             <div className="flex flex-col grow">
                               <div className="font-medium text-white text-sm leading-tight line-clamp-1">

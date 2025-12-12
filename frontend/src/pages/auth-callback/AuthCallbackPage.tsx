@@ -24,7 +24,7 @@ const AuthCallbackPage = () => {
 					imageUrl: user.imageUrl,
 				});
 			} catch (error) {
-				console.log("Error in auth callback", error);
+				// console.log("Error in auth callback", error);
 			} finally {
 				navigate("/");
 			}

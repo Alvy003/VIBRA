@@ -5,7 +5,7 @@ import { Album, Music, ListMusic } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SongsTabContent from "./components/SongsTabContent";
 import AlbumsTabContent from "./components/AlbumsTabContent";
-import PlaylistsTabContent from "./components/PlaylistsTabContent";
+// import PlaylistsTabContent from "./components/PlaylistsTabContent";
 import { useEffect } from "react";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { usePlaylistStore } from "@/stores/usePlaylistStore"; 
@@ -14,14 +14,14 @@ const AdminPage = () => {
   const { isAdmin } = useAuthStore();
 
   const { fetchAlbums, fetchSongs, fetchStats } = useMusicStore();
-  const { fetchPlaylists } = usePlaylistStore(); 
+  const { fetchAllPlaylists  } = usePlaylistStore(); 
 
   useEffect(() => {
     fetchAlbums();
     fetchSongs();
     fetchStats();
-    fetchPlaylists(); 
-  }, [fetchAlbums, fetchSongs, fetchStats, fetchPlaylists]);
+    fetchAllPlaylists(); 
+  }, [fetchAlbums, fetchSongs, fetchStats, fetchAllPlaylists]);
 
   if (!isAdmin) return <div>Unauthorized</div>;
 
@@ -44,7 +44,7 @@ const AdminPage = () => {
             <Album className="mr-2 size-4" />
             Albums
           </TabsTrigger>
-          <TabsTrigger value="playlists" className="data-[state=active]:bg-zinc-700">
+          <TabsTrigger value="playlists" disabled className="data-[state=active]:bg-zinc-700">
             <ListMusic className="mr-2 size-4" />
             Playlists
           </TabsTrigger>
@@ -57,7 +57,7 @@ const AdminPage = () => {
           <AlbumsTabContent />
         </TabsContent>
         <TabsContent value="playlists">
-          <PlaylistsTabContent />
+          {/* <PlaylistsTabContent /> */}
         </TabsContent>
       </Tabs>
     </div>
