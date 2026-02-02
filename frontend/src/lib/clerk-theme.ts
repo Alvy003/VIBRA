@@ -4,7 +4,7 @@ import { dark } from "@clerk/themes";
 export const clerkAppearance = {
   baseTheme: dark,
   elements: {
-    rootBox: { zIndex: 9999 },
+    rootBox: { zIndex: 40 },
     card: {
       backgroundColor: "#18181b",
       border: "1px solid #27272a",

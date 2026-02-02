@@ -18,6 +18,7 @@ export default defineConfig({
         name: "Vibra",
         short_name: "Vibra",
         description: "Your Music Escape",
+        categories: ["music", "entertainment"],
         theme_color: "#000000",
         background_color: "#000000",
         display: "standalone",

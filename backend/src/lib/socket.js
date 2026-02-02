@@ -1,3 +1,4 @@
+// lib/socket.js
 import { Server } from "socket.io";
 import { Message } from "../models/message.model.js";
 import PushSubscription from "../models/PushSubscription.js";
@@ -7,7 +8,6 @@ import { User } from "../models/user.model.js";
 let io;
 let userSockets = new Map();
 
-// ✅ Export getters
 export const getIO = () => io;
 export const getUserSockets = () => userSockets;
 
@@ -19,9 +19,8 @@ export const initializeSocket = (server) => {
     },
   });
 
- // const userSockets = new Map(); // userId -> socketId
   const userActivities = new Map();
-  const callRings = new Map(); // callId -> { fromId, toId, timer }
+  const callRings = new Map();
 
   const genCallId = () => `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
@@ -39,22 +38,73 @@ export const initializeSocket = (server) => {
       io.emit("activity_updated", { userId, activity });
     });
 
-    // TEXT
+    // ✅ TYPING INDICATOR
+    socket.on("typing", ({ senderId, receiverId, isTyping }) => {
+      const receiverSocketId = userSockets.get(receiverId);
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("user_typing", { senderId, isTyping });
+      }
+    });
+
+    // ✅ MARK MESSAGES AS READ
+    socket.on("mark_messages_read", async ({ userId, otherUserId }) => {
+      try {
+        const result = await Message.updateMany(
+          { senderId: otherUserId, receiverId: userId, read: false },
+          { $set: { read: true, readAt: new Date() } }
+        );
+        
+        // Notify the sender that their messages were read
+        const senderSocketId = userSockets.get(otherUserId);
+        if (senderSocketId) {
+          io.to(senderSocketId).emit("messages_read", { by: userId });
+        }
+        
+        // console.log(`Marked ${result.modifiedCount} messages as read from ${otherUserId} to ${userId}`);
+      } catch (err) {
+        console.error("Failed to mark messages as read:", err);
+      }
+    });
+
+    // ✅ GET ONLINE USERS (for PWA reconnection)
+      socket.on("get_online_users", () => {
+        socket.emit("users_online", Array.from(userSockets.keys()));
+        socket.emit("activities", Array.from(userActivities.entries()));
+      });
+
+    // ✅ TEXT MESSAGE WITH REPLY SUPPORT
     socket.on("send_message", async (data) => {
       try {
-        const { senderId, receiverId, content } = data;
+        const { senderId, receiverId, content, replyToId } = data;
 
-        const message = await Message.create({
+        const messageData = {
           senderId,
           receiverId,
           content,
           read: false,
-        });
+        };
+
+        // Add reply reference if provided
+        if (replyToId) {
+          messageData.replyTo = replyToId;
+        }
+
+        const message = await Message.create(messageData);
+        
+        // Populate reply if exists
+        let populatedMessage = message.toObject();
+        if (replyToId) {
+          const replyMessage = await Message.findById(replyToId).lean();
+          if (replyMessage) {
+            populatedMessage.replyTo = replyMessage;
+          }
+        }
 
         const receiverSocketId = userSockets.get(receiverId);
-        if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", message);
-        socket.emit("message_sent", message);
+        if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", populatedMessage);
+        socket.emit("message_sent", populatedMessage);
 
+        // Push notification
         try {
           const subs = await PushSubscription.find({ userId: receiverId }).lean();
           const sender = await User.findOne({ clerkId: senderId }).lean();
@@ -66,7 +116,6 @@ export const initializeSocket = (server) => {
               icon: sender?.imageUrl || "/vibra.png",
               badge: "/vibra.png",
               tag: "message",
-              // renotify: true,
               data: { url: `/chat`, senderId, receiverId, senderName, type: "message" },
               actions: [
                 { action: "reply_thumbsup", title: "👍" },
@@ -90,16 +139,16 @@ export const initializeSocket = (server) => {
       }
     });
 
-    // FILE MESSAGE
+    // ✅ FILE MESSAGE WITH REPLY SUPPORT
     socket.on("send_file", async (data) => {
       try {
-        const { senderId, receiverId, files, content } = data;
+        const { senderId, receiverId, files, content, replyToId } = data;
         
         if (!files || files.length === 0) {
           return socket.emit("message_error", "No files provided");
         }
 
-        const message = await Message.create({
+        const messageData = {
           senderId,
           receiverId,
           type: "file",
@@ -111,11 +160,26 @@ export const initializeSocket = (server) => {
           })),
           content: content || "",
           read: false,
-        });
+        };
+
+        if (replyToId) {
+          messageData.replyTo = replyToId;
+        }
+
+        const message = await Message.create(messageData);
+
+        // Populate reply if exists
+        let populatedMessage = message.toObject();
+        if (replyToId) {
+          const replyMessage = await Message.findById(replyToId).lean();
+          if (replyMessage) {
+            populatedMessage.replyTo = replyMessage;
+          }
+        }
 
         const receiverSocketId = userSockets.get(receiverId);
-        if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", message);
-        socket.emit("message_sent", message);
+        if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", populatedMessage);
+        socket.emit("message_sent", populatedMessage);
 
         // Push notification
         try {
@@ -124,15 +188,9 @@ export const initializeSocket = (server) => {
           const senderName = sender?.fullName || "New message";
           
           if (subs?.length) {
-            // Determine notification body based on files
             const fileCount = files.length;
             const hasImages = files.some(f => f.mimetype?.startsWith('image/'));
             const hasVideos = files.some(f => f.mimetype?.startsWith('video/'));
-            const hasDocs = files.some(f => 
-              f.mimetype?.includes('pdf') || 
-              f.mimetype?.includes('document') ||
-              f.mimetype?.includes('text')
-            );
             
             let body = "";
             if (content) {
@@ -143,8 +201,6 @@ export const initializeSocket = (server) => {
               body = `📷 Sent ${fileCount} photos`;
             } else if (hasVideos) {
               body = "🎥 Sent a video";
-            } else if (hasDocs) {
-              body = "📄 Sent a document";
             } else {
               body = `📎 Sent ${fileCount} file${fileCount > 1 ? 's' : ''}`;
             }
@@ -155,12 +211,7 @@ export const initializeSocket = (server) => {
               icon: sender?.imageUrl || "/vibra.png",
               badge: "/vibra.png",
               tag: "message",
-              data: { 
-                url: `/chat`, 
-                senderId, 
-                senderName, 
-                type: "file_message" 
-              },
+              data: { url: `/chat`, senderId, senderName, type: "file_message" },
             };
             
             for (const row of subs) {
@@ -168,9 +219,7 @@ export const initializeSocket = (server) => {
                 await webpush.sendNotification(row.subscription, JSON.stringify(payload));
               } catch (e) {
                 const code = e?.statusCode;
-                if (code === 410 || code === 404) {
-                  await PushSubscription.deleteOne({ _id: row._id });
-                }
+                if (code === 410 || code === 404) await PushSubscription.deleteOne({ _id: row._id });
               }
             }
           }
@@ -183,13 +232,13 @@ export const initializeSocket = (server) => {
       }
     });
 
-    // VOICE
+    // ✅ VOICE MESSAGE WITH REPLY SUPPORT
     socket.on("send_voice", async (data) => {
       try {
-        const { senderId, receiverId, audioUrl, duration } = data;
+        const { senderId, receiverId, audioUrl, duration, replyToId } = data;
         if (!audioUrl) return;
 
-        const message = await Message.create({
+        const messageData = {
           senderId,
           receiverId,
           type: "audio",
@@ -197,12 +246,28 @@ export const initializeSocket = (server) => {
           audioDuration: Math.max(0, Number(duration || 0)),
           content: "",
           read: false,
-        });
+        };
+
+        if (replyToId) {
+          messageData.replyTo = replyToId;
+        }
+
+        const message = await Message.create(messageData);
+
+        // Populate reply if exists
+        let populatedMessage = message.toObject();
+        if (replyToId) {
+          const replyMessage = await Message.findById(replyToId).lean();
+          if (replyMessage) {
+            populatedMessage.replyTo = replyMessage;
+          }
+        }
 
         const receiverSocketId = userSockets.get(receiverId);
-        if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", message);
-        socket.emit("message_sent", message);
+        if (receiverSocketId) io.to(receiverSocketId).emit("receive_message", populatedMessage);
+        socket.emit("message_sent", populatedMessage);
 
+        // Push notification
         try {
           const subs = await PushSubscription.find({ userId: receiverId }).lean();
           const sender = await User.findOne({ clerkId: senderId }).lean();
@@ -210,7 +275,7 @@ export const initializeSocket = (server) => {
           if (subs?.length) {
             const payload = {
               title: senderName,
-              body: "Voice message",
+              body: "🎤 Voice message",
               icon: sender?.imageUrl || "/vibra.png",
               badge: "/vibra.png",
               tag: "message",
@@ -231,7 +296,47 @@ export const initializeSocket = (server) => {
       }
     });
 
-    // 1:1 CALL SIGNALING
+    // ✅ REACTION NOTIFICATION
+    socket.on("add_reaction", async ({ messageId, emoji, senderId, receiverId }) => {
+      try {
+        // Notify the message owner about the reaction
+        const receiverSocketId = userSockets.get(receiverId);
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("message_reaction", { messageId, emoji, senderId });
+        }
+
+        // Send push notification for reaction
+        try {
+          const subs = await PushSubscription.find({ userId: receiverId }).lean();
+          const sender = await User.findOne({ clerkId: senderId }).lean();
+          const senderName = sender?.fullName || "Someone";
+          
+          if (subs?.length) {
+            const payload = {
+              title: senderName,
+              body: `Reacted ${emoji} to your message`,
+              icon: sender?.imageUrl || "/vibra.png",
+              badge: "/vibra.png",
+              tag: "reaction",
+              data: { url: `/chat`, senderId, type: "reaction" },
+            };
+            
+            for (const row of subs) {
+              try {
+                await webpush.sendNotification(row.subscription, JSON.stringify(payload));
+              } catch (e) {
+                const code = e?.statusCode;
+                if (code === 410 || code === 404) await PushSubscription.deleteOne({ _id: row._id });
+              }
+            }
+          }
+        } catch {}
+      } catch (e) {
+        console.error("add_reaction error:", e);
+      }
+    });
+
+    // CALL SIGNALING (unchanged)
     socket.on("call_user", async ({ fromId, toId }) => {
       const toSocket = userSockets.get(toId);
       const fromSocket = userSockets.get(fromId);
@@ -241,7 +346,6 @@ export const initializeSocket = (server) => {
         const callerSock = userSockets.get(fromId);
         const calleeSock = userSockets.get(toId);
         
-        // ✅ Store missed call message
         try {
           const message = await Message.create({
             senderId: fromId,
@@ -251,7 +355,6 @@ export const initializeSocket = (server) => {
             read: false,
           });
           
-          // ✅ Emit to both users in real-time
           if (callerSock) io.to(callerSock).emit("receive_message", message);
           if (calleeSock) io.to(calleeSock).emit("receive_message", message);
         } catch (err) {
@@ -313,7 +416,6 @@ export const initializeSocket = (server) => {
       clearTimeout(ring.timer);
       callRings.delete(callId);
     
-      // ✅ Store successful call message
       try {
         const message = await Message.create({
           senderId: fromId,
@@ -323,7 +425,6 @@ export const initializeSocket = (server) => {
           read: false,
         });
         
-        // ✅ Emit to both users in real-time
         const callerSock = userSockets.get(fromId);
         const calleeSock = userSockets.get(toId);
         if (callerSock) io.to(callerSock).emit("receive_message", message);
@@ -339,7 +440,6 @@ export const initializeSocket = (server) => {
       if (calleeSock) io.to(calleeSock).emit("call_accepted", { callId, fromId });
     });
     
-    // ✅ When call is declined
     socket.on("decline_call", async ({ callId, toId, fromId }) => {
       const ring = callRings.get(callId);
       if (ring) {
@@ -347,7 +447,6 @@ export const initializeSocket = (server) => {
         callRings.delete(callId);
       }
       
-      // ✅ Store declined call message
       try {
         const message = await Message.create({
           senderId: fromId,
@@ -357,7 +456,6 @@ export const initializeSocket = (server) => {
           read: false,
         });
         
-        // ✅ Emit to both users in real-time
         const callerSock = userSockets.get(fromId);
         const calleeSock = userSockets.get(toId);
         if (callerSock) io.to(callerSock).emit("receive_message", message);
@@ -380,7 +478,6 @@ export const initializeSocket = (server) => {
       if (calleeSock) io.to(calleeSock).emit("call_cancelled", { callId, fromId });
     });
 
-    // SDP/ICE relay
     socket.on("webrtc_offer", ({ toId, offer, callId }) => {
       const toSocket = userSockets.get(toId);
       if (toSocket) io.to(toSocket).emit("webrtc_offer", { offer, callId });
@@ -396,7 +493,6 @@ export const initializeSocket = (server) => {
       if (toSocket) io.to(toSocket).emit("webrtc_ice_candidate", { candidate, callId });
     });
 
-    // End call
     socket.on("end_call", ({ toId, callId }) => {
       const ring = callRings.get(callId);
       if (ring) {

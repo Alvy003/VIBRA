@@ -12,6 +12,7 @@ import {
   updateAlbum,
   updateSongImage,
   updateSongAudio, 
+  updateAlbumImage,
 } from "../controller/admin.controller.js";
 import {
   createPlaylist,
@@ -37,6 +38,7 @@ router.post("/albums", protectRoute, requireAdmin, createAlbum);
 router.patch("/albums/:id", protectRoute, requireAdmin, updateAlbum);
 router.delete("/albums/:id", protectRoute, requireAdmin, deleteAlbum);
 router.patch("/albums/:id/songs", protectRoute, requireAdmin, patchAlbumSongs); 
+router.patch("/albums/:id/image", protectRoute, requireAdmin, updateAlbumImage);
 
 // PLAYLISTS
 router.post("/playlists", protectRoute, requireAdmin, createPlaylist);

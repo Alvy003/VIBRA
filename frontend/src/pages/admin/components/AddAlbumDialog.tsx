@@ -38,15 +38,14 @@ const AddAlbumDialog = () => {
 		setIsLoading(true);
 
 		try {
-			if (!imageFile) {
-				return toast.error("Please upload an image");
-			}
-
 			const formData = new FormData();
 			formData.append("title", newAlbum.title);
 			formData.append("artist", newAlbum.artist);
 			formData.append("releaseYear", newAlbum.releaseYear.toString());
+			
+			if (imageFile) {
 			formData.append("imageFile", imageFile);
+			}			
 
 			await axiosInstance.post("/admin/albums", formData, {
 				headers: {
@@ -144,7 +143,7 @@ const AddAlbumDialog = () => {
 					<Button
 						onClick={handleSubmit}
 						className='bg-violet-500 hover:bg-violet-600'
-						disabled={isLoading || !imageFile || !newAlbum.title || !newAlbum.artist}
+						disabled={!newAlbum.title || !newAlbum.artist}
 					>
 						{isLoading ? "Creating..." : "Add Album"}
 					</Button>

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
-import { Pencil, X, Loader2, Music, FileText, Trash2 } from "lucide-react";
+import { X, Loader2, Music, FileText, Trash2 } from "lucide-react";
 import { usePlaylistStore } from "@/stores/usePlaylistStore";
 import { Playlist } from "@/types";
 import toast from "react-hot-toast";
@@ -85,10 +85,8 @@ const EditPlaylistDialog = ({ isOpen, onClose, playlist, onDelete }: EditPlaylis
           <div className="p-5 pb-4 border-b border-zinc-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-violet-500/10 flex items-center justify-center">
-                  <Pencil className="w-5 h-5 text-violet-500" />
-                </div>
-                <h3 className="text-lg font-semibold text-white">Edit Playlist</h3>
+              <h3 id="edit-playlist-title">Edit Playlist</h3>
+
               </div>
               <button onClick={onClose} disabled={isLoading} className="p-2 hover:bg-zinc-800 rounded-lg transition-colors">
                 <X className="w-5 h-5 text-zinc-400" />
@@ -103,8 +101,9 @@ const EditPlaylistDialog = ({ isOpen, onClose, playlist, onDelete }: EditPlaylis
                   <Trash2 className="w-5 h-5 text-red-500" />
                 </div>
                 <div>
-                  <h4 className="text-white font-medium">Delete Playlist?</h4>
-                  <p className="text-sm text-zinc-400">This cannot be undone</p>
+                <p className="text-sm text-zinc-400">
+                  Delete <span className="text-white font-medium">{playlist.name}</span>? This cannot be undone.
+                </p>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -158,7 +157,7 @@ const EditPlaylistDialog = ({ isOpen, onClose, playlist, onDelete }: EditPlaylis
                 </div>
                 <button
                   onClick={() => setShowDeleteConfirm(true)}
-                  className="w-full px-4 py-2 rounded-lg text-red-400 hover:bg-red-500/10 text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                  className="w-full px-4 py-3 rounded-xl text-white hover:bg-zinc-700 bg-zinc-800 text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <Trash2 className="w-4 h-4" /> Delete Playlist
                 </button>

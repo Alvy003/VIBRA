@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { useMusicStore } from "@/stores/useMusicStore";
-import { Pencil, X, Loader2, Upload, Image as ImageIcon, Music } from "lucide-react";
+import { X, Loader2, Upload, Image as ImageIcon, Music } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface EditSongDialogProps {
@@ -192,9 +192,6 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
           <div className="p-5 pb-4 border-b border-zinc-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-violet-500/10 flex items-center justify-center">
-                  <Pencil className="w-5 h-5 text-violet-500" />
-                </div>
                 <h3 className="text-lg font-semibold text-white">Edit Song</h3>
               </div>
               <button

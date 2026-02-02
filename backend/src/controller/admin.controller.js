@@ -2,6 +2,7 @@ import { Song } from "../models/song.model.js";
 import { Album } from "../models/album.model.js";
 import cloudinary from "../lib/cloudinary.js";
 import { clerkClient } from "@clerk/express";
+import { buildAlbumPreviewImages } from "../utils/albumPreview.js";
 
 // helper function for cloudinary uploads
 const uploadToCloudinary = async (file) => {
@@ -41,10 +42,13 @@ export const createSong = async (req, res, next) => {
 		await song.save();
 
 		// if song belongs to an album, update the album's songs array
-		if (albumId) {
-			await Album.findByIdAndUpdate(albumId, {
-				$push: { songs: song._id },
-			});
+	if (albumId) {
+		const album = await Album.findById(albumId).populate("songs", "imageUrl");
+		if (album) {
+			album.songs.push(song._id);
+			album.previewImages = buildAlbumPreviewImages(album.songs);
+			await album.save();
+		}
 		}
 		res.status(201).json(song);
 	} catch (error) {
@@ -60,11 +64,16 @@ export const deleteSong = async (req, res, next) => {
 		const song = await Song.findById(id);
 
 		// if song belongs to an album, update the album's songs array
-		if (song.albumId) {
-			await Album.findByIdAndUpdate(song.albumId, {
-				$pull: { songs: song._id },
-			});
+	if (song.albumId) {
+		const album = await Album.findById(song.albumId).populate("songs", "imageUrl");
+		if (album) {
+			album.songs = album.songs.filter(
+			(s) => s._id.toString() !== song._id.toString()
+			);
+			album.previewImages = buildAlbumPreviewImages(album.songs);
+			await album.save();
 		}
+		}		  
 
 		await Song.findByIdAndDelete(id);
 
@@ -77,26 +86,33 @@ export const deleteSong = async (req, res, next) => {
 
 export const createAlbum = async (req, res, next) => {
 	try {
-		const { title, artist, releaseYear } = req.body;
-		const { imageFile } = req.files;
-
-		const imageUrl = await uploadToCloudinary(imageFile);
-
-		const album = new Album({
-			title,
-			artist,
-			imageUrl,
-			releaseYear,
-		});
-
-		await album.save();
-
-		res.status(201).json(album);
+	  const { title, artist, releaseYear } = req.body;
+  
+	  let imageUrl = null;
+  
+	  // Only upload if image exists
+	  if (req.files && req.files.imageFile) {
+		imageUrl = await uploadToCloudinary(req.files.imageFile);
+	  }
+  
+	  const album = new Album({
+		title,
+		artist,
+		releaseYear,
+		imageUrl,
+	  });
+  
+	  album.previewImages = buildAlbumPreviewImages(album.songs);
+	  await album.save();
+	  
+  
+	  res.status(201).json(album);
 	} catch (error) {
-		console.log("Error in createAlbum", error);
-		next(error);
+	  console.log("Error in createAlbum", error);
+	  next(error);
 	}
-};
+  };
+  
 
 export const patchAlbumSongs = async (req, res) => {
 	try {
@@ -153,8 +169,21 @@ export const patchAlbumSongs = async (req, res) => {
 		  return res.status(400).json({ message: "Invalid operation" });
 	  }
   
-	  const updatedAlbum = await Album.findById(id).populate("songs");
+	  const updatedAlbum = await Album.findById(id).populate("songs", "imageUrl");
+
+	  updatedAlbum.previewImages = buildAlbumPreviewImages(updatedAlbum.songs);
+	  await updatedAlbum.save();
+
+	  if (op === "move" && targetAlbumId) {
+		const targetAlbum = await Album.findById(targetAlbumId).populate("songs", "imageUrl");
+		if (targetAlbum) {
+		  targetAlbum.previewImages = buildAlbumPreviewImages(targetAlbum.songs);
+		  await targetAlbum.save();
+		}
+	  }	  
+	  
 	  res.json(updatedAlbum);
+	  
 	} catch (err) {
 	  console.error("Error patching album songs:", err);
 	  res.status(500).json({ message: "Error updating album songs" });
@@ -220,7 +249,7 @@ export const checkAdmin = async (req, res, next) => {
   export const changeSongAlbum = async (req, res, next) => {
 	try {
 	  const { id } = req.params;
-	  const { albumId } = req.body; // null to remove from album, or new album ID
+	  const { albumId } = req.body;
   
 	  const song = await Song.findById(id);
 	  if (!song) {
@@ -229,62 +258,97 @@ export const checkAdmin = async (req, res, next) => {
   
 	  const oldAlbumId = song.albumId;
   
-	  // Remove from old album if exists
+	  // Remove from old album
 	  if (oldAlbumId) {
-		await Album.findByIdAndUpdate(oldAlbumId, {
-		  $pull: { songs: song._id },
-		});
+		const oldAlbum = await Album.findById(oldAlbumId).populate("songs", "imageUrl");
+		if (oldAlbum) {
+		  oldAlbum.songs = oldAlbum.songs.filter(
+			(s) => s._id.toString() !== song._id.toString()
+		  );
+		  oldAlbum.previewImages = buildAlbumPreviewImages(oldAlbum.songs);
+		  await oldAlbum.save();
+		}
 	  }
   
-	  // Add to new album if provided
+	  // Add to new album
 	  if (albumId) {
-		const newAlbum = await Album.findById(albumId);
+		const newAlbum = await Album.findById(albumId).populate("songs", "imageUrl");
 		if (!newAlbum) {
 		  return res.status(404).json({ message: "Target album not found" });
 		}
-		
-		await Album.findByIdAndUpdate(albumId, {
-		  $addToSet: { songs: song._id },
-		});
+  
+		newAlbum.songs.push(song._id);
+		newAlbum.previewImages = buildAlbumPreviewImages(newAlbum.songs);
+		await newAlbum.save();
 	  }
   
-	  // Update song's albumId
 	  song.albumId = albumId || null;
 	  await song.save();
   
-	  res.status(200).json({ 
+	  res.status(200).json({
 		message: albumId ? "Song moved to album" : "Song removed from album",
-		song 
+		song,
 	  });
 	} catch (error) {
 	  console.error("Error in changeSongAlbum:", error);
 	  next(error);
 	}
   };
+  
 
   // Update album details
-export const updateAlbum = async (req, res, next) => {
-	try {
-	  const { id } = req.params;
-	  const { title, artist, releaseYear } = req.body;
-  
-	  const album = await Album.findById(id);
-	  if (!album) {
-		return res.status(404).json({ message: "Album not found" });
-	  }
-  
-	  if (title !== undefined) album.title = title;
-	  if (artist !== undefined) album.artist = artist;
-	  if (releaseYear !== undefined) album.releaseYear = releaseYear;
-  
-	  await album.save();
-  
-	  res.status(200).json(album);
-	} catch (error) {
-	  console.error("Error in updateAlbum:", error);
-	  next(error);
-	}
-  };
+	export const updateAlbum = async (req, res, next) => {
+		try {
+		const { id } = req.params;
+		const { title, artist, releaseYear, imageUrl, useMosaicCover } = req.body;
+	
+		const album = await Album.findById(id);
+		if (!album) {
+			return res.status(404).json({ message: "Album not found" });
+		}
+	
+		if (title !== undefined) album.title = title;
+		if (artist !== undefined) album.artist = artist;
+		if (releaseYear !== undefined) album.releaseYear = releaseYear;
+		if (imageUrl === null) {
+			album.imageUrl = null;
+			album.useMosaicCover = true; // auto fallback to mosaic
+		}		  
+		if (useMosaicCover !== undefined) {
+			album.useMosaicCover = useMosaicCover;
+		}
+		await album.save();
+	
+		res.status(200).json(album);
+		} catch (error) {
+		console.error("Error in updateAlbum:", error);
+		next(error);
+		}
+	};
+
+		export const updateAlbumImage = async (req, res, next) => {
+			try {
+			const { id } = req.params;
+		
+			if (!req.files || !req.files.imageFile) {
+				return res.status(400).json({ message: "Please upload an image file" });
+			}
+		
+			const album = await Album.findById(id);
+			if (!album) {
+				return res.status(404).json({ message: "Album not found" });
+			}
+		
+			const imageUrl = await uploadToCloudinary(req.files.imageFile);
+			album.imageUrl = imageUrl;
+			album.useMosaicCover = false; // 🔑 important UX rule
+			await album.save();
+		
+			res.status(200).json(album);
+			} catch (error) {
+			next(error);
+			}
+		};
 
 
 // Update song image
@@ -306,6 +370,15 @@ export const updateSongImage = async (req, res, next) => {
   
 	  song.imageUrl = imageUrl;
 	  await song.save();
+
+	  if (song.albumId) {
+		const album = await Album.findById(song.albumId).populate("songs", "imageUrl");
+		if (album) {
+		  album.previewImages = buildAlbumPreviewImages(album.songs);
+		  await album.save();
+		}
+	  }
+	  
   
 	  res.status(200).json(song);
 	} catch (error) {

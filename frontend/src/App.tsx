@@ -1,3 +1,4 @@
+// src/App.tsx
 import { Route, Routes, useNavigate, useLocation } from "react-router-dom";
 import { AuthenticateWithRedirectCallback, useUser } from "@clerk/clerk-react";
 import { Toaster } from "react-hot-toast";
@@ -22,9 +23,11 @@ import { CallScreen } from "@/components/CallScreen";
 import CallNav from "@/components/CallNav";
 import RequestNotificationPermission from "./components/RequestNotificationPermission";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
-// import { UpdateBanner } from "@/components/UpdateBanner";
 import { HistoryTracker } from "@/components/HistoryTracker";
 import PlaylistPage from "@/pages/playlist/PlaylistPage";
+import MobileLibraryPage from "@/pages/library/MobileLibraryPage"; 
+import RecentlyPlayedPage from "@/pages/library/RecentlyPlayedPage";
+import ProfilePage from "@/pages/profile/ProfilePage";
 
 const LAST_PAGE_KEY = 'vibra_last_page';
 const PAGE_RESTORED_KEY = 'vibra_page_restored';
@@ -35,33 +38,27 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ Restore last page on app load (only once per session)
   useEffect(() => {
     const hasRestored = sessionStorage.getItem(PAGE_RESTORED_KEY);
     
-    // Only restore if we haven't already and user is on home page
     if (!hasRestored && location.pathname === '/') {
       const lastPage = localStorage.getItem(LAST_PAGE_KEY);
+      const cacheableRoutes = ['/chat', '/search', '/favorites', '/downloads', '/library'];
       
-      // Define which routes can be restored
-      const cacheableRoutes = ['/chat', '/search', '/favorites', '/downloads'];
-      
-      // If there's a saved page and it's cacheable, navigate to it
       if (lastPage && cacheableRoutes.includes(lastPage)) {
         navigate(lastPage, { replace: true });
       }
       
-      // Mark as restored for this session (prevents re-navigation)
       sessionStorage.setItem(PAGE_RESTORED_KEY, 'true');
     }
-  }, []); // Run only once on mount
+  }, []);
 
   useEffect(() => {
     const handleServiceWorkerMessage = (event: MessageEvent) => {
       if (event.data?.type === "navigation") {
         const url = event.data.url;
         if (url) {
-          navigate(url); // react-router navigation
+          navigate(url);
         }
       }
     };
@@ -77,7 +74,6 @@ function App() {
     <AuthProvider>
       <AccentToastProvider>
         <OfflineIndicator />
-        {/* <UpdateBanner /> */}
         <HistoryTracker />
         <RequestNotificationPermission />
         <CallEngine myId={user?.id} />
@@ -92,12 +88,15 @@ function App() {
           <Route path="/admin" element={<AdminPage />} />
           <Route element={<MainLayout />}>
             <Route path="/" element={<HomePage />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/albums/:albumId" element={<AlbumPage />} />
             <Route path="/playlists/:id" element={<PlaylistPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
             <Route path="/downloads" element={<DownloadsPage />} />
+            <Route path="/library" element={<MobileLibraryPage />} />
+            <Route path="/library/recently-played" element={<RecentlyPlayedPage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

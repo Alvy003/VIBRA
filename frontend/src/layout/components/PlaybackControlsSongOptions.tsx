@@ -11,6 +11,8 @@ import {
   Pencil,
   FolderOpen,
   Trash2,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useMusicStore } from "@/stores/useMusicStore";
@@ -26,6 +28,8 @@ type Props = {
   song: any;
   onClose: () => void;
   variant: "desktop" | "mobile-sheet";
+  onToggleFullscreen?: () => void;
+  isFullscreen?: boolean;
 };
 
 // Delete Confirmation Dialog
@@ -99,7 +103,7 @@ const DeleteConfirmDialog = ({
   );
 };
 
-const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant }) => {
+const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, onToggleFullscreen, isFullscreen = false }) => {
   const { isSignedIn } = useAuth();
   const { likedSongs, likeSong, unlikeSong, deleteSong } = useMusicStore();
   const { isAdmin } = useAuthStore();
@@ -245,7 +249,7 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant }
   // Styles based on variant
   const buttonClass =
     variant === "mobile-sheet"
-      ? "w-full text-left px-4 py-3.5 rounded-xl hover:bg-white/5 active:bg-white/10 flex items-center gap-3 text-[15px] text-zinc-200 transition-colors"
+      ? "w-full text-left px-2 py-3.5 rounded-xl hover:bg-white/5 active:bg-white/10 flex items-center gap-3 text-[15px] text-zinc-200 transition-colors"
       : "w-full text-left px-4 py-2.5 rounded-lg hover:bg-white/5 flex items-center gap-2 text-[13px] text-zinc-200 transition-colors";
 
   const iconClass = variant === "mobile-sheet" ? "h-5 w-5" : "h-4 w-4";
@@ -255,14 +259,14 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant }
       <div className="flex flex-col">
 
         <button className={buttonClass} onClick={addToQueue}>
-          <ListEnd className={`${iconClass} text-violet-400`} />
+          <ListEnd className={`${iconClass} text-zinc-400`} />
           <span>Add to queue</span>
         </button>
 
         <button className={buttonClass} onClick={toggleLike}>
           <Heart
             className={`${iconClass} ${
-              isLiked ? "fill-violet-500 text-violet-500" : "text-violet-400"
+              isLiked ? "fill-violet-500 text-violet-500" : "text-zinc-400"
             }`}
           />
           <span>{isLiked ? "Unlike" : "Like"}</span>
@@ -270,7 +274,7 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant }
 
         {isSignedIn && (
           <button className={buttonClass} onClick={() => openDialog(setAddToPlaylistOpen)}>
-            <ListPlus className={`${iconClass} text-violet-400`} />
+            <ListPlus className={`${iconClass} text-zinc-400`} />
             <span>Add to Playlist</span>
           </button>
         )}
@@ -281,12 +285,12 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant }
               animate={{ rotate: 360 }}
               transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
             >
-              <Download className={`${iconClass} text-violet-400`} />
+              <Download className={`${iconClass} text-zinc-400`} />
             </motion.div>
           ) : downloadState === "completed" ? (
             <Check className={`${iconClass} text-violet-300`} />
           ) : (
-            <Download className={`${iconClass} text-violet-400`} />
+            <Download className={`${iconClass} text-zinc-400`} />
           )}
           <span>
             {downloadState === "completed"
@@ -297,27 +301,47 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant }
           </span>
         </button>
 
+          {/* Fullscreen Option - Only show for mobile-sheet variant */}
+          {variant === "mobile-sheet" && onToggleFullscreen && (
+          <>
+            <button 
+              className={buttonClass} 
+              onClick={() => {
+                onToggleFullscreen();
+                onClose();
+              }}
+            >
+              {isFullscreen ? (
+                <Minimize className={`${iconClass} text-zinc-400`} />
+              ) : (
+                <Maximize className={`${iconClass} text-zinc-400`} />
+              )}
+              <span>{isFullscreen ? "Exit Fullscreen" : "Fullscreen"}</span>
+            </button>
+          </>
+        )}
+
         {/* Admin Options */}
         {isAdmin && (
           <>
             <div className="border-t border-white/10 my-2" />
 
             <button className={buttonClass} onClick={() => openDialog(setEditDialogOpen)}>
-              <Pencil className={`${iconClass} text-violet-400`} />
+              <Pencil className={`${iconClass} text-zinc-400`} />
               <span>Edit Song</span>
             </button>
 
             <button className={buttonClass} onClick={() => openDialog(setMoveDialogOpen)}>
-              <FolderOpen className={`${iconClass} text-violet-400`} />
-              <span>Move to Album</span>
+              <FolderOpen className={`${iconClass} text-zinc-400`} />
+              <span>Add to Album</span>
             </button>
 
             <button
               className={`${buttonClass} text-red-400 hover:bg-red-900/10`}
               onClick={() => openDialog(setDeleteDialogOpen)}
             >
-              <Trash2 className={`${iconClass} text-red-400`} />
-              <span className="text-red-400">Delete Song</span>
+              <Trash2 className={`${iconClass} text-zinc-400`} />
+              <span>Delete Song</span>
             </button>
           </>
         )}

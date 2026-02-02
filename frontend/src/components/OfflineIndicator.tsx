@@ -1,74 +1,121 @@
-import { useEffect, useState } from "react";
-import { WifiOff, Wifi } from "lucide-react";
+// src/components/OfflineIndicator.tsx
+import { useEffect, useState, useRef } from "react";
+import { WifiOff, Wifi, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export const OfflineIndicator = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [showBanner, setShowBanner] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [showBackOnline, setShowBackOnline] = useState(false);
+  const wasOfflineRef = useRef(false);
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      setShowBanner(true);
-      setTimeout(() => setShowBanner(false), 3000);
+      setDismissed(false);
+      
+      // Only show "back online" if we were previously offline
+      if (wasOfflineRef.current) {
+        setShowBackOnline(true);
+        // Auto-hide after 3 seconds
+        setTimeout(() => setShowBackOnline(false), 3000);
+      }
+      wasOfflineRef.current = false;
     };
 
     const handleOffline = () => {
       setIsOnline(false);
-      setShowBanner(true);
+      setDismissed(false);
+      setShowBackOnline(false);
+      wasOfflineRef.current = true;
     };
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
 
-    // Show banner if already offline
+    // Track initial offline state
     if (!navigator.onLine) {
-      setShowBanner(true);
+      wasOfflineRef.current = true;
     }
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, []);
 
+  const showOfflineBar = !isOnline && !dismissed;
+
   return (
     <AnimatePresence>
-      {showBanner && (
+      {/* Offline Bar */}
+      {showOfflineBar && (
         <motion.div
-          initial={{ y: -100, opacity: 0 }}
+          key="offline"
+          initial={{ y: 100, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          exit={{ y: -100, opacity: 0 }}
-          className="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] w-[90%] max-w-md"
+          exit={{ y: 100, opacity: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          className="fixed bottom-[120px] md:bottom-[100px] left-0 right-0 z-[100] px-2"
         >
-        <div className={`
-          ${isOnline 
-            ? 'bg-violet-600/90 backdrop-blur-sm' 
-            : 'bg-zinc-800/90 backdrop-blur-sm'
-          }
-          text-white rounded-xl shadow-2xl p-4 flex items-center gap-3
-        `}>
-          <div className="p-2 bg-white/20 rounded-lg">
-            {isOnline ? (
-              <Wifi className="w-5 h-5 text-violet-100" />
-            ) : (
-              <WifiOff className="w-5 h-5 text-zinc-200" />
-            )}
-          </div>
+          <div className="max-w-screen-3xl mx-auto">
+            <div className="bg-violet-500 text-black rounded-lg px-4 py-1 flex items-center justify-between shadow-lg shadow-black/20 relative">
+            {/* Text container */}
+              <div className="flex items-center gap-3 w-full md:absolute md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:justify-center">
+                <WifiOff className="w-4 h-4 flex-shrink-0" />
+                <span className="text-sm font-medium text-center">
+                  You're offline. Some features may not work.
+                </span>
+              </div>
 
-          <div className="flex-1">
-            <p className="font-semibold text-sm">
-              {isOnline ? "Back Online" : "You're Offline"}
-            </p>
-            <p className="text-xs text-white/90">
-              {isOnline
-                ? "Connection restored"
-                : "Use downloaded songs"}
-            </p>
+              {/* Dismiss button */}
+              <button
+                onClick={() => setDismissed(true)}
+                className="p-1 hover:bg-white/10 rounded-full transition-colors flex-shrink-0"
+                aria-label="Dismiss"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-        </div>
         </motion.div>
       )}
+
+{/* Back Online Toast */}
+{showBackOnline && (
+  <motion.div
+    key="online"
+    initial={{ y: 100, opacity: 0 }}
+    animate={{ y: 0, opacity: 1 }}
+    exit={{ y: 100, opacity: 0 }}
+    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+    className="fixed bottom-[120px] md:bottom-[100px] left-0 right-0 z-[100] px-2"
+  >
+    <div className="max-w-screen-3xl mx-auto">
+      <div className="bg-green-500 text-black rounded-lg px-4 py-1 flex items-center justify-between shadow-lg shadow-black/20 relative">
+        {/* Text container */}
+        <div className="flex items-center gap-3 w-full md:absolute md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:justify-center">
+          <Wifi className="w-4 h-4 flex-shrink-0" />
+          <span className="text-sm font-medium text-center">
+            You're back online
+          </span>
+        </div>
+
+        {/* Dismiss button */}
+        <button
+          onClick={() => setShowBackOnline(false)}
+          className="p-1 hover:bg-white/20 rounded-full transition-colors flex-shrink-0"
+          aria-label="Dismiss"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  </motion.div>
+)}
+
     </AnimatePresence>
   );
 };
+
+export default OfflineIndicator;

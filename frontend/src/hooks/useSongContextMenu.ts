@@ -1,49 +1,80 @@
+// src/hooks/useSongContextMenu.ts
 import { useState, useRef, useCallback } from "react";
+import { Song } from "@/types";
 
-export function useSongContextMenu() {
-  const [contextSong, setContextSong] = useState<any>(null);
+const LONG_PRESS_DURATION = 500; // ms - increase from whatever you have
+const MOVE_THRESHOLD = 10; // pixels - if finger moves more than this, cancel
+
+export const useSongContextMenu = () => {
+  const [contextSong, setContextSong] = useState<Song | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [showOptions, setShowOptions] = useState(false);
+  
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startPosRef = useRef<{ x: number; y: number } | null>(null);
+  const hasMoved = useRef(false);
 
-  const touchTimeout = useRef<any>(null);
-  const touchMoved = useRef(false);
-
-  const openContextMenu = useCallback((e: React.MouseEvent | React.TouchEvent, song: any) => {
-    if ("type" in e && e.type === "contextmenu") {
-      e.preventDefault();
-    }
-
-    const x = "touches" in e ? e.touches[0].clientX : (e as any).clientX;
-    const y = "touches" in e ? e.touches[0].clientY : (e as any).clientY;
-
+  const openContextMenu = useCallback((e: React.MouseEvent, song: Song) => {
+    e.preventDefault();
+    e.stopPropagation();
     setContextSong(song);
-    setContextMenu({ x, y });
+    setContextMenu({ x: e.clientX, y: e.clientY });
     setShowOptions(true);
   }, []);
 
-  // 🟣 Start touch → begin long-press timer
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent, song: any) => {
-      touchMoved.current = false;
+  const handleTouchStart = useCallback((e: React.TouchEvent, song: Song) => {
+    // Don't interfere with scroll
+    const touch = e.touches[0];
+    startPosRef.current = { x: touch.clientX, y: touch.clientY };
+    hasMoved.current = false;
 
-      touchTimeout.current = setTimeout(() => {
-        if (!touchMoved.current) {
-          openContextMenu(e, song);
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+    }
+
+    timerRef.current = setTimeout(() => {
+      // Only trigger if finger hasn't moved significantly
+      if (!hasMoved.current && startPosRef.current) {
+        // Vibrate for haptic feedback if supported
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
         }
-      }, 600); // perfect long-press delay
-    },
-    [openContextMenu]
-  );
-
-  // 🟣 Finger moves → cancel long-press
-  const handleTouchMove = useCallback(() => {
-    touchMoved.current = true;
-    clearTimeout(touchTimeout.current);
+        
+        setContextSong(song);
+        setContextMenu({ 
+          x: startPosRef.current.x, 
+          y: startPosRef.current.y 
+        });
+        setShowOptions(true);
+      }
+    }, LONG_PRESS_DURATION);
   }, []);
 
-  // 🟣 Finger lifted → cancel
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!startPosRef.current) return;
+    
+    const touch = e.touches[0];
+    const deltaX = Math.abs(touch.clientX - startPosRef.current.x);
+    const deltaY = Math.abs(touch.clientY - startPosRef.current.y);
+    
+    // If moved more than threshold, cancel the long press
+    if (deltaX > MOVE_THRESHOLD || deltaY > MOVE_THRESHOLD) {
+      hasMoved.current = true;
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, []);
+
   const handleTouchEnd = useCallback(() => {
-    clearTimeout(touchTimeout.current);
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    startPosRef.current = null;
+    hasMoved.current = false;
   }, []);
 
   const closeContextMenu = useCallback(() => {
@@ -58,8 +89,8 @@ export function useSongContextMenu() {
     showOptions,
     openContextMenu,
     handleTouchStart,
-    handleTouchMove,   // ← add this
+    handleTouchMove, // Add this new handler
     handleTouchEnd,
     closeContextMenu,
   };
-}
+};

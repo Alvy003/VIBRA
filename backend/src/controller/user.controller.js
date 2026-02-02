@@ -21,7 +21,9 @@ export const getMessages = async (req, res, next) => {
         { senderId: userId, receiverId: myId },
         { senderId: myId, receiverId: userId },
       ],
-    }).sort({ createdAt: 1 });
+    })
+    .populate('replyTo')
+    .sort({ createdAt: 1 });
 
     res.status(200).json(messages);
   } catch (error) {

@@ -28,6 +28,23 @@ const messageSchema = new mongoose.Schema(
     }],
 
     read: { type: Boolean, default: false },
+    readAt: { type: Date, default: null },
+    delivered: { type: Boolean, default: false },
+    deliveredAt: { type: Date, default: null },
+
+    // Reply feature (NEW)
+    replyTo: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: 'Message',
+      default: null 
+    },
+
+    // Reactions (NEW)
+    reactions: [{
+      emoji: { type: String, required: true },
+      userId: { type: String, required: true },
+      createdAt: { type: Date, default: Date.now }
+    }],
   },
   { timestamps: true }
 );

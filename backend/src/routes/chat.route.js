@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { protectRoute } from "../middleware/auth.middleware.js";
-import { sendMessage, deleteMessage, quickReply } from "../controller/chat.controller.js";
+import { sendMessage, deleteMessage, quickReply, addReaction, removeReaction } from "../controller/chat.controller.js";
 import { uploadVoice } from "../controller/voice.controller.js";
 import { updateMessageDuration } from "../controller/chat.controller.js";
 import { uploadFiles } from "../controller/file.controller.js";
@@ -14,5 +14,7 @@ router.post("/files/upload", protectRoute, uploadFiles);
 router.post("/quick-reply", protectRoute, quickReply);
 router.patch("/messages/:messageId/duration", protectRoute, updateMessageDuration);
 router.delete("/messages/:messageId", protectRoute, deleteMessage);
+router.post("/messages/:messageId/reactions", protectRoute, addReaction);
+router.delete("/messages/:messageId/reactions", protectRoute, removeReaction);
 
 export default router;

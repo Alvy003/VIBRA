@@ -50,9 +50,9 @@ export const CreatePlaylistDialog = () => {
         variant="ghost"
         size="icon"
         onClick={handleOpen}
-        className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-zinc-800"
+        className="h-8 w-8 text-zinc-200 bg-zinc-800/50 p-2 md:p-0 md:bg-transparent rounded-full font-semibold active:text-white"
       >
-        <Plus className="h-5 w-5" />
+        <Plus className="h-7 w-7" />
       </Button>
 
       {isOpen && createPortal(
@@ -62,7 +62,7 @@ export const CreatePlaylistDialog = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[99999]"
+            className="fixed inset-0 bg-black/70 z-[99999]"
             onClick={handleClose}
           />
 
@@ -80,10 +80,10 @@ export const CreatePlaylistDialog = () => {
               <div className="p-5 pb-4 border-b border-zinc-800">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-violet-500/10 flex items-center justify-center">
+                    {/* <div className="w-10 h-10 rounded-full bg-violet-500/10 flex items-center justify-center">
                       <Plus className="w-5 h-5 text-violet-500" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-white">Create Playlist</h3>
+                    </div> */}
+                    <h3 className="text-base font-normal text-white">Create Playlist</h3>
                   </div>
                   <button
                     onClick={handleClose}

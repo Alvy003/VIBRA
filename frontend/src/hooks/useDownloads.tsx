@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { get, set, del, keys } from "idb-keyval";
 
 export type DownloadState = "idle" | "downloading" | "completed" | "error";
@@ -8,6 +8,24 @@ const blobUrlCache = new Map<string, string>();
 
 export const useDownloads = (song?: any) => {
   const [state, setState] = useState<DownloadState>("idle");
+
+    useEffect(() => {
+    const checkDownloadStatus = async () => {
+      if (!song) {
+        setState("idle");
+        return;
+      }
+      
+      const downloaded = await get(`song-${song._id}`);
+      if (downloaded) {
+        setState("completed");
+      } else {
+        setState("idle");
+      }
+    };
+    
+    checkDownloadStatus();
+  }, [song?._id]);
 
   // 🔽 Start download for a given song
   const start = async () => {

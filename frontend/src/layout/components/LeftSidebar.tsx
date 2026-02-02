@@ -1,99 +1,163 @@
+// src/layout/components/LeftSidebar.tsx
 import PlaylistSkeleton from "@/components/skeletons/PlaylistSkeleton";
-import { buttonVariants } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { usePlaylistStore } from "@/stores/usePlaylistStore";
+import { useUIStore } from "@/stores/useUIStore";
 import { SignedIn, useUser } from "@clerk/clerk-react";
-import { HomeIcon, Library, MessageCircle, Search, Heart, Download, ListMusic, Disc3 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { 
+  HomeIcon, Library, MessageCircle, Search, Heart, Download, 
+  ListMusic, Disc3, PanelLeftClose, PanelLeftOpen
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { useChatStore } from "@/stores/useChatStore";
 import { CreatePlaylistDialog } from "../../components/CreatePlaylistDialog";
 import { Song } from "@/types";
 import { useAppUpdate } from "@/hooks/useAppUpdate";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useIsTouchDevice } from "@/hooks/useIsTouchDevice";
 
-// Shared Mosaic Thumbnail Component
+const LibraryEmptyState = ({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}) => (
+  <div className="flex flex-col items-center justify-center text-zinc-400 py-10 px-4 text-center">
+    <div className="relative bg-zinc-800/50 rounded-full mb-2 p-4">
+      <Icon className="size-6 text-zinc-400" />
+    </div>
+
+    <h3 className="text-sm font-medium mb-1 text-zinc-300">
+      {title}
+    </h3>
+
+    <p className="text-xs text-zinc-500 leading-relaxed max-w-[240px]">
+      {description}
+    </p>
+  </div>
+);
+
+type LibraryFilter = "all" | "playlists" | "albums";
+
+// Mosaic Thumbnail
 const MosaicThumbnail = ({ 
-  songs, 
+  previewImages,
+  songs,
   imageUrl,
   name,
   type
 }: { 
-  songs?: Song[]; 
-  imageUrl?: string;
+  previewImages?: string[];
+  songs?: Song[];
+  imageUrl?: string | null;
   name: string;
   type: 'playlist' | 'album';
 }) => {
+
   const Icon = type === 'playlist' ? ListMusic : Disc3;
   
-  // If has custom image, use it
   if (imageUrl) {
     return (
-      <div className="size-12 rounded-md ring-1 ring-white/5 overflow-hidden relative group/thumb">
+      <div className="size-10 rounded-sm overflow-hidden flex-shrink-0">
         <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-start p-1.5 md:opacity-0 md:group-hover/thumb:opacity-100 transition-opacity">
-          <div className="bg-black/50 backdrop-blur-sm rounded p-0.5">
-            <Icon className="size-3 text-white/80" />
-          </div>
-        </div>
       </div>
     );
   }
 
-  const covers = (songs || []).slice(0, 4).map((s) => s.imageUrl).filter(Boolean);
+  const covers =
+  previewImages?.length
+    ? previewImages.slice(0, 4)
+    : (songs || []).map(s => s.imageUrl).filter(Boolean).slice(0, 4);
 
-  // No songs - show placeholder
+
   if (covers.length === 0) {
     const gradientClass = type === 'playlist' 
       ? 'from-violet-600/30 to-fuchsia-600/30' 
       : 'from-violet-500/30 to-purple-600/30';
     
     return (
-      <div className={`size-12 rounded-md bg-gradient-to-br ${gradientClass} ring-1 ring-white/5 flex items-center justify-center`}>
+      <div className={cn("size-10 rounded-sm flex-shrink-0 bg-gradient-to-br flex items-center justify-center", gradientClass)}>
         <Icon className="size-5 text-violet-400/70" />
       </div>
     );
   }
 
-  // Less than 4 songs - show first cover
   if (covers.length < 4) {
     return (
-      <div className="size-12 rounded-md ring-1 ring-white/5 overflow-hidden relative group/thumb">
+      <div className="size-10 rounded-sm overflow-hidden flex-shrink-0">
         <img src={covers[0]} alt={name} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-start p-1.5 md:opacity-0 md:group-hover/thumb:opacity-100 transition-opacity">
-          <div className="bg-black/50 backdrop-blur-sm rounded p-0.5">
-            <Icon className="size-3 text-white/80" />
-          </div>
-        </div>
       </div>
     );
   }
 
-  // 4+ songs - show mosaic
   return (
-    <div className="size-12 rounded-md ring-1 ring-white/5 overflow-hidden relative group/thumb">
+    <div className="size-10 rounded-sm overflow-hidden flex-shrink-0">
       <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-px bg-zinc-800">
         {covers.slice(0, 4).map((cover, i) => (
           <img key={i} src={cover} alt="" className="w-full h-full object-cover" />
         ))}
       </div>
-      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end justify-start p-1.5 md:opacity-0 md:group-hover/thumb:opacity-100 transition-opacity">
-        <div className="bg-black/50 backdrop-blur-sm rounded p-0.5">
-          <Icon className="size-3 text-white/80" />
-        </div>
-      </div>
     </div>
   );
 };
 
+// Filter Chip
+const FilterChip = ({ 
+  label, 
+  isActive, 
+  onClick,
+  count
+}: { 
+  label: string; 
+  isActive: boolean; 
+  onClick: () => void;
+  count?: number;
+}) => (
+  <button
+    onClick={onClick}
+    className={cn(
+      "px-3 py-1.5 text-xs font-medium rounded-full transition-all duration-200 whitespace-nowrap",
+      "flex items-center gap-1.5",
+      isActive
+        ? "bg-white text-black shadow-sm"
+        : "bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700/80 hover:text-white"
+    )}
+  >
+    {label}
+    {count !== undefined && count > 0 && (
+      <span className={cn(
+        "text-[10px] px-1.5 py-0.5 rounded-full min-w-[18px] text-center",
+        isActive ? "bg-black/10 text-black/70" : "bg-zinc-700 text-zinc-400"
+      )}>
+        {count}
+      </span>
+    )}
+  </button>
+);
+
 const LeftSidebar = () => {
-  const { albums, fetchAlbums, isLoading: isAlbumLoading } = useMusicStore();
+  const { albums, fetchAlbums, likedSongs, fetchLikedSongs, isLoading: isAlbumLoading } = useMusicStore();
   const { playlists, fetchUserPlaylists, isLoading: isPlaylistLoading } = usePlaylistStore();
   const { unreadMessagesByUser } = useChatStore();
   const { updateAvailable } = useAppUpdate(true);
   const { isSignedIn, isLoaded } = useUser();
   const location = useLocation();
+  
+  const { isLeftSidebarCollapsed, toggleLeftSidebar } = useUIStore();
+  const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
+  const [isHovered, setIsHovered] = useState(false);
+  const isTouch = useIsTouchDevice();
 
   useEffect(() => {
     fetchAlbums();
@@ -102,208 +166,492 @@ const LeftSidebar = () => {
   useEffect(() => {
     if (isLoaded && isSignedIn) {
       fetchUserPlaylists();
+      fetchLikedSongs();
     }
-  }, [fetchUserPlaylists, isLoaded, isSignedIn]);
+  }, [fetchUserPlaylists, fetchLikedSongs, isLoaded, isSignedIn]);
 
   const totalUnread = useMemo(
     () => Object.values(unreadMessagesByUser || {}).reduce((a, b) => a + b, 0),
     [unreadMessagesByUser]
   );
 
-  const navClass = ({ isActive }: { isActive: boolean }) =>
-    cn(
-      buttonVariants({
-        variant: "ghost",
-        className:
-          "w-full justify-start text-white lg:hover:bg-zinc-800 relative pl-3 transition-all duration-200",
-      }),
-      isActive && "bg-zinc-800/70 border-l-2 border-violet-500"
-    );
-
+  const showPlaylists = libraryFilter === "all" || libraryFilter === "playlists";
+  const showAlbums = libraryFilter === "all" || libraryFilter === "albums";
   const isLoading = isAlbumLoading || isPlaylistLoading;
 
-  return (
-    <div className="h-full min-h-0 flex flex-col gap-2">
-      {/* Navigation menu */}
-      <div className="rounded-lg bg-zinc-900 p-4">
-        <div className="space-y-2">
-          <NavLink to="/" end className={navClass}>
-            {({ isActive }) => (
-              <>
-                <HomeIcon className={cn("mr-2 size-5 transition-colors", isActive && "text-violet-400")} />
-                <span className="hidden md:inline">Home</span>
-              </>
-            )}
-          </NavLink>
+  // Collapsed Nav Item
+  const CollapsedNavItem = ({ to, icon: Icon, label, badge, end }: { 
+    to: string; 
+    icon: typeof HomeIcon; 
+    label: string; 
+    badge?: boolean;
+    end?: boolean;
+  }) => (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <NavLink
+          to={to}
+          end={end}
+          className={({ isActive }) =>
+            cn(
+              "flex items-center justify-center size-10 rounded-lg transition-colors",
+              "text-zinc-400 hover:text-white hover:bg-zinc-800/60",
+              isActive && "bg-zinc-800/60 text-white"
+            )
+          }
+        >
+          {({ isActive }) => (
+            <Icon 
+              className={cn(
+                "size-4 flex-shrink-0",
+                isActive && "text-white",
+                badge && !isActive && "text-violet-400",
+                !isActive && !badge && "text-zinc-400 hover:text-white/95"
+              )} 
+            />
+          )}
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={12} className="bg-zinc-900 text-white border-zinc-800">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
 
-          <SignedIn>
-            <NavLink to="/chat" className={navClass}>
-              {({ isActive }) => (
-                <>
-                  <MessageCircle
-                    className={cn(
-                      "mr-2 size-5 transition-colors",
-                      isActive ? "text-violet-400" : totalUnread > 0 ? "text-violet-400 animate-pulse" : ""
-                    )}
-                  />
-                  <span className="hidden md:inline">Messages</span>
-                </>
-              )}
-            </NavLink>
-          </SignedIn>
-
-          <NavLink to="/search" className={navClass}>
-            {({ isActive }) => (
-              <>
-                <Search className={cn("mr-2 size-5 transition-colors", isActive && "text-violet-400")} />
-                <span className="hidden md:inline">Search</span>
-              </>
-            )}
-          </NavLink>
-
-          <SignedIn>
-            <NavLink to="/favorites" className={navClass}>
-              {({ isActive }) => (
-                <>
-                  <Heart className={cn("mr-2 size-5 transition-colors", isActive && "text-violet-400")} />
-                  <span className="hidden md:inline">Favourites</span>
-                </>
-              )}
-            </NavLink>
-          </SignedIn>
-
-          <NavLink to="/downloads" className={navClass}>
-            {({ isActive }) => (
-              <>
-                <Download
-                  className={cn(
-                    "mr-2 size-5 transition-colors",
-                    isActive ? "text-violet-400" : updateAvailable ? "text-violet-400 animate-pulse" : ""
-                  )}
-                />
-                <span className="hidden md:inline">Downloads</span>
-              </>
-            )}
-          </NavLink>
-        </div>
-      </div>
-
-       {/* Library section */}
-       <div className="flex-1 min-h-0 mb-12 sm:mb-0 rounded-lg bg-zinc-900 py-3 px-0 flex flex-col">
-        {/* Header row */}
-        <div className="flex items-center justify-between mb-2 px-2 shrink-0">
-          <div className="flex items-center ml-2 text-white">
-            <Library className="size-5 mr-2 ml-2 sm:ml-0 text-violet-400" />
-            <span className="hidden md:inline font-semibold">Library</span>
+  // Collapsed Library Item
+  const CollapsedLibraryItem = ({ to, imageComponent, title, subtitle, isActive }: {
+    to: string;
+    imageComponent: React.ReactNode;
+    title: string;
+    subtitle: string;
+    isActive: boolean;
+  }) => (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <Link to={to} className="block">
+          <div className={cn(
+            "flex items-center justify-center p-1 rounded-lg transition-colors",
+            "hover:bg-zinc-800/70",
+            isActive && "bg-zinc-800/50"
+          )}>
+            {imageComponent}
           </div>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={12} className="bg-zinc-900 text-white border-zinc-800">
+        <p className="font-medium">{title}</p>
+        <p className="text-xs text-zinc-400">{subtitle}</p>
+      </TooltipContent>
+    </Tooltip>
+  );
 
-          {/* Wide sidebar: circular + with subtle hover */}
-          <SignedIn>
-            <div className="hidden md:flex items-center justify-center">
-              <div className="rounded-xl bg-zinc-800/80 transition-colors duration-150 p-0.5">
-                <CreatePlaylistDialog />
-              </div>
-            </div>
-          </SignedIn>
-        </div>
-
-        {/* Narrow sidebar: + aligned with list items, no hover change */}
-        <SignedIn>
-          <div className="md:hidden mb-3 px-2 ml-1 flex items-center">
-            <div className="rounded-lg bg-zinc-800/90 p-2 mt-3">
-              <CreatePlaylistDialog />
-            </div>
-          </div>
-        </SignedIn>
-
-        <ScrollArea className="flex-1 h-full scrollarea-no-bar" type="hover">
-          <div className="space-y-1 pb-2">
-            
-            {/* User Playlists */}
+  // COLLAPSED SIDEBAR
+  if (isLeftSidebarCollapsed) {
+    return (
+      <TooltipProvider>
+        <div 
+          className="h-full flex flex-col gap-2"
+          onMouseEnter={() => !isTouch && setIsHovered(true)}
+          onMouseLeave={() => !isTouch && setIsHovered(false)}
+        >
+          {/* Navigation */}
+          <div className="rounded-lg bg-zinc-900 p-0 pl-6 pt-6 flex flex-col items-center">
+            <CollapsedNavItem to="/" icon={HomeIcon} label="Home" end />
             <SignedIn>
-              {playlists.map((playlist) => (
-                <Link
-                  to={`/playlists/${playlist._id}`}
-                  key={playlist._id}
-                  className="relative md:group block"
+              <CollapsedNavItem to="/chat" icon={MessageCircle} label="Messages" badge={totalUnread > 0} />
+            </SignedIn>
+            <CollapsedNavItem to="/search" icon={Search} label="Search" />
+            <CollapsedNavItem to="/downloads" icon={Download} label="Downloads" badge={updateAvailable} />
+          </div>
+
+          {/* Library */}
+          <div className="flex-1 min-h-0 rounded-lg bg-zinc-900 p-3 flex flex-col">
+            {/* Library Header with Toggle */}
+            <Tooltip delayDuration={0}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={toggleLeftSidebar}
+                  className="flex items-center justify-center size-10 pl-2 rounded-lg hover:bg-zinc-800/60 transition-colors mb-2"
                 >
-                  <div className={cn(
-                    "p-2 rounded-lg flex items-center ml-1 gap-3 cursor-pointer transition-all duration-200",
-                    "md:hover:bg-zinc-800/70",
-                    location.pathname === `/playlists/${playlist._id}` && "bg-zinc-800/50 ring-1 ring-violet-500/20"
-                  )}>
-                    <div className="shrink-0">
-                      <MosaicThumbnail 
-                        songs={playlist.songs} 
-                        imageUrl={playlist.imageUrl}
-                        name={playlist.name}
-                        type="playlist"
-                      />
-                    </div>
-                    <div className="flex-1 min-w-0 hidden md:block">
-                      <p className={cn(
-                        "font-medium truncate text-sm", 
-                        location.pathname === `/playlists/${playlist._id}` ? "text-violet-300" : "text-white"
-                      )}>
-                        {playlist.name}
-                      </p>
-                      <p className="text-xs text-zinc-400 truncate">
-                        Playlist • {playlist.songs?.length || 0} songs
-                      </p>
+                  {isTouch || isHovered ? (
+                    <PanelLeftOpen className="size-5 text-zinc-400 hover:text-white transition-colors" />
+                  ) : (
+                    <Library className="size-5 text-zinc-400" />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" sideOffset={12} className="bg-zinc-900 text-white border-zinc-800">
+                Expand sidebar
+              </TooltipContent>
+            </Tooltip>
+
+            {/* Create Playlist */}
+            <SignedIn>
+              <Tooltip delayDuration={0}>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center justify-center mb-2">
+                    <div className="size-10 rounded-sm bg-zinc-800/80 hover:bg-zinc-800/60 transition-colors flex items-center justify-center">
+                      <CreatePlaylistDialog />
                     </div>
                   </div>
-                </Link>
-              ))}
+                </TooltipTrigger>
+                <TooltipContent side="right" sideOffset={12} className="bg-zinc-900 text-white border-zinc-800">
+                  Create playlist
+                </TooltipContent>
+              </Tooltip>
             </SignedIn>
 
-            {/* Separator if both exist */}
-            {playlists.length > 0 && albums.length > 0 && (
-              <div className="h-px bg-zinc-800 mx-2 my-2" />
-            )}
+            {/* Library Items */}
+            <ScrollArea className="flex-1" type="hover">
+              <div className="space-y-1 flex flex-col items-center">
+                {/* Liked Songs - Collapsed */}
+                <SignedIn>
+                  <CollapsedLibraryItem
+                    to="/favorites"
+                    imageComponent={
+                      <div className="size-10 rounded-sm bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center">
+                        <Heart className="size-5 text-white" fill="white" />
+                      </div>
+                    }
+                    title="Liked Songs"
+                    subtitle={`Playlist • ${likedSongs?.length || 0} songs`}
+                    isActive={location.pathname === "/favorites"}
+                  />
+                </SignedIn>
 
-            {/* Admin Albums - Now with Mosaic */}
-            {isLoading ? (
-              <PlaylistSkeleton />
-            ) : (
-              albums.map((album) => (
-                <Link
-                  to={`/albums/${album._id}`}
-                  key={album._id}
-                  className="relative md:group block"
-                >
-                  <div className={cn(
-                    "p-2 rounded-lg flex items-center ml-1 gap-3 cursor-pointer transition-all duration-200",
-                    "md:hover:bg-zinc-800/70",
-                    location.pathname === `/albums/${album._id}` && "bg-zinc-800/50 ring-1 ring-violet-500/20"
-                  )}>
-                    <div className="shrink-0">
-                      {/* Use album.imageUrl if exists, otherwise create mosaic from songs */}
+                <SignedIn>
+                  {playlists.map((playlist) => (
+                    <CollapsedLibraryItem
+                      key={playlist._id}
+                      to={`/playlists/${playlist._id}`}
+                      imageComponent={
+                        <MosaicThumbnail 
+                          songs={playlist.songs} 
+                          imageUrl={playlist.imageUrl}
+                          name={playlist.name}
+                          type="playlist"
+                        />
+                      }
+                      title={playlist.name}
+                      subtitle={`Playlist • ${playlist.songs?.length || 0} songs`}
+                      isActive={location.pathname === `/playlists/${playlist._id}`}
+                    />
+                  ))}
+                </SignedIn>
+
+                {albums.map((album) => (
+                  <CollapsedLibraryItem
+                    key={album._id}
+                    to={`/albums/${album._id}`}
+                    imageComponent={
                       <MosaicThumbnail 
-                        songs={album.songs} 
+                        previewImages={album.previewImages}
                         imageUrl={album.imageUrl}
                         name={album.title}
                         type="album"
                       />
-                    </div>
-                    <div className="flex-1 min-w-0 hidden md:block">
-                      <p className={cn(
-                        "font-medium truncate text-sm", 
-                        location.pathname === `/albums/${album._id}` ? "text-violet-300" : "text-white"
-                      )}>
-                        {album.title}
-                      </p>
-                      <p className="text-xs text-zinc-400 truncate">
-                        Album • {album.artist}
-                      </p>
-                    </div>
-                  </div>
-                </Link>
-              ))
-            )}
+                    }
+                    title={album.title}
+                    subtitle={`Album • ${album.artist}`}
+                    isActive={location.pathname === `/albums/${album._id}`}
+                  />
+                ))}
+              </div>
+            </ScrollArea>
           </div>
-        </ScrollArea>
+        </div>
+      </TooltipProvider>
+    );
+  }
+
+  // EXPANDED SIDEBAR
+  return (
+    <TooltipProvider>
+      <div 
+        className="h-full min-h-0 flex flex-col gap-2"
+        onMouseEnter={() => !isTouch && setIsHovered(true)}
+        onMouseLeave={() => !isTouch && setIsHovered(false)}
+      >
+        {/* Navigation menu */}
+        <div className="rounded-lg bg-zinc-900 p-3">
+          <div className="space-y-0.5">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-4 px-3 py-2.5 rounded-lg transition-colors",
+                  "text-zinc-400 hover:text-white/90 hover:bg-zinc-800/60",
+                  isActive && "bg-zinc-800/60 text-white"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <HomeIcon className={cn("size-4", isActive && "text-white")} />
+                  <span className="font-medium text-sm">Home</span>
+                </>
+              )}
+            </NavLink>
+
+            <SignedIn>
+              <NavLink
+                to="/chat"
+                className={({ isActive }) =>
+                  cn(
+                    "flex items-center gap-4 px-3 py-2.5 rounded-lg transition-colors",
+                    "text-zinc-400 hover:text-white/90 hover:bg-zinc-800/60",
+                    isActive && "bg-zinc-800/60 text-white"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <MessageCircle className={cn(
+                      "size-4",
+                      isActive ? "text-white" : totalUnread > 0 ? "text-violet-400" : ""
+                    )} />
+                    <span className="font-medium text-sm">Messages</span>
+                  </>
+                )}
+              </NavLink>
+            </SignedIn>
+
+            <NavLink
+              to="/search"
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-4 px-3 py-2.5 rounded-lg transition-colors",
+                  "text-zinc-400 hover:text-white/90 hover:bg-zinc-800/60",
+                  isActive && "bg-zinc-800/60 text-white"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Search className={cn("size-4", isActive && "text-white")} />
+                  <span className="font-medium text-sm">Search</span>
+                </>
+              )}
+            </NavLink>
+
+            <NavLink
+              to="/downloads"
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-4 px-3 py-2.5 rounded-lg transition-colors",
+                  "text-zinc-400 hover:text-white/90 hover:bg-zinc-800/60",
+                  isActive && "bg-zinc-800/60 text-white"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Download className={cn(
+                    "size-4",
+                    isActive ? "text-white" : updateAvailable ? "text-violet-400" : ""
+                  )} />
+                  <span className="font-medium text-sm">Downloads</span>
+                </>
+              )}
+            </NavLink>
+          </div>
+        </div>
+
+        {/* Library section */}
+        <div className="flex-1 min-h-0 rounded-lg bg-zinc-900 py-3 flex flex-col">
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 mb-3">
+            <button
+              onClick={toggleLeftSidebar}
+              className="flex items-center gap-3 group"
+            >
+              {isTouch || isHovered ? (
+                <PanelLeftClose className="size-5 text-zinc-400 group-hover:text-white transition-colors" />
+              ) : (
+                <Library className="size-5 text-zinc-400" />
+              )}
+              <span className="font-semibold text-sm text-zinc-200">Your Library</span>
+            </button>
+            <SignedIn>
+              <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                  <div className="rounded-full bg-zinc-800/60 hover:bg-zinc-800/60 transition-colors p-0.5">
+                    <CreatePlaylistDialog />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="bg-zinc-900 text-white border-zinc-800">
+                  Create playlist
+                </TooltipContent>
+              </Tooltip>
+            </SignedIn>
+          </div>
+
+          {/* Filter chips */}
+          <div className="flex items-center gap-2 px-3 mb-3 overflow-x-auto scrollbar-none">
+            <FilterChip
+              label="All"
+              isActive={libraryFilter === "all"}
+              onClick={() => setLibraryFilter("all")}
+            />
+            <SignedIn>
+              <FilterChip
+                label="Playlists"
+                isActive={libraryFilter === "playlists"}
+                onClick={() => setLibraryFilter("playlists")}
+                count={playlists.length + 1} // +1 for Liked Songs
+              />
+            </SignedIn>
+            <FilterChip
+              label="Albums"
+              isActive={libraryFilter === "albums"}
+              onClick={() => setLibraryFilter("albums")}
+              count={albums.length}
+            />
+          </div>
+
+          {/* Library Items */}
+          <ScrollArea className="flex-1 px-2" type="hover">
+            <div className="space-y-0.5">
+              {/* Liked Songs - Always at top when showing playlists */}
+              <SignedIn>
+                {showPlaylists && (
+                  <>
+                    {libraryFilter === "all" && (
+                      <div className="px-2 pt-1 pb-2">
+                        <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                          Playlists
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* Liked Songs Card */}
+                    <Link to="/favorites" className="block">
+                      <div className={cn(
+                        "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+                        "hover:bg-zinc-800/70",
+                        location.pathname === "/favorites" && "bg-zinc-800/60"
+                      )}>
+                        <div className="size-10 rounded-sm bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center flex-shrink-0">
+                          <Heart className="size-5 text-white" fill="white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-normal truncate text-sm text-white/90">
+                            Liked Songs
+                          </p>
+                          <p className="text-xs text-zinc-400/90 truncate">
+                            Playlist • {likedSongs?.length || 0} songs
+                          </p>
+                        </div>
+                      </div>
+                    </Link>
+
+                    {/* User Playlists */}
+                    {playlists.map((playlist) => (
+                      <Link
+                        key={playlist._id}
+                        to={`/playlists/${playlist._id}`}
+                        className="block"
+                      >
+                        <div className={cn(
+                          "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+                          "hover:bg-zinc-800/70",
+                          location.pathname === `/playlists/${playlist._id}` && "bg-zinc-800/60"
+                        )}>
+                          <MosaicThumbnail 
+                            songs={playlist.songs} 
+                            imageUrl={playlist.imageUrl}
+                            name={playlist.name}
+                            type="playlist"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-normal truncate text-sm text-white/90">
+                              {playlist.name}
+                            </p>
+                            <p className="text-xs text-zinc-400/90 truncate">
+                              Playlist • {playlist.songs?.length || 0} songs
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </>
+                )}
+              </SignedIn>
+
+              {/* Separator */}
+              {libraryFilter === "all" && (showPlaylists && (playlists.length > 0 || isSignedIn)) && albums.length > 0 && (
+                <div className="h-px bg-zinc-800/50 mx-2 my-2" />
+              )}
+
+              {/* Albums */}
+              {showAlbums && (
+                <>
+                  {libraryFilter === "all" && albums.length > 0 && (
+                    <div className="px-2 pt-1 pb-2">
+                      <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                        Albums
+                      </p>
+                    </div>
+                  )}
+
+                  {isLoading ? (
+                    <PlaylistSkeleton />
+                  ) : (
+                    albums.map((album) => (
+                      <Link
+                        key={album._id}
+                        to={`/albums/${album._id}`}
+                        className="block"
+                      >
+                        <div className={cn(
+                          "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+                          "hover:bg-zinc-800/70",
+                          location.pathname === `/albums/${album._id}` && "bg-zinc-800/60"
+                        )}>
+                          <MosaicThumbnail 
+                            previewImages={album.previewImages}
+                            imageUrl={album.imageUrl}
+                            name={album.title}
+                            type="album"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-normal truncate text-sm text-white/90">
+                              {album.title}
+                            </p>
+                            <p className="text-xs text-zinc-400/90 truncate">
+                              Album • {album.artist}
+                            </p>
+                          </div>
+                        </div>
+                      </Link>
+                    ))
+                  )}
+                </>
+              )}
+
+              {/* Empty states */}
+              {libraryFilter === "playlists" && playlists.length === 0 && !isLoading && (
+                <LibraryEmptyState
+                  icon={ListMusic}
+                  title="No playlists yet"
+                  description="Create your first playlist"
+                />
+              )}
+
+              {libraryFilter === "albums" && albums.length === 0 && !isLoading && (
+                <LibraryEmptyState
+                  icon={Disc3}
+                  title="No albums available"
+                  description="Albums will appear here"
+                />
+              )}
+
+            </div>
+          </ScrollArea>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 };
 

@@ -8,6 +8,7 @@ interface FuzzySearchOptions<T> {
   distance?: number;
   minMatchCharLength?: number;
   returnAllOnEmpty?: boolean;
+  limit?: number;
 }
 
 export function useFuzzySearch<T>(
@@ -32,8 +33,11 @@ export function useFuzzySearch<T>(
       // Return all items only if returnAllOnEmpty is true (default: true for admin, false for search page)
       return options.returnAllOnEmpty !== false ? items : [];
     }
-    return fuse.search(query).map((result) => result.item);
-  }, [fuse, query, items, options.returnAllOnEmpty]);
+    return fuse
+    .search(query)
+    .slice(0, options.limit ?? 20) // LIMIT HERE
+    .map((result) => result.item);
+  }, [fuse, query, items, options.returnAllOnEmpty, options.limit]);
 
   return results;
 }

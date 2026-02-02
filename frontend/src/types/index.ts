@@ -15,9 +15,11 @@ export interface Album {
 	_id: string;
 	title: string;
 	artist: string;
-	imageUrl: string;
+	imageUrl?: string | null;
 	releaseYear: number;
+	previewImages?: string[]; 
 	songs: Song[];
+	useMosaicCover?: boolean;
 }
 
 export interface Stats {
@@ -27,11 +29,34 @@ export interface Stats {
 	totalArtists: number;
 }
 
+export interface MessageReaction {
+	emoji: string;
+	userId: string;
+	createdAt?: string;
+}
+
+export interface MessageFile {
+	url: string;
+	filename: string;
+	mimetype: string;
+	size: number;
+}
+
 export interface Message {
 	_id: string;
 	senderId: string;
 	receiverId: string;
 	content: string;
+	type?: "text" | "audio" | "file" | "call_started" | "call_missed" | "call_declined";
+	audioUrl?: string;
+	audioDuration?: number;
+	files?: MessageFile[];
+	read: boolean;
+	readAt?: string;
+	delivered?: boolean;
+	deliveredAt?: string;
+	replyTo?: Message | null;
+	reactions?: MessageReaction[];
 	createdAt: string;
 	updatedAt: string;
 }

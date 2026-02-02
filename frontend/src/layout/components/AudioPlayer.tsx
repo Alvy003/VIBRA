@@ -1,10 +1,12 @@
-// AudioPlayer.tsx - Enhanced version
-import { useEffect, useRef } from "react";
+// AudioPlayer.tsx - Enhanced with background playback support
+import { useEffect, useRef, useCallback } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { shouldStopAfterCurrentSong, clearStopAfterCurrentSong } from "@/components/SleepTimer";
 
 const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   const {
     currentSong,
@@ -25,6 +27,107 @@ const AudioPlayer = () => {
     hasMS &&
     (navigator.mediaSession as any) &&
     typeof (navigator.mediaSession as any).setPositionState === "function";
+
+  // Wake Lock API - prevents screen from sleeping and helps keep audio alive
+  const requestWakeLock = useCallback(async () => {
+    if ('wakeLock' in navigator && isPlaying) {
+      try {
+        wakeLockRef.current = await navigator.wakeLock.request('screen');
+        wakeLockRef.current.addEventListener('release', () => {
+          // console.log('Wake Lock released');
+        });
+      } catch (err) {
+        // console.log('Wake Lock error:', err);
+      }
+    }
+  }, [isPlaying]);
+
+  const releaseWakeLock = useCallback(() => {
+    if (wakeLockRef.current) {
+      wakeLockRef.current.release();
+      wakeLockRef.current = null;
+    }
+  }, []);
+
+  // Request/release wake lock based on play state
+  useEffect(() => {
+    if (isPlaying) {
+      requestWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+    return () => releaseWakeLock();
+  }, [isPlaying, requestWakeLock, releaseWakeLock]);
+
+  // Re-acquire wake lock when page becomes visible again
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && isPlaying) {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isPlaying, requestWakeLock]);
+
+  // Handle page visibility - keep audio playing when backgrounded
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const handleVisibilityChange = () => {
+      // When coming back to foreground, ensure audio state matches our state
+      if (document.visibilityState === 'visible') {
+        if (isPlaying && audio.paused) {
+          audio.play().catch(() => {});
+        }
+      }
+    };
+
+    // Prevent audio from being suspended on iOS
+    const handlePageHide = (e: PageTransitionEvent) => {
+      if (e.persisted && isPlaying) {
+        // Page is being cached (bfcache), try to keep audio alive
+        setTimeout(() => {
+          if (audio.paused && isPlaying) {
+            audio.play().catch(() => {});
+          }
+        }, 0);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageHide);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageHide);
+    };
+  }, [isPlaying]);
+
+  // iOS Safari workaround - keep audio context alive
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    // Create a silent audio context to keep audio session alive on iOS
+    let silentInterval: NodeJS.Timeout | null = null;
+
+    const keepAlive = () => {
+      if (isPlaying && audio.paused) {
+        audio.play().catch(() => {});
+      }
+    };
+
+    if (isPlaying) {
+      // Check every 5 seconds if audio should still be playing
+      silentInterval = setInterval(keepAlive, 5000);
+    }
+
+    return () => {
+      if (silentInterval) clearInterval(silentInterval);
+    };
+  }, [isPlaying]);
 
   const resetMSPosition = () => {
     if (!canSetPos) return;
@@ -101,8 +204,16 @@ const AudioPlayer = () => {
         navigator.mediaSession.metadata = new MediaMetadata({
           title: currentSong.title,
           artist: (currentSong as any).artist,
+          album: (currentSong as any).album || '',
           artwork: currentSong.imageUrl
-            ? [{ src: currentSong.imageUrl, sizes: "512x512", type: "image/png" }]
+            ? [
+                { src: currentSong.imageUrl, sizes: "96x96", type: "image/png" },
+                { src: currentSong.imageUrl, sizes: "128x128", type: "image/png" },
+                { src: currentSong.imageUrl, sizes: "192x192", type: "image/png" },
+                { src: currentSong.imageUrl, sizes: "256x256", type: "image/png" },
+                { src: currentSong.imageUrl, sizes: "384x384", type: "image/png" },
+                { src: currentSong.imageUrl, sizes: "512x512", type: "image/png" },
+              ]
             : [],
         });
 
@@ -131,7 +242,6 @@ const AudioPlayer = () => {
           }
         });
 
-        // ✅ Seek backward/forward (some platforms support this)
         navigator.mediaSession.setActionHandler?.("seekbackward", (e: any) => {
           const skipTime = e.seekOffset || 10;
           audio.currentTime = Math.max(0, audio.currentTime - skipTime);
@@ -142,6 +252,14 @@ const AudioPlayer = () => {
           const skipTime = e.seekOffset || 10;
           audio.currentTime = Math.min(audio.duration || 0, audio.currentTime + skipTime);
           setMSPositionFromAudio(audio);
+        });
+
+        // Stop handler
+        navigator.mediaSession.setActionHandler?.("stop", () => {
+          audio.pause();
+          audio.currentTime = 0;
+          setIsPlaying(false);
+          navigator.mediaSession.playbackState = "none";
         });
       } catch {
         // ignore
@@ -158,7 +276,7 @@ const AudioPlayer = () => {
     };
   }, [currentSong, isPlaying, playNext, playPrevious, setIsPlaying]);
 
-  // ✅ Enhanced keyboard shortcuts with shuffle/repeat
+  // Enhanced keyboard shortcuts with shuffle/repeat
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isInput =
@@ -167,37 +285,31 @@ const AudioPlayer = () => {
 
       if (isInput) return;
 
-      // Space - Play/Pause
       if (e.code === "Space") {
         e.preventDefault();
         setIsPlaying(!isPlaying);
       }
 
-      // Shift + P - Previous
       if (e.shiftKey && e.key.toLowerCase() === "p") {
         e.preventDefault();
         playPrevious();
       }
 
-      // Shift + N - Next
       if (e.shiftKey && e.key.toLowerCase() === "n") {
         e.preventDefault();
         playNext();
       }
 
-      // ✅ S - Toggle Shuffle
       if (e.key.toLowerCase() === "s" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         toggleShuffle();
       }
 
-      // ✅ R - Toggle Repeat
       if (e.key.toLowerCase() === "r" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         toggleRepeat();
       }
 
-      // ✅ Arrow Left - Seek backward 5s
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         const audio = audioRef.current;
@@ -206,7 +318,6 @@ const AudioPlayer = () => {
         }
       }
 
-      // ✅ Arrow Right - Seek forward 5s
       if (e.key === "ArrowRight") {
         e.preventDefault();
         const audio = audioRef.current;
@@ -215,7 +326,6 @@ const AudioPlayer = () => {
         }
       }
 
-      // ✅ M - Mute/Unmute
       if (e.key.toLowerCase() === "m" && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         const audio = audioRef.current;
@@ -277,6 +387,13 @@ const AudioPlayer = () => {
 
     const handleEnded = () => {
       setMSPositionFromAudio(audio);
+      
+      if (shouldStopAfterCurrentSong()) {
+        setIsPlaying(false);
+        clearStopAfterCurrentSong();
+        return;
+      }
+      
       playNext();
     };
 
@@ -292,6 +409,14 @@ const AudioPlayer = () => {
       setMSPositionFromAudio(audio);
     };
 
+    // Handle audio interruptions (phone calls, etc.)
+    const handleInterruption = () => {
+      // Audio was interrupted, update our state
+      if (audio.paused && isPlaying) {
+        setIsPlaying(false);
+      }
+    };
+
     audio.addEventListener("loadstart", handleLoadStart);
     audio.addEventListener("timeupdate", handleTime);
     audio.addEventListener("loadedmetadata", handleDuration);
@@ -300,6 +425,8 @@ const AudioPlayer = () => {
     audio.addEventListener("play", handlePlay);
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("emptied", resetMSPosition as any);
+    audio.addEventListener("suspend", handleInterruption);
+    audio.addEventListener("stalled", handleInterruption);
 
     return () => {
       audio.removeEventListener("loadstart", handleLoadStart);
@@ -310,10 +437,20 @@ const AudioPlayer = () => {
       audio.removeEventListener("play", handlePlay);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("emptied", resetMSPosition as any);
+      audio.removeEventListener("suspend", handleInterruption);
+      audio.removeEventListener("stalled", handleInterruption);
     };
-  }, [playNext, setDuration, setCurrentTime, setIsPlaying]);
+  }, [playNext, setDuration, setCurrentTime, setIsPlaying, isPlaying]);
 
-  return <audio ref={audioRef} preload="auto" />;
+  return (
+    <audio 
+      ref={audioRef} 
+      preload="auto"
+      // These attributes help with background playback
+      playsInline
+      webkit-playsinline="true"
+    />
+  );
 };
 
 export default AudioPlayer;

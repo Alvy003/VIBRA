@@ -1,5 +1,5 @@
 // ✅ Version control - increment this on each deployment
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '3.0.0';
 const CACHE_NAME = `vibra-cache-${APP_VERSION}`;
 const OFFLINE_PAGE = '/offline.html';
 

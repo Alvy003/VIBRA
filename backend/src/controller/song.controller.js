@@ -13,7 +13,7 @@ export const getAllSongs = async (req, res, next) => {
 export const getFeaturedSongs = async (req, res, next) => {
 	try {
 		const songs = await Song.aggregate([
-			{ $sample: { size: 6 } },
+			{ $sample: { size: 8 } },
 			{
 				$project: {
 					_id: 1,
@@ -33,7 +33,7 @@ export const getFeaturedSongs = async (req, res, next) => {
 export const getMadeForYouSongs = async (req, res, next) => {
 	try {
 		const songs = await Song.aggregate([
-			{ $sample: { size: 4 } },
+			{ $sample: { size: 8 } },
 			{
 				$project: {
 					_id: 1,
@@ -57,12 +57,12 @@ export const getTrendingSongs = async (req, res, next) => {
 
 		if (trending && trending.songs.length > 0) {
 			// Return the curated playlist (limit to 10 songs for frontend)
-			return res.json(trending.songs.slice(0, 10));
+			return res.json(trending.songs.slice(0, 8));
 		}
 
 		// Fallback: pick 4 random songs if no playlist exists
 		const songs = await Song.aggregate([
-			{ $sample: { size: 4 } },
+			{ $sample: { size: 8 } },
 			{
 				$project: {
 					_id: 1,

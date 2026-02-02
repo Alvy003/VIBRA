@@ -80,28 +80,326 @@
   height: 0;
 }
 
-/* Optional: elegant tails for last bubbles of a group */
-.chat-bubble {
-  position: relative;
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
-.chat-bubble.mine.last::after,
-.chat-bubble.other.last::after {
+
+.animate-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.animate-shimmer::after {
   content: "";
   position: absolute;
-  bottom: 8px;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 20%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 80%,
+    transparent 100%
+  );
+  animation: shimmer 1.5s infinite ease-in-out;
+}
+
+/* Stagger animation for skeleton rows */
+.animate-shimmer:nth-child(1)::after { animation-delay: 0ms; }
+.animate-shimmer:nth-child(2)::after { animation-delay: 75ms; }
+.animate-shimmer:nth-child(3)::after { animation-delay: 150ms; }
+.animate-shimmer:nth-child(4)::after { animation-delay: 225ms; }
+.animate-shimmer:nth-child(5)::after { animation-delay: 300ms; }
+.animate-shimmer:nth-child(6)::after { animation-delay: 375ms; }
+.animate-shimmer:nth-child(7)::after { animation-delay: 450ms; }
+.animate-shimmer:nth-child(8)::after { animation-delay: 525ms; }
+.animate-shimmer:nth-child(9)::after { animation-delay: 600ms; }
+.animate-shimmer:nth-child(10)::after { animation-delay: 675ms; }
+
+/* Disable image context menu (open in new tab, save image, etc.) */
+img {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Re-enable pointer events for images that need to be clickable */
+/* The parent container handles the click */
+.group img,
+button img,
+a img {
+  pointer-events: none;
+}
+
+/* Disable text selection globally for app-like feel */
+/* But allow it in specific areas like search inputs */
+body {
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Allow text selection in inputs and textareas */
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  -khtml-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
+/* Disable long-press context menu on touch devices */
+* {
+  -webkit-touch-callout: none;
+}
+
+/* Hide scrollbars but keep functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* globals.css */
+
+/* Chat background pattern - simple version */
+.chat-bg-pattern {
+  background-color: #0a0a0f;
+  background-image: url('/chat-pattern.svg');
+  background-repeat: repeat;
+  background-size: 120px 120px;
+}
+
+/* Hide scrollbar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Chat scroll - even thinner */
+.chat-scroll::-webkit-scrollbar {
+  width: 3px;
+}
+
+.chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+
+.chat-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* ============================================
+   SPOTIFY-STYLE SCROLLBAR
+   ============================================ */
+
+/* For Webkit browsers (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
-.chat-bubble.mine.last::after {
-  right: -3px;
-  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%);
-  border-bottom-left-radius: 12px;
-  transform: skewX(-15deg);
-}
-.chat-bubble.other.last::after {
-  left: -3px;
-  background: #27272a;
-  border-bottom-right-radius: 12px;
-  transform: skewX(15deg);
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.5);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* ============================================
+   SCROLLBAR VARIANTS
+   ============================================ */
+
+/* Thin scrollbar variant */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+}
+
+/* Auto-hide scrollbar - shows on hover */
+.scrollbar-auto-hide::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.scrollbar-auto-hide:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-auto-hide:hover::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+/* Violet accent scrollbar (matches your theme) */
+.scrollbar-violet::-webkit-scrollbar-thumb {
+  background: rgba(139, 92, 246, 0.4);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-violet::-webkit-scrollbar-thumb:hover {
+  background: rgba(139, 92, 246, 0.6);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-violet::-webkit-scrollbar-thumb:active {
+  background: rgba(139, 92, 246, 0.8);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Firefox violet variant */
+.scrollbar-violet {
+  scrollbar-color: rgba(139, 92, 246, 0.4) transparent;
+}
+
+/* ============================================
+   RADIX SCROLL AREA CUSTOMIZATION
+   ============================================ */
+
+/* Target Radix ScrollArea viewport */
+[data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.15s ease;
+}
+
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+[data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:active {
+  background: rgba(255, 255, 255, 0.45);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Firefox for Radix */
+[data-radix-scroll-area-viewport] {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+/* ============================================
+   MOBILE - HIDE SCROLLBAR
+   ============================================ */
+
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+  }
+  
+  [data-radix-scroll-area-viewport]::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+  }
+  
+  * {
+    scrollbar-width: none;
+  }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+/* Completely hide scrollbar but keep scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Gutter stable - prevents layout shift */
+.scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
+/* Utility to completely hide scrollbar */
+.scrollbar-none {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+}

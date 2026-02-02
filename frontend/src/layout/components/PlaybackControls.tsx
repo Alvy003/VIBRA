@@ -1,10 +1,7 @@
-// src/pages/layout/components/PlaybackControls.tsx
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
+// src/layout/components/PlaybackControls.tsx
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useUIStore } from "@/stores/useUIStore";
 import { cn } from "@/lib/utils";
-import Queue from "@/pages/home/components/Queue";
 import {
   ListMusic,
   Pause,
@@ -14,17 +11,28 @@ import {
   SkipBack,
   SkipForward,
   Volume1,
+  Volume2,
   VolumeX,
-  ChevronDown,
   Maximize2,
-  Minimize2,
+  ChevronDown,
   MoreHorizontal,
-  Timer,
+  Share2,
+  ListPlus,
+  ListEnd,
+  Maximize,
+  Minimize,
+  Download,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import LikeButton from "@/pages/home/components/LikeButton";
-import { motion, AnimatePresence, useMotionValue, PanInfo } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import PlaybackControlsSongOptions from "./PlaybackControlsSongOptions";
+import SleepTimer from "@/components/SleepTimer";
+import { Song } from "@/types";
+import AddToPlaylistDialog from "@/components/AddToPlaylistDialog";
+import Queue from "@/pages/home/components/Queue";
+import { useDownloads } from "@/hooks/useDownloads";
+import ShareDialog from "@/components/ShareDialog";
 
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return "0:00";
@@ -33,306 +41,234 @@ const formatTime = (seconds: number) => {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
-// ---- Improved Sleep Timer Bottom Sheet ----
-const SleepTimer = () => {
-  const { setIsPlaying } = usePlayerStore();
-  const [activeSeconds, setActiveSeconds] = useState<number | null>(null);
-  const [activeMode, setActiveMode] = useState<"timer" | "endOfSong" | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const timeoutRef = useRef<number | null>(null);
-  const endedListenerRef = useRef<(() => void) | null>(null);
+// ==================== CUSTOM PROGRESS SLIDER ====================
+interface ProgressSliderProps {
+  value: number;
+  max: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+  className?: string;
+  showThumbAlways?: boolean;
+  trackColor?: string;
+  progressColor?: string;
+}
 
-  const clearEverything = () => {
-    if (timeoutRef.current) window.clearTimeout(timeoutRef.current);
-    timeoutRef.current = null;
-    
-    // Remove ended event listener if exists
-    if (endedListenerRef.current) {
-      const audio = document.querySelector("audio");
-      if (audio) {
-        audio.removeEventListener("ended", endedListenerRef.current);
-      }
-      endedListenerRef.current = null;
-    }
-    
-    setActiveSeconds(null);
-    setActiveMode(null);
-  };
-
-  const startCountdown = (seconds: number) => {
-    clearEverything();
-    timeoutRef.current = window.setTimeout(() => {
-      setIsPlaying(false);
-      clearEverything();
-    }, seconds * 1000);
-    setActiveSeconds(seconds);
-    setActiveMode("timer");
-    setIsOpen(false);
-  };
-
-  // const setEndOfSong = () => {
-  //   clearEverything();
-  //   const audio = document.querySelector("audio") as HTMLAudioElement;
-    
-  //   if (audio && duration > 0) {
-  //     // Create listener that will pause at the end
-  //     const endedListener = () => {
-  //       audio.pause();
-  //       setIsPlaying(false);
-  //       clearEverything();
-  //     };
-      
-  //     // Store reference and add listener
-  //     endedListenerRef.current = endedListener;
-  //     audio.addEventListener("ended", endedListener, { once: true });
-      
-  //     const remainingTime = (duration - currentTime) * 1000;
-  //     setActiveMode("endOfSong");
-  //     setActiveSeconds(Math.floor(remainingTime / 1000));
-  //     setIsOpen(false);
-  //   }
-  // };
-
-  const cancel = () => clearEverything();
-
-  const isActiveTimer = (s: number) => activeMode === "timer" && activeSeconds === s;
+const ProgressSlider = ({
+  value,
+  max,
+  onChange,
+  disabled = false,
+  className = "",
+  showThumbAlways = false,
+  trackColor = "bg-zinc-600",
+  progressColor = "bg-white",
+}: ProgressSliderProps) => {
+  const percent = max > 0 ? (value / max) * 100 : 0;
 
   return (
-    <>
-      <Button
-        size="icon"
-        variant="ghost"
+    <div className={cn("relative group h-1 w-full", className)}>
+      {/* Track */}
+      <div className={cn("absolute inset-0 rounded-full", trackColor)} />
+      
+      {/* Progress */}
+      <div
+        className={cn("absolute inset-y-0 left-0 rounded-full transition-all", progressColor)}
+        style={{ width: `${percent}%` }}
+      />
+      
+      {/* Thumb - Shows on hover or always */}
+      <div
         className={cn(
-          "text-zinc-400 hover:text-white transition-all relative",
-          activeMode && "text-violet-400"
+          "absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow-lg pointer-events-none transition-opacity",
+          progressColor,
+          showThumbAlways ? "opacity-100" : "opacity-0 group-hover:opacity-100"
         )}
-        onClick={() => setIsOpen(true)}
-        aria-label="Sleep timer"
-      >
-        <Timer className={cn("h-5 w-5 transition-transform", activeMode && "scale-110")} />
-      </Button>
-
-      <AnimatePresence>
-        {isOpen && (
-          <>
-            <motion.div
-              className="fixed inset-0 bg-black/50 z-[90] backdrop-blur-sm"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsOpen(false)}
-            />
-
-            <motion.div
-              key="sleep-timer-sheet"
-              initial={{ y: "100%" }}
-              animate={{ y: 0 }}
-              exit={{ y: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="fixed inset-x-0 bottom-0 z-[99] bg-gradient-to-b from-neutral-900 to-neutral-950 lg:bg-gradient-to-b lg:from-zinc-900 lg:to-zinc-950 rounded-t-[28px] shadow-2xl flex flex-col max-h-[75vh]"
-            >
-              {/* Header */}
-              <div className="flex flex-col items-center pt-3 pb-2 border-b border-zinc-800/50">
-                <div className="w-12 h-1.5 bg-zinc-700 rounded-full mb-4" />
-                <div className="flex items-center gap-2.5 px-6 pb-3">
-                  <Timer className="w-5 h-5 text-violet-400" />
-                  <h2 className="text-xl font-bold text-white">Sleep Timer</h2>
-                </div>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 px-4 py-6 overflow-y-auto">
-                <div className="max-w-md mx-auto space-y-6">
-                  {/* Quick Timers */}
-                  <div>
-                    <h3 className="text-sm font-medium text-zinc-400 mb-3 px-2">Timer Duration</h3>
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {[
-                        { label: "5 minutes", value: 5 },
-                        { label: "15 minutes", value: 15 },
-                        { label: "30 minutes", value: 30 },
-                        { label: "45 minutes", value: 45 },
-                        { label: "1 hour", value: 60 },
-                        { label: "2 hours", value: 120 },
-                      ].map(({ label, value }) => (
-                        <Button
-                          key={value}
-                          variant="outline"
-                          className={cn(
-                            "h-14 justify-start text-left border-zinc-800 hover:border-violet-500/50 transition-all rounded-xl",
-                            isActiveTimer(value * 60)
-                              ? "bg-violet-500/15 border-violet-500 text-violet-300 shadow-lg shadow-violet-500/10"
-                              : "bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
-                          )}
-                          onClick={() => startCountdown(value * 60)}
-                        >
-                          <Timer className="w-4 h-4 mr-2.5" />
-                          <span className="font-medium">{label}</span>
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* End of Song Option */}
-                  {/* <div>
-                    <h3 className="text-sm font-medium text-zinc-400 mb-3 px-2">Special Options</h3>
-                    <Button
-                      variant="outline"
-                      className={cn(
-                        "w-full h-14 justify-start text-left border-zinc-800 hover:border-violet-500/50 transition-all rounded-xl",
-                        activeMode === "endOfSong"
-                          ? "bg-violet-500/15 border-violet-500 text-violet-300 shadow-lg shadow-violet-500/10"
-                          : "bg-zinc-900/50 text-zinc-300 hover:bg-zinc-800/80 hover:text-white"
-                      )}
-                      onClick={setEndOfSong}
-                      disabled={!duration || duration === 0}
-                    >
-                      <Music2 className="w-4 h-4 mr-2.5" />
-                      <div className="flex flex-col items-start">
-                        <span className="font-medium">End of current song</span>
-                        {duration > 0 && (
-                          <span className="text-xs text-zinc-500">
-                            {formatTime(duration - currentTime)} remaining
-                          </span>
-                        )}
-                      </div>
-                    </Button>
-                  </div> */}
-
-                  {/* Cancel Button */}
-                  {activeMode && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="pt-2"
-                    >
-                      <Button
-                        variant="outline"
-                        className="w-full h-12 border-red-900/50 bg-red-950/20 text-red-400 hover:bg-red-950/40 hover:text-red-300 hover:border-red-800 rounded-xl font-medium"
-                        onClick={cancel}
-                      >
-                        Cancel Timer
-                      </Button>
-                    </motion.div>
-                  )}
-                </div>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </>
+        style={{ left: `calc(${percent}% - 6px)` }}
+      />
+      
+      {/* Invisible input for interaction */}
+      <input
+        type="range"
+        min={0}
+        max={max || 100}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        disabled={disabled}
+        className="absolute inset-0 w-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
+      />
+    </div>
   );
 };
 
-// ---- Improved Draggable Queue Sheet ----
-const SNAP_POINTS = [0.4, 0.65, 0.9];
-const CLOSE_THRESHOLD = 120;
+// ==================== CUSTOM VOLUME SLIDER ====================
+interface VolumeSliderProps {
+  value: number;
+  onChange: (value: number) => void;
+  className?: string;
+}
 
-const DraggableQueueSheet = ({ 
-  onClose 
-}: { 
+const VolumeSlider = ({ value, onChange, className = "" }: VolumeSliderProps) => {
+  return (
+    <div className={cn("relative group h-1", className)}>
+      {/* Track */}
+      <div className="absolute inset-0 rounded-full bg-zinc-600" />
+      
+      {/* Progress */}
+      <div
+        className="absolute inset-y-0 left-0 rounded-full bg-white/95 transition-all"
+        style={{ width: `${value}%` }}
+      />
+      
+      {/* Thumb */}
+      <div
+        className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white/95 rounded-full shadow-lg pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity"
+        style={{ left: `calc(${value}% - 6px)` }}
+      />
+      
+      {/* Invisible input */}
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="absolute inset-0 w-full opacity-0 cursor-pointer"
+      />
+    </div>
+  );
+};
+
+// ==================== SONG OPTIONS MENU ====================
+const SongOptionsMenu = ({
+  isOpen,
+  onClose,
+  song,
+  position,
+  onToggleFullscreen,
+  isFullscreen,
+}: {
+  isOpen: boolean;
   onClose: () => void;
+  song: Song | null;
+  position: { x: number; y: number } | null;
+  onToggleFullscreen: () => void;
+  isFullscreen: boolean;
 }) => {
-  const [currentSnap, setCurrentSnap] = useState(0.65);
-  const y = useMotionValue(0);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const isDraggingRef = useRef(false);
+  const [showPlaylistDialog, setShowPlaylistDialog] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
 
-  const findNearestSnap = (currentY: number, velocity: number): number => {
-    const viewportHeight = window.innerHeight;
-    const currentHeight = viewportHeight - currentY;
-    const currentPercent = currentHeight / viewportHeight;
+  if (!isOpen || !song || !position) return null;
 
-    if (velocity > 800) return 0;
-    
-    if (velocity < -800) {
-      const higherSnaps = SNAP_POINTS.filter(s => s > currentPercent);
-      if (higherSnaps.length > 0) return Math.min(...higherSnaps);
-    }
-
-    return SNAP_POINTS.reduce((prev, curr) => 
-      Math.abs(curr - currentPercent) < Math.abs(prev - currentPercent) ? curr : prev
-    );
-  };
-
-  const handleDragEnd = (_: any, info: PanInfo) => {
-    isDraggingRef.current = false;
-    
-    if (info.offset.y > CLOSE_THRESHOLD || info.velocity.y > 500) {
-      onClose();
-      return;
-    }
-
-    const nearestSnap = findNearestSnap(info.point.y, info.velocity.y);
-    setCurrentSnap(nearestSnap);
-    y.set(0);
-  };
-
-  const sheetHeight = `${currentSnap * 100}vh`;
+  const menuItems = [
+    { 
+      icon: isFullscreen ? Minimize : Maximize, 
+      label: isFullscreen ? "Exit Fullscreen" : "Fullscreen", 
+      action: () => {
+        onToggleFullscreen();
+        onClose();
+      },
+      divider: true,
+    },
+    { 
+      icon: ListPlus, 
+      label: "Add to Playlist", 
+      action: () => {
+        setShowPlaylistDialog(true);
+      }
+    },
+    { 
+      icon: ListEnd, 
+      label: "Add to Queue", 
+      action: () => {
+        usePlayerStore.getState().addSongToQueue(song);
+        onClose();
+      }
+    },
+    { 
+      icon: Share2, 
+      label: "Share", 
+      action: () => {
+        setShowShareDialog(true);
+      }
+    },
+  ];
 
   return (
     <>
       <motion.div
-        className="fixed inset-0 bg-black/50 z-40 backdrop-blur-sm"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[100]"
         onClick={onClose}
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95, y: -10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          className="absolute bg-zinc-900/95 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl overflow-hidden w-56"
+          style={{
+            top: Math.min(position.y, window.innerHeight - 280),
+            left: Math.min(position.x - 120, window.innerWidth - 240),
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Song Preview */}
+          <div className="flex items-center gap-3 p-3 border-b border-white/5 bg-white/5">
+            <img 
+              src={song.imageUrl} 
+              alt={song.title}
+              className="w-10 h-10 rounded-lg object-cover"
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{song.title}</p>
+              <p className="text-xs text-zinc-400 truncate">{song.artist}</p>
+            </div>
+          </div>
+
+          {/* Menu Items */}
+          <div className="p-1.5">
+            {menuItems.map((item, idx) => (
+              <div key={idx}>
+                <button
+                  onClick={item.action}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] text-zinc-300 hover:bg-white/10 hover:text-white transition-colors"
+                >
+                  <item.icon className="w-4 h-4 text-zinc-400" />
+                  {item.label}
+                </button>
+                {item.divider && <div className="my-1 border-t border-white/5" />}
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      </motion.div>
+
+      <AddToPlaylistDialog
+        isOpen={showPlaylistDialog}
+        onClose={() => {
+          setShowPlaylistDialog(false);
+          onClose();
+        }}
+        song={song}
       />
 
-      <motion.div
-        initial={{ y: "100%" }}
-        animate={{ y: 0, height: sheetHeight }}
-        exit={{ y: "100%" }}
-        transition={{ 
-          type: "spring",
-          damping: 35,
-          stiffness: 400,
-          mass: 0.8
+      <ShareDialog
+        isOpen={showShareDialog}
+        onClose={() => {
+          setShowShareDialog(false);
+          onClose();
         }}
-        style={{ y }}
-        className="fixed inset-x-0 bottom-0 z-50 bg-neutral-900 rounded-t-[30px] shadow-2xl flex flex-col"
-      >
-        <motion.div 
-          drag="y"
-          dragDirectionLock
-          dragConstraints={{ top: 0, bottom: 0 }}
-          dragElastic={{ top: 0, bottom: 0.2 }}
-          onDragStart={() => {
-            isDraggingRef.current = true;
-          }}
-          onDrag={(_, info) => {
-            if (scrollRef.current && scrollRef.current.scrollTop > 5 && info.offset.y > 0) {
-              return false;
-            }
-          }}
-          onDragEnd={handleDragEnd}
-          className="flex flex-col items-center py-2 cursor-grab active:cursor-grabbing select-none shrink-0"
-        >
-          <div className="w-12 h-1.5 bg-zinc-600 rounded-full" />
-        </motion.div>
-
-        <div 
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto px-2 overscroll-contain"
-          style={{ 
-            WebkitOverflowScrolling: 'touch',
-            touchAction: 'pan-y',
-          }}
-          onTouchStart={() => {
-            if (scrollRef.current && scrollRef.current.scrollTop > 0) {
-              isDraggingRef.current = false;
-            }
-          }}
-        >
-          <Queue />
-        </div>
-      </motion.div>
+        title={song.title}
+        text={`Listen to ${song.title} by ${song.artist}`}
+        url={`${window.location.origin}/song/${song._id}`}
+        imageUrl={song.imageUrl}
+      />
     </>
   );
 };
 
+// ==================== MAIN PLAYBACK CONTROLS ====================
 export const PlaybackControls = () => {
   const {
     currentSong,
@@ -351,35 +287,57 @@ export const PlaybackControls = () => {
     isRepeat,
   } = usePlayerStore();
 
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [queueOpen, setQueueOpen] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const previousVolumeRef = useRef(volume);
-  
-  const toggleSidePanelView = useUIStore((s) => s.toggleSidePanelView);
-  const sidePanelView = useUIStore((s) => s.sidePanelView);
+  const { 
+    toggleSidePanelView, 
+    sidePanelView,
+    isRightSidebarCollapsed,
+    setRightSidebarCollapsed,
+    setSidePanelView
+  } = useUIStore();
 
+  const [isMuted, setIsMuted] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
+  const [showSongOptions, setShowSongOptions] = useState(false);
+  const [optionsPosition, setOptionsPosition] = useState<{ x: number; y: number } | null>(null);
   const [songOptionsOpen, setSongOptionsOpen] = useState(false);
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
+  const { start, state } = useDownloads(currentSong);
+
+  const previousVolumeRef = useRef(volume);
 
   // Toggle mute/unmute
-  const toggleMute = () => {
+  const toggleMute = useCallback(() => {
     if (isMuted) {
-      // Unmute - restore previous volume
       setVolume(previousVolumeRef.current || 50);
       setIsMuted(false);
     } else {
-      // Mute - save current volume and set to 0
       previousVolumeRef.current = volume;
       setVolume(0);
       setIsMuted(true);
     }
-  };
+  }, [isMuted, volume, setVolume]);
 
+  // Browser fullscreen (F11 style)
+  const toggleBrowserFullscreen = useCallback(() => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+      setIsBrowserFullscreen(true);
+    } else {
+      document.exitFullscreen().catch(() => {});
+      setIsBrowserFullscreen(false);
+    }
+  }, []);
+
+  // Listen for fullscreen changes
   useEffect(() => {
-    setSongOptionsOpen(false);
-    setContextMenuPos(null);
-  }, [currentSong?._id]);
+    const handleFullscreenChange = () => {
+      setIsBrowserFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Update muted state when volume changes externally
   useEffect(() => {
@@ -391,452 +349,288 @@ export const PlaybackControls = () => {
     }
   }, [volume, isMuted]);
 
-  const enterFullscreen = () => {
-    const elem = document.documentElement;
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen();
-    } else if ((elem as any).webkitRequestFullscreen) {
-      (elem as any).webkitRequestFullscreen();
-    } else if ((elem as any).msRequestFullscreen) {
-      (elem as any).msRequestFullscreen();
-    }
-    setIsFullscreen(true);
-  };
-  
-  const exitFullscreen = () => {
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-    } else if ((document as any).webkitExitFullscreen) {
-      (document as any).webkitExitFullscreen();
-    } else if ((document as any).msExitFullscreen) {
-      (document as any).msExitFullscreen();
-    }
-    setIsFullscreen(false);
-  };
-  
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const toggleFullscreen = () => {
-    if (window.innerWidth < 768) return;
-    if (!isFullscreen) enterFullscreen();
-    else exitFullscreen();
-  };
-  
+  // Close song options when song changes
   useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && isFullscreen) setIsFullscreen(false);
+    setSongOptionsOpen(false);
+    setContextMenuPos(null);
+    setShowSongOptions(false);
+  }, [currentSong?._id]);
+
+  // Fullscreen handlers
+  const openFullscreen = useCallback(() => {
+    setIsFullscreen(true);
+    setShowQueue(false);
+  }, []);
+
+  const closeFullscreen = useCallback(() => {
+    setIsFullscreen(false);
+    setShowQueue(false);
+    setShowSongOptions(false);
+  }, []);
+
+  // ESC key to exit fullscreen
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (showSongOptions) {
+          setShowSongOptions(false);
+        } else if (showQueue) {
+          setShowQueue(false);
+        } else if (isFullscreen) {
+          closeFullscreen();
+        }
+      }
+      if (e.key === "F11" && isFullscreen) {
+        e.preventDefault();
+        toggleBrowserFullscreen();
+      }
     };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isFullscreen, showQueue, showSongOptions, closeFullscreen, toggleBrowserFullscreen]);
 
-    const handleFullscreenChange = () => {
-      const isFull = !!document.fullscreenElement;
-      setIsFullscreen(isFull);
-    };
-
-    window.addEventListener("keydown", handleEsc);
-    document.addEventListener("fullscreenchange", handleFullscreenChange);
-
+  // Lock body scroll when fullscreen
+  useEffect(() => {
+    if (isFullscreen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
     return () => {
-      window.removeEventListener("keydown", handleEsc);
-      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+      document.body.style.overflow = '';
     };
   }, [isFullscreen]);
 
-  const handleSeek = (value: number[]) => {
-    const newTime = value[0];
+  // Seek handler
+  const handleSeek = useCallback((newTime: number) => {
     setCurrentTime(newTime);
-
     const audio = document.querySelector("audio") as HTMLAudioElement | null;
     if (audio) audio.currentTime = newTime;
-  };
+  }, [setCurrentTime]);
 
-  const toggleExpand = () => setIsExpanded(!isExpanded);
+  // Volume handler
+  const handleVolumeChange = useCallback((newVolume: number) => {
+    setVolume(newVolume);
+    if (newVolume > 0) setIsMuted(false);
+  }, [setVolume]);
+
+  // Context menu handler
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!currentSong) return;
+    e.preventDefault();
+    setContextMenuPos({ x: e.clientX, y: e.clientY });
+    setSongOptionsOpen(true);
+  }, [currentSong]);
+
+  // Options menu in fullscreen
+  const handleOptionsClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    setOptionsPosition({ x: e.clientX, y: e.clientY });
+    setShowSongOptions(true);
+  }, []);
 
   return (
-    <footer
-      className={`bg-zinc-900 border-t border-zinc-800 
-        fixed bottom-1 left-0 right-0 z-40
-        sm:static sm:border-none sm:px-0
-        transition-all duration-300 ease-in-out
-        ${isExpanded ? "h-screen sm:h-24" : "h-19 sm:h-24"}
-        flex flex-col sm:flex-row sm:justify-between items-center
-        max-w-[1800px] mx-auto w-full`}
-    >
-      <AnimatePresence initial={false}>
-        {/* MOBILE MINI PLAYER */}
-        {!isExpanded && (
-          <motion.div
-            key="mini"
-            initial={{ opacity: 0, y: 40 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 40 }}
-            transition={{ duration: 0.3 }}
-            className="relative flex sm:hidden items-center gap-3 w-full h-16 cursor-pointer rounded-md overflow-hidden"
-            onClick={() => currentSong && toggleExpand()}
-          >
-            {currentSong && (
-              <>
-                <div
-                  className="absolute inset-0 bg-cover bg-center blur-lg opacity-40"
-                  style={{ backgroundImage: `url(${currentSong.imageUrl})` }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-zinc-900/40 to-transparent" />
-              </>
-            )}
-
-            <div className="relative flex items-center gap-4 px-3 w-full">
-              {currentSong ? (
-                <>
-                  <img
-                    src={currentSong.imageUrl}
-                    alt={currentSong.title}
-                    className="w-10 h-10 object-cover rounded-md"
-                  />
-                  <div className="flex flex-col overflow-hidden">
-                    <div className="text-sm font-medium text-white truncate">{currentSong.title}</div>
-                    <div className="text-xs text-zinc-300 truncate">{currentSong.artist}</div>
-                  </div>
-
-                  <div className="ml-auto flex items-center">
-                    <LikeButton songId={currentSong._id} />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex flex-col overflow-hidden ml-1">
-                    <div className="text-sm font-medium text-white/85">Not playing</div>
-                    <div className="text-xs text-zinc-400">Tap a song to start</div>
-                  </div>
-                  <div className="ml-auto" />
-                </>
-              )}
-
-              <div className="flex items-center gap-3">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    playPrevious();
-                  }}
-                  className="text-zinc-300 lg:hover:text-white"
-                  disabled={!currentSong}
-                >
-                  <SkipBack className="h-5 w-5" />
-                </Button>
-
-                <Button
-                  size="icon"
-                  className="bg-white/90 lg:hover:bg-white/80 text-black rounded-full h-9 w-9"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    togglePlay();
-                  }}
-                  disabled={!currentSong}
-                >
-                  {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-                </Button>
-
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    playNext();
-                  }}
-                  className="text-zinc-300 lg:hover:text-white"
-                  disabled={!currentSong}
-                >
-                  <SkipForward className="h-5 w-5" />
-                </Button>
-              </div>
-            </div>
-          </motion.div>
-        )}
-
-        {/* MOBILE EXPANDED VIEW */}
-        {isExpanded && currentSong && (
-          <motion.div
-            key="expanded"
-            initial={{ opacity: 0, y: "100%" }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: "100%" }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="sm:hidden fixed inset-0 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
-            style={{ height: "calc(var(--vh, 1vh) * 100)" }}
-          >
-            <div
-              className="absolute inset-0 bg-cover bg-center blur-2xl opacity-80"
-              style={{ backgroundImage: `url(${currentSong.imageUrl})` }}
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-zinc-900/80 to-transparent" />
-
-            <div className="relative flex flex-col h-full px-6 pb-6 text-white overflow-y-auto">
-            <div className="flex justify-between items-center sticky top-0 z-10 pt-6">
-              <Button size="icon" variant="ghost" className="text-zinc-300" onClick={toggleExpand}>
-                <ChevronDown className="h-7 w-7" />
-              </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="text-zinc-300"
-                onClick={() => setSongOptionsOpen(true)}
-              >
-                <MoreHorizontal className="h-6 w-6" />
-              </Button>
-            </div>
-
-              {/* Art */}
-              <div className="flex justify-center mt-12 mb-8">
-                <motion.img
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ duration: 0.3 }}
-                  src={currentSong.imageUrl}
-                  alt={currentSong.title}
-                  className="w-[85vw] max-w-[340px] aspect-square rounded-3xl shadow-2xl object-cover ring-1 ring-white/10"
-                />
-              </div>
-
-            {/* Song Info */}
-            <div className="flex items-start justify-between gap-3 px-1 mb-8">
-                <div className="flex flex-col flex-1 min-w-0">
-                  <h1 className="text-xl font-medium truncate leading-tight mb-1">
-                    {currentSong.title}
-                  </h1>
-                  <p className="text-base text-zinc-400 truncate">
-                    {currentSong.artist}
-                  </p>
-                </div>
-                <div className="flex-shrink-0 mt-1">
-                  <LikeButton songId={currentSong._id} />
-                </div>
-              </div>
-
-              {/* Progress Section - Compact */}
-              <div className="px-1">
-                {/* Slider - with reduced width */}
-                <div className="px-1">
-                  <Slider
-                    value={[currentTime]}
-                    max={duration || 100}
-                    step={1}
-                    className="w-full"
-                    onValueChange={handleSeek}
-                  />
-                </div>
-                
-                {/* Time labels */}
-                <div className="flex items-center justify-between mt-2.5 px-1">
-                  <span className="text-xs font-medium text-zinc-400 tabular-nums">
-                    {formatTime(currentTime)}
-                  </span>
-                  <span className="text-xs font-medium text-zinc-400 tabular-nums">
-                    {formatTime(duration)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="mt-8 flex items-center justify-center gap-8">
-                <Button size="icon" variant="ghost" className={`${isShuffle ? "text-white" : "text-zinc-400"}`} onClick={toggleShuffle}>
-                  <Shuffle className="h-6 w-6" />
-                </Button>
-                <Button size="icon" variant="ghost" className="text-zinc-400" onClick={playPrevious}>
-                  <SkipBack className="h-9 w-9" />
-                </Button>
-                <Button size="icon" className="bg-white text-black rounded-full h-16 w-16 shadow-lg" onClick={togglePlay}>
-                  {isPlaying ? <Pause className="h-9 w-9" /> : <Play className="h-9 w-9" />}
-                </Button>
-                <Button size="icon" variant="ghost" className="text-zinc-400" onClick={playNext}>
-                  <SkipForward className="h-9 w-9" />
-                </Button>
-                <Button size="icon" variant="ghost" className={`${isRepeat ? "text-white" : "text-zinc-400"}`} onClick={toggleRepeat}>
-                  <Repeat className="h-6 w-6" />
-                </Button>
-              </div>
-
-              <div className="mt-9 flex items-center justify-center gap-3">
-                <SleepTimer />
-                <Button size="icon" variant="ghost" className="text-transparent" disabled>
-                  <Repeat className="h-6 w-6" />
-                </Button>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="text-zinc-400"
-                  onClick={() => setQueueOpen(true)}
-                >
-                  <ListMusic className="h-6 w-6" />
-                </Button>
-              </div>
-            </div>
-
-            <AnimatePresence>
-              {queueOpen && (
-                <DraggableQueueSheet 
-                  onClose={() => setQueueOpen(false)} 
-                />
-              )}
-            </AnimatePresence>
-
-            {/* Song Options Bottom Sheet - Mobile */}
-            <AnimatePresence>
-              {songOptionsOpen && currentSong && (
-                <>
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="fixed inset-0 bg-black/50 z-[60] backdrop-blur-sm"
-                    onClick={() => setSongOptionsOpen(false)}
-                  />
-                  <motion.div
-                    initial={{ y: "100%" }}
-                    animate={{ y: 0 }}
-                    exit={{ y: "100%" }}
-                    transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                    className="fixed inset-x-0 bottom-0 z-[70] bg-gradient-to-b from-neutral-900 to-neutral-950 rounded-t-[28px] shadow-2xl max-h-[70vh] overflow-hidden"
-                  >
-                    {/* Handle */}
-                    <div className="flex justify-center pt-3 pb-4">
-                      <div className="w-12 h-1.5 bg-zinc-700 rounded-full" />
-                    </div>
-
-                    {/* Song Info Header */}
-                    <div className="flex items-center gap-3 px-5 pb-4 border-b border-zinc-800/50">
-                      <img
-                        src={currentSong.imageUrl}
-                        alt={currentSong.title}
-                        className="w-12 h-12 rounded-lg object-cover"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white font-medium truncate">{currentSong.title}</p>
-                        <p className="text-zinc-400 text-sm truncate">{currentSong.artist}</p>
-                      </div>
-                    </div>
-
-                    {/* Options */}
-                    <div className="p-3 pb-8 overflow-y-auto">
-                      <PlaybackControlsSongOptions
-                        song={currentSong}
-                        onClose={() => setSongOptionsOpen(false)}
-                        variant="mobile-sheet"
-                      />
-                    </div>
-                  </motion.div>
-                </>
-              )}
-            </AnimatePresence>
-
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* DESKTOP SONG INFO + LIKE */}
+    <footer className="hidden sm:flex h-24 bg-zinc-900 border-t border-zinc-800 items-center px-4 mx-auto w-full">
+      {/* Left: Song Info + Like */}
       <div
-          className="hidden sm:flex items-center gap-4 min-w-[180px] w-[30%] pl-4"
-          onContextMenu={(e) => {
-            if (!currentSong) return;
-            e.preventDefault();
-            setContextMenuPos({ x: e.clientX, y: e.clientY });
-            setSongOptionsOpen(true);
-          }}
-        >
-        {currentSong && (
+        className="flex items-center gap-4 min-w-[180px] w-[30%]"
+        onContextMenu={handleContextMenu}
+      >
+        {currentSong ? (
           <>
-            <img src={currentSong.imageUrl} alt={currentSong.title} className="w-14 h-14 object-cover rounded-md" />
+            <img
+              src={currentSong.imageUrl}
+              alt={currentSong.title}
+              className="w-14 h-14 object-cover rounded-md cursor-pointer hover:opacity-80 transition-opacity"
+              onClick={openFullscreen}
+            />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <div className="font-medium truncate hover:underline cursor-pointer">{currentSong.title}</div>
+                <span 
+                  className="font-medium truncate hover:underline cursor-pointer"
+                  onClick={openFullscreen}
+                >
+                  {currentSong.title}
+                </span>
                 <LikeButton songId={currentSong._id} />
               </div>
-              <div className="text-sm text-zinc-400 truncate hover:underline cursor-pointer">{currentSong.artist}</div>
+              <span className="text-sm text-zinc-400 truncate hover:underline cursor-pointer block">
+                {currentSong.artist}
+              </span>
             </div>
           </>
+        ) : (
+          <div className="flex items-center gap-4 opacity-50">
+            <div className="w-14 h-14 bg-zinc-800 rounded-md" />
+            <div>
+              <div className="font-medium text-zinc-500">No song playing</div>
+              <div className="text-sm text-zinc-600">Select a song to play</div>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Desktop Player Controls */}
-      <div className="hidden sm:flex flex-col items-center gap-2 flex-1 max-w-[45%]">
-        <div className="flex items-center gap-6">
-          <Button size="icon" variant="ghost" className={`${isShuffle ? "text-white" : "text-zinc-400"} hover:text-white`} onClick={toggleShuffle}>
+      {/* Center: Player Controls */}
+      <div className="flex flex-col items-center gap-2 flex-1 max-w-[45%]">
+        {/* Control Buttons */}
+        <div className="flex items-center gap-4 lg:gap-5">
+          <button
+            className={cn(
+              "p-1.5 rounded-full transition-colors relative",
+              isShuffle
+                ? "text-violet-400 hover:text-violet-300"
+                : "text-zinc-400 hover:text-white",
+              !currentSong && "opacity-40 cursor-not-allowed"
+            )}
+            onClick={toggleShuffle}
+            disabled={!currentSong}
+          >
             <Shuffle className="h-4 w-4" />
-          </Button>
+            {isShuffle && (
+              <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-violet-400 rounded-full" />
+            )}
+          </button>
 
-          <Button size="icon" variant="ghost" onClick={playPrevious} disabled={!currentSong} className="hover:text-white text-zinc-400">
-            <SkipBack className="h-4 w-4" />
-          </Button>
+          <button
+            onClick={playPrevious}
+            disabled={!currentSong}
+            className={cn(
+              "p-1.5 text-zinc-400 hover:text-white transition-colors",
+              !currentSong && "opacity-40 cursor-not-allowed"
+            )}
+          >
+            <SkipBack className="h-4 w-4" fill="currentColor" />
+          </button>
 
-          <Button size="icon" className="bg-white lg:hover:bg-white/80 px-5 py-5 text-black rounded-full h-8 w-8" onClick={togglePlay} disabled={!currentSong}>
-            {isPlaying ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
-          </Button>
+          <button
+            className={cn(
+              "h-9 w-9 rounded-full flex items-center justify-center transition-all",
+              currentSong
+                ? "bg-white hover:bg-white/90 hover:scale-105 text-black"
+                : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
+            )}
+            onClick={togglePlay}
+            disabled={!currentSong}
+          >
+            {isPlaying ? (
+              <Pause className="h-4 w-4" fill="currentColor" />
+            ) : (
+              <Play className="h-4 w-4 ml-0.5" fill="currentColor" />
+            )}
+          </button>
 
-          <Button size="icon" variant="ghost" onClick={playNext} disabled={!currentSong} className="hover:text-white text-zinc-400">
-            <SkipForward className="h-4 w-4" />
-          </Button>
+          <button
+            onClick={playNext}
+            disabled={!currentSong}
+            className={cn(
+              "p-1.5 text-zinc-400 hover:text-white transition-colors",
+              !currentSong && "opacity-40 cursor-not-allowed"
+            )}
+          >
+            <SkipForward className="h-4 w-4" fill="currentColor" />
+          </button>
 
-          <Button size="icon" variant="ghost" className={`${isRepeat ? "text-white" : "text-zinc-400"} hover:text-white`} onClick={toggleRepeat}>
+          <button
+            className={cn(
+              "p-1.5 rounded-full transition-colors relative",
+              isRepeat
+                ? "text-violet-400 hover:text-violet-300"
+                : "text-zinc-400 hover:text-white",
+              !currentSong && "opacity-40 cursor-not-allowed"
+            )}
+            onClick={toggleRepeat}
+            disabled={!currentSong}
+          >
             <Repeat className="h-4 w-4" />
-          </Button>
+            {isRepeat && (
+              <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-violet-400 rounded-full" />
+            )}
+          </button>
         </div>
 
+        {/* Progress Bar - Custom Slider */}
         <div className="flex items-center gap-2 w-full">
-          <div className="text-xs text-zinc-400">{formatTime(currentTime)}</div>
-          <Slider value={[currentTime]} max={duration || 100} step={1} className="w-full hover:cursor-grab active:cursor-grabbing" onValueChange={handleSeek} />
-          <div className="text-xs text-zinc-400">{formatTime(duration)}</div>
+          <span className="text-xs text-zinc-400 w-10 text-right tabular-nums">
+            {formatTime(currentTime)}
+          </span>
+          
+          <ProgressSlider
+            value={currentTime}
+            max={duration || 100}
+            onChange={handleSeek}
+            disabled={!currentSong}
+            className="flex-1"
+            trackColor="bg-zinc-700"
+            progressColor="bg-white/95"
+          />
+          
+          <span className="text-xs text-zinc-400 w-10 tabular-nums">
+            {formatTime(duration)}
+          </span>
         </div>
       </div>
 
-      {/* Desktop right group */}
-      <div className="hidden sm:flex items-center gap-4 min-w-[180px] w-[30%] justify-end pr-4">
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={toggleSidePanelView}
+      {/* Right: Volume & Extra Controls */}
+      <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 min-w-[140px] sm:min-w-[160px] lg:min-w-[180px] w-[30%] justify-end">
+        {/* Queue Toggle */}
+        <button
+          onClick={() => {
+            if (isRightSidebarCollapsed) {
+              setRightSidebarCollapsed(false);
+              setSidePanelView("queue");
+            } else {
+              toggleSidePanelView();
+            }
+          }}
           className={cn(
-            "text-zinc-400 hover:text-white",
-            sidePanelView === "queue" && "text-white"
+            "p-2 rounded-lg transition-colors",
+            sidePanelView === "queue" && !isRightSidebarCollapsed
+              ? "text-violet-400 hover:text-violet-300"
+              : "text-zinc-400 hover:text-white"
           )}
         >
           <ListMusic className="h-4 w-4" />
-        </Button>
+        </button>
 
+        {/* Sleep Timer */}
         <SleepTimer />
 
-        <div className="flex items-center gap-2">
-          <Button 
-            size="icon" 
-            variant="ghost" 
-            className="hover:text-white text-zinc-400"
+        {/* Volume Controls */}
+        <div className="flex items-center gap-1.5">
+          <button
+            className="p-2 text-zinc-400 hover:text-white transition-colors"
             onClick={toggleMute}
           >
             {isMuted || volume === 0 ? (
               <VolumeX className="h-4 w-4" />
-            ) : (
+            ) : volume < 50 ? (
               <Volume1 className="h-4 w-4" />
+            ) : (
+              <Volume2 className="h-4 w-4" />
             )}
-          </Button>
-          <Slider 
-            value={[volume]} 
-            max={100} 
-            step={1} 
-            className="w-28 hover:cursor-grab active:cursor-grabbing" 
-            onValueChange={(value) => {
-              setVolume(value[0]);
-              if (value[0] > 0) setIsMuted(false);
-            }} 
+          </button>
+          
+          <VolumeSlider
+            value={volume}
+            onChange={handleVolumeChange}
+            className="w-16 sm:w-20 lg:w-24"
           />
         </div>
 
-        <Button
-          size="icon"
-          variant="ghost"
-          className="hover:text-white text-zinc-400"
-          onClick={toggleFullscreen}
+        {/* Fullscreen */}
+        <button
+          className={cn(
+            "p-2 text-zinc-400 hover:text-white transition-colors",
+            !currentSong && "opacity-40 cursor-not-allowed"
+          )}
+          onClick={openFullscreen}
+          disabled={!currentSong}
         >
           <Maximize2 className="h-4 w-4" />
-        </Button>
+        </button>
       </div>
 
-      {/* Fullscreen Player */}
+      {/* ==================== PREMIUM FULLSCREEN PLAYER ==================== */}
       <AnimatePresence>
         {isFullscreen && currentSong && (
           <motion.div
@@ -844,127 +638,327 @@ export const PlaybackControls = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4, ease: "easeInOut" }}
-            className="fixed inset-0 z-[9999] flex flex-col items-center justify-between text-white bg-black/95 backdrop-blur-3xl overflow-hidden"
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[9999] overflow-hidden"
           >
-            <motion.div
-              className="absolute inset-0 bg-cover bg-center blur-3xl opacity-80 scale-110"
-              style={{ backgroundImage: `url(${currentSong.imageUrl})` }}
-              animate={{
-                scale: [1.1, 1.15, 1.1],
-                x: [-30, 30, -30],
-                y: [-15, 15, -15],
-              }}
-              transition={{
-                duration: 40,
-                repeat: Infinity,
-                repeatType: "mirror",
-                ease: "easeInOut",
-              }}
-            />
-
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/70 to-transparent" />
-
-            <div className="relative z-10 w-full flex justify-end p-6">
-              <Button
-                size="icon"
-                variant="ghost"
-                className="text-zinc-300 hover:text-white"
-                onClick={toggleFullscreen}
-              >
-                <Minimize2 className="h-6 w-6" />
-              </Button>
-            </div>
-
-            <div
-              className="relative z-10 flex flex-col items-center justify-center text-center w-full px-6"
-              style={{
-                maxWidth: "min(95vw, 900px)",
-                flex: "1 1 auto",
-                gap: "clamp(16px, 4vh, 40px)",
-              }}
-            >
-              <img
+            {/* Background Image */}
+            <div className="absolute inset-0">
+              <motion.img
+                key={currentSong._id}
                 src={currentSong.imageUrl}
-                alt={currentSong.title}
-                className="object-cover -mt-10 rounded-3xl shadow-[0_0_60px_-20px_rgba(255,255,255,0.15)] transition-transform duration-300 hover:scale-[1.02]"
-                style={{
-                  width: "clamp(240px, 50vh, 600px)",
-                  aspectRatio: "1 / 1",
-                }}
+                alt=""
+                className="w-full h-full object-cover"
+                initial={{ scale: 1.1, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                transition={{ duration: 0.4 }}
               />
+              <div className="absolute inset-0 bg-black/50" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/60 to-black/30" />
+              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/70" />
+            </div>
 
-              <div className="mt-2 w-full flex items-center justify-between max-w-[550px]">
-                <div className="flex flex-col text-left truncate">
-                  <div className="text-2xl font-semibold truncate">{currentSong.title}</div>
-                  <div className="text-sm text-zinc-400">{currentSong.artist}</div>
+            {/* Main Content */}
+            <div className="relative h-full flex flex-col z-[2]">
+              {/* Top Bar */}
+              <motion.header 
+                initial={{ y: -20, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: 0.1 }}
+                className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4"
+              >
+                <button
+                  onClick={closeFullscreen}
+                  className="flex items-center gap-2 text-white/60 hover:text-white transition-colors group"
+                >
+                  <ChevronDown className="w-5 h-5 group-hover:translate-y-0.5 transition-transform" />
+                  <span className="text-sm font-medium hidden sm:inline">Back</span>
+                </button>
+
+                <div className="absolute left-1/2 -translate-x-1/2 text-center hidden sm:block">
+                  <p className="text-[10px] uppercase tracking-widest text-white/40 font-medium">
+                    Now Playing
+                  </p>
                 </div>
-                <LikeButton songId={currentSong._id} />
-              </div>
 
-              <div className="flex items-center gap-3 w-full mt-2">
-                <span className="text-xs text-zinc-400">{formatTime(currentTime)}</span>
-                <Slider
-                  value={[currentTime]}
-                  max={duration || 100}
-                  step={1}
-                  onValueChange={handleSeek}
-                  className="flex-1"
-                />
-                <span className="text-xs text-zinc-400">{formatTime(duration)}</span>
-              </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowQueue(!showQueue)}
+                    className={cn(
+                      "flex items-center gap-2 px-3 sm:px-3.5 py-2 rounded-full text-sm font-medium transition-all",
+                      showQueue 
+                        ? "bg-white text-black" 
+                        : "bg-white/10 text-white/80 hover:bg-white/20 hover:text-white"
+                    )}
+                  >
+                    <ListMusic className="w-4 h-4" />
+                    <span className="hidden sm:inline">Queue</span>
+                  </button>
 
-              <div className="flex items-center justify-center gap-8 mt-2 flex-wrap">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className={`${isShuffle ? "text-white" : "text-zinc-400"} hover:text-white`}
-                  onClick={toggleShuffle}
+                  <button
+                    onClick={handleOptionsClick}
+                    className="p-2 sm:p-2.5 rounded-full bg-white/10 text-white/80 hover:bg-white/20 hover:text-white transition-colors"
+                  >
+                    <MoreHorizontal className="w-5 h-5" />
+                  </button>
+                </div>
+              </motion.header>
+
+              {/* Main Area */}
+              <div className="flex-1 flex overflow-hidden">
+                <motion.div 
+                  className={cn(
+                    "flex-1 flex items-center justify-center px-4 sm:px-8 lg:px-16 pb-6 sm:pb-8",
+                    "transition-all duration-300"
+                  )}
                 >
-                  <Shuffle className="h-7 w-7" />
-                </Button>
+                  <div className={cn(
+                    "flex items-center w-full transition-all duration-300",
+                    showQueue 
+                      ? "flex-col xl:flex-row gap-6 xl:gap-8 max-w-lg xl:max-w-none" 
+                      : "flex-col lg:flex-row gap-6 lg:gap-10 xl:gap-11 max-w-5xl",
+                    "mx-auto"
+                  )}>
+                    {/* Album Art */}
+                    <motion.div
+                      layout
+                      className={cn(
+                        "relative shrink-0 transition-all duration-300",
+                        showQueue 
+                          ? "w-44 h-44 lg:w-56 lg:h-56" 
+                          : "w-56 h-56 lg:w-64 lg:h-64"
+                      )}
+                    >
+                      <div className="w-full h-full rounded-xl overflow-hidden shadow-2xl">
+                        <img
+                          src={currentSong.imageUrl}
+                          alt={currentSong.title}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </motion.div>
 
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={playPrevious}
-                  className="text-zinc-400 hover:text-white"
-                >
-                  <SkipBack className="h-10 w-10" />
-                </Button>
+                    {/* Song Info & Controls */}
+                    <motion.div 
+                      layout
+                      className={cn(
+                        "flex-1 min-w-0 space-y-4 sm:space-y-5 transition-all duration-300",
+                        showQueue 
+                          ? "text-center xl:text-left w-full xl:w-auto" 
+                          : "text-center lg:text-left w-full lg:w-auto",
+                        showQueue ? "max-w-md xl:max-w-md" : "max-w-lg xl:max-w-lg"
+                      )}
+                    >
+                      {/* Song Details */}
+                      <div className="space-y-1">
+                        <motion.h1 
+                          layout="position"
+                          className={cn(
+                            "truncate max-w-full font-bold text-white leading-tight",
+                            showQueue 
+                              ? "text-lg sm:text-xl xl:text-xl" 
+                              : "text-xl sm:text-xl md:text-xl lg:text-2xl"
+                          )}
+                        >
+                          {currentSong.title}
+                        </motion.h1>
+                        <motion.p 
+                          layout="position"
+                          className={cn(
+                            "truncate max-w-full text-white/50 font-medium",
+                            showQueue 
+                              ? "text-sm xl:text-base" 
+                              : "text-sm sm:text-base md:text-base"
+                          )}
+                        >
+                          {currentSong.artist}
+                        </motion.p>
+                      </div>
 
-                <Button
-                  size="icon"
-                  className="bg-white lg:hover:bg-white/80 text-black rounded-full h-16 w-16 shadow-xl"
-                  onClick={togglePlay}
-                >
-                  {isPlaying ? <Pause className="h-9 w-9" /> : <Play className="h-9 w-9" />}
-                </Button>
+                      {/* Progress Bar - Fullscreen */}
+                      <div className={cn(
+                        "space-y-2 w-full",
+                        showQueue ? "max-w-sm xl:max-w-md mx-auto xl:mx-0" : "max-w-md lg:max-w-lg mx-auto lg:mx-0"
+                      )}>
+                        <ProgressSlider
+                          value={currentTime}
+                          max={duration || 100}
+                          onChange={handleSeek}
+                          className="h-1.5"
+                          trackColor="bg-white/20"
+                          progressColor="bg-white/95"
+                        />
+                        <div className="flex justify-between text-xs text-white/40 tabular-nums">
+                          <span>{formatTime(currentTime)}</span>
+                          <span>{formatTime(duration)}</span>
+                        </div>
+                      </div>
 
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={playNext}
-                  className="text-zinc-400 hover:text-white"
-                >
-                  <SkipForward className="h-10 w-10" />
-                </Button>
+                      {/* Controls */}
+                      <div className={cn(
+                        "flex items-center gap-4 sm:gap-5 lg:gap-8",
+                        "justify-center"
+                      )}>
+                        <button
+                          onClick={toggleShuffle}
+                          className={cn(
+                            "p-2 rounded-full transition-all relative",
+                            isShuffle 
+                              ? "text-violet-400" 
+                              : "text-white/60 hover:text-white"
+                          )}
+                        >
+                          <Shuffle className="w-5 h-5" />
+                        </button>
 
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={toggleRepeat}
-                  className={`${isRepeat ? "text-white" : "text-zinc-400"} hover:text-white`}
-                >
-                  <Repeat className="h-7 w-7" />
-                </Button>
+                        <button
+                          onClick={playPrevious}
+                          className="p-2 text-white/70 hover:text-white transition-colors"
+                        >
+                          <SkipBack className="w-6 h-6" fill="currentColor" />
+                        </button>
+
+                        <motion.button
+                          whileHover={{ scale: 1.03 }}
+                          whileTap={{ scale: 0.95 }}
+                          onClick={togglePlay}
+                          className={cn(
+                            "rounded-full bg-white text-black flex items-center justify-center shadow-xl",
+                            showQueue 
+                              ? "w-14 h-14" 
+                              : "w-14 h-14 lg:w-16 lg:h-16"
+                          )}
+                        >
+                          {isPlaying ? (
+                            <Pause className="w-6 h-6" fill="currentColor" />
+                          ) : (
+                            <Play className="w-6 h-6 ml-0.5" fill="currentColor" />
+                          )}
+                        </motion.button>
+
+                        <button
+                          onClick={playNext}
+                          className="p-2 text-white/70 hover:text-white transition-colors"
+                        >
+                          <SkipForward className="w-6 h-6" fill="currentColor" />
+                        </button>
+
+                        <button
+                          onClick={toggleRepeat}
+                          className={cn(
+                            "p-2 rounded-full transition-all relative",
+                            isRepeat 
+                              ? "text-violet-400" 
+                              : "text-white/60 hover:text-white"
+                          )}
+                        >
+                          <Repeat className="w-5 h-5" />
+                        </button>
+                      </div>
+
+                      {/* Extra Actions */}
+                      <div className={cn(
+                        "flex items-center gap-3 pt-1",
+                        "justify-center lg:justify-start"
+                      )}>
+                        <LikeButton songId={currentSong._id} />
+                        <button
+                          onClick={start}
+                          disabled={state === "downloading" || state === "completed"}
+                          className={cn(
+                            "p-2 transition-colors",
+                            state === "completed"
+                              ? "text-violet-400"
+                              : "text-white/70 hover:text-white"
+                          )}
+                        >
+                          <Download className="w-5 h-5" />
+                        </button>
+                        
+                        {/* Volume */}
+                        <div className="hidden sm:flex items-center gap-2 ml-auto">
+                          <button
+                            onClick={toggleMute}
+                            className="text-white/70 hover:text-white transition-colors"
+                          >
+                            {isMuted || volume === 0 ? (
+                              <VolumeX className="w-5 h-5" />
+                            ) : volume < 50 ? (
+                              <Volume1 className="w-5 h-5" />
+                            ) : (
+                              <Volume2 className="w-5 h-5" />
+                            )}
+                          </button>
+                          
+                          <div className="w-20 lg:w-24">
+                            <ProgressSlider
+                              value={volume}
+                              max={100}
+                              onChange={handleVolumeChange}
+                              trackColor="bg-white/20"
+                              progressColor="bg-white/95"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  </div>
+                </motion.div>
+
+                {/* Queue Panel */}
+                <AnimatePresence>
+                  {showQueue && (
+                    <motion.div
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 380, opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ type: "spring", damping: 30, stiffness: 300 }}
+                      className="h-full border-l border-white/5 overflow-hidden shrink-0 hidden lg:block"
+                      style={{ 
+                        background: 'rgba(0, 0, 0, 0.6)',
+                        backdropFilter: 'blur(20px)',
+                      }}
+                    >
+                      <div className="w-[380px] h-full">
+                        <Queue />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
-            <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black via-transparent to-transparent pointer-events-none" />
+            {/* Mobile Queue */}
+            <AnimatePresence>
+              {showQueue && (
+                <motion.div
+                  initial={{ y: "100%" }}
+                  animate={{ y: 0 }}
+                  exit={{ y: "100%" }}
+                  transition={{ type: "spring", damping: 30, stiffness: 300 }}
+                  className="fixed inset-x-0 bottom-0 top-16 z-[10] bg-zinc-950/95 backdrop-blur-xl lg:hidden"
+                >
+                  <Queue />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Song Options Menu */}
+            <AnimatePresence>
+              {showSongOptions && (
+                <SongOptionsMenu
+                  isOpen={showSongOptions}
+                  onClose={() => setShowSongOptions(false)}
+                  song={currentSong}
+                  position={optionsPosition}
+                  onToggleFullscreen={toggleBrowserFullscreen}
+                  isFullscreen={isBrowserFullscreen}
+                />
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
+
       {/* Desktop Context Menu */}
       {songOptionsOpen && currentSong && contextMenuPos && (
         <div
@@ -983,9 +977,8 @@ export const PlaybackControls = () => {
             className="bg-gradient-to-b from-zinc-900/95 to-zinc-950/95 border border-white/10 rounded-xl shadow-2xl backdrop-blur-xl p-1 w-48"
             style={{
               position: "fixed",
-              top: contextMenuPos.y,
-              left: contextMenuPos.x,
-              transform: "translate(-50%, -100%)",
+              top: Math.min(contextMenuPos.y, window.innerHeight - 300),
+              left: Math.min(contextMenuPos.x, window.innerWidth - 200),
             }}
             onClick={(e) => e.stopPropagation()}
           >

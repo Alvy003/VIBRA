@@ -9,11 +9,11 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow lg:hover:bg-violet-500/100",
+        default: "bg-primary text-primary-foreground shadow",
         destructive: "bg-destructive text-destructive-foreground shadow-sm lg:hover:bg-destructive/90",
-        outline: "border border-input bg-background text-foreground shadow-sm lg:hover:bg-accent lg:hover:text-accent-foreground",
+        outline: "border border-input bg-background text-foreground shadow-sm",
         secondary: "bg-secondary text-secondary-foreground shadow-sm lg:hover:bg-secondary/80",
-        ghost: "bg-transparent text-foreground lg:hover:bg-zinc-800 lg:hover:text-accent-foreground",
+        ghost: "bg-transparent text-foreground",
         link: "text-primary underline-offset-4 lg:hover:underline",
       }
       

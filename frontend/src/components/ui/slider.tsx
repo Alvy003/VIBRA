@@ -18,7 +18,7 @@ const Slider = React.forwardRef<
     <SliderPrimitive.Track
       className={cn(
         // horizontal
-        "relative h-[4.8px] lg:h-[3.5px] w-full grow overflow-hidden rounded-full bg-white/25",
+        "relative h-[3.5px] lg:h-[3.5px] w-full grow overflow-hidden rounded-full bg-white/25",
         // vertical support
         "data-[orientation=vertical]:h-full data-[orientation=vertical]:w-[3px]"
       )}
@@ -26,7 +26,7 @@ const Slider = React.forwardRef<
       {/* Played range */}
       <SliderPrimitive.Range
         className={cn(
-          "absolute h-full bg-white",
+          "absolute h-full bg-white/80",
           "data-[orientation=vertical]:w-full data-[orientation=vertical]:h-auto"
         )}
       />
@@ -35,7 +35,7 @@ const Slider = React.forwardRef<
     {/* Thumb (white, subtle shadow) */}
     <SliderPrimitive.Thumb
       className={cn(
-        "block h-[10px] w-[10px] rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.35)]",
+        "block h-[8px] w-[8px] rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.35)]",
         "transition-transform focus-visible:scale-105 active:scale-110",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60",
         "disabled:pointer-events-none disabled:opacity-50",

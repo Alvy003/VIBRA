@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { usePlaylistStore } from "@/stores/usePlaylistStore";
-import { ListMusic, X, Check, Music, Loader2, Plus } from "lucide-react";
+import { ListMusic, X, Check, Music, Loader, Plus } from "lucide-react";
 import toast from "react-hot-toast";
 import { Song, Playlist } from "@/types";
 import { axiosInstance } from "@/lib/axios";
@@ -171,7 +171,7 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[99999]" 
+        className="fixed inset-0 bg-black/70 z-[99999]" 
         onClick={handleClose} 
       />
       <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 pointer-events-none">
@@ -187,12 +187,12 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
           <div className="p-5 pb-4 border-b border-zinc-800">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-violet-500/10 flex items-center justify-center">
-                  <ListMusic className="w-5 h-5 text-violet-500" />
-                </div>
+                {/* <div className="w-10 h-10 rounded-full bg-zinc-800/50 flex items-center justify-center">
+                  <ListMusic className="w-5 h-5 text-zinc-400" />
+                </div> */}
                 <div className="min-w-0">
-                  <h3 className="text-lg font-semibold text-white">Add to Playlist</h3>
-                  <p className="text-sm text-zinc-400 truncate max-w-[200px]">{song.title}</p>
+                <h3 id="edit-playlist-title">Add to Playlist</h3>
+                  <p className="text-sm text-zinc-400 line-clamp-1">{song.title}</p>
                 </div>
               </div>
               <button 
@@ -205,10 +205,10 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
           </div>
 
           {/* Content */}
-          <div className="p-3 max-h-[350px] overflow-y-auto">
+          <div className="p-3 max-h-[350px] overflow-y-auto no-scrollbar">
             {isLoading ? (
               <div className="flex items-center justify-center py-12">
-                <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
+                <Loader className="w-6 h-6 text-violet-500 animate-spin" />
               </div>
             ) : (
               <div className="space-y-1">
@@ -218,8 +218,8 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
                     onClick={() => setShowCreate(true)}
                     className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-zinc-800/70 transition-all"
                   >
-                    <div className="w-11 h-11 rounded-lg bg-violet-500/20 flex items-center justify-center">
-                      <Plus className="w-5 h-5 text-violet-400" />
+                    <div className="w-11 h-11 rounded-lg bg-zinc-800/50 flex items-center justify-center">
+                      <Plus className="w-5 h-5 text-zinc-400" />
                     </div>
                     <span className="text-sm font-medium text-white">Create New Playlist</span>
                   </button>
@@ -256,7 +256,7 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
                         disabled={!newPlaylistName.trim() || isSaving === "new"}
                         className="flex-1 px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm flex items-center justify-center transition-colors"
                       >
-                        {isSaving === "new" ? <Loader2 className="w-4 h-4 animate-spin" /> : "Create & Add"}
+                        {isSaving === "new" ? <Loader className="w-4 h-4 animate-spin" /> : "Create & Add"}
                       </button>
                     </div>
                   </div>
@@ -265,7 +265,7 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
                 {/* Empty State */}
                 {localPlaylists.length === 0 && !showCreate && !isLoading && (
                   <div className="text-center py-8 text-zinc-500">
-                    <Music className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                    <Music className="w-11 h-11 mx-auto mb-2 opacity-50" />
                     <p className="text-sm">No playlists yet</p>
                     <p className="text-xs mt-1">Create one to get started</p>
                   </div>
@@ -283,24 +283,10 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
                       disabled={!!isSaving}
                       className={`w-full flex items-center gap-3 p-3 rounded-xl transition-all duration-200 ${
                         isInPlaylist 
-                          ? "bg-violet-500/10 ring-1 ring-violet-500/30" 
+                          ? "bg-transparent" 
                           : "hover:bg-zinc-800/70"
                       } ${isSaving ? "opacity-70" : ""}`}
                     >
-                      {/* Checkbox */}
-                      <div
-                        className={`w-5 h-5 rounded flex items-center justify-center shrink-0 transition-all duration-200 ${
-                          isInPlaylist
-                            ? "bg-violet-500"
-                            : "border-2 border-zinc-600"
-                        }`}
-                      >
-                        {isModifying ? (
-                          <Loader2 className="w-3 h-3 text-white animate-spin" />
-                        ) : isInPlaylist ? (
-                          <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />
-                        ) : null}
-                      </div>
 
                       {/* Thumbnail */}
                       <div className="w-11 h-11 rounded-lg bg-zinc-800 flex items-center justify-center overflow-hidden shrink-0">
@@ -315,9 +301,25 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
                       
                       {/* Info */}
                       <div className="flex-1 text-left min-w-0">
-                        <p className="text-sm font-medium text-white truncate">{playlist.name}</p>
+                        <p className="text-sm font-medium text-white line-clamp-1">{playlist.name}</p>
                         <p className="text-xs text-zinc-400">{playlist.songs?.length || 0} songs</p>
                       </div>
+
+                      {/* Checkbox */}
+                      <div
+                        className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 ${
+                          isInPlaylist
+                            ? "bg-violet-500"
+                            : "border-2 border-zinc-600"
+                        }`}
+                      >
+                        {isModifying ? (
+                          <Loader className="w-3 h-3 text-white animate-spin" />
+                        ) : isInPlaylist ? (
+                          <Check className="w-3.5 h-3.5 text-black" strokeWidth={3} />
+                        ) : null}
+                      </div>
+
                     </button>
                   );
                 })}
