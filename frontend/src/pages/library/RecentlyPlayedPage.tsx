@@ -34,8 +34,8 @@ const RecentlyPlayedPage = () => {
   return (
     <main className="h-full bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-lg overflow-hidden">
       <Topbar />
-      <ScrollArea className="h-[calc(100vh-55px)]">
-        <MobileSubHeader title="Recently Played" showBack className="px-5" />
+      <ScrollArea className="h-[calc(100vh-55px)] md:h-[calc(100vh-180px)]">
+        <MobileSubHeader title="Recently Played" showBack className="px-5 pb-1 md:px-10" />
         
         <div className="px-2 pb-4">
           {loading ? (

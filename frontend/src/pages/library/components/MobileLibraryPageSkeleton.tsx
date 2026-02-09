@@ -26,16 +26,6 @@ const SectionHeaderSkeleton = () => (
   </div>
 );
 
-// List Item Skeleton (for songs, playlists, albums)
-const ListItemSkeleton = () => (
-  <div className="flex items-center gap-3 p-2 -mx-2">
-    <Shimmer className="size-12 rounded-lg flex-shrink-0" />
-    <div className="flex-1 min-w-0 space-y-1.5">
-      <Shimmer className="h-3.5 w-3/4 rounded" />
-      <Shimmer className="h-2.5 w-1/2 rounded" />
-    </div>
-  </div>
-);
 
 // Mosaic Thumbnail Skeleton (for 2x2 grid effect)
 const MosaicThumbnailSkeleton = () => (
@@ -101,16 +91,6 @@ const MobileLibraryPageSkeleton = () => (
           <FilterChipSkeleton width="w-20" />
         </div>
 
-        {/* Recently Played Section Skeleton */}
-        <section className="space-y-1">
-          <SectionHeaderSkeleton />
-          <div className="space-y-0.5">
-            {[...Array(3)].map((_, i) => (
-              <ListItemSkeleton key={`recent-${i}`} />
-            ))}
-          </div>
-        </section>
-
         {/* Playlists Section Skeleton */}
         <section className="space-y-1">
           <SectionHeaderSkeleton />
@@ -127,7 +107,7 @@ const MobileLibraryPageSkeleton = () => (
         <section className="space-y-1">
           <SectionHeaderSkeleton />
           <div className="space-y-0.5">
-            {[...Array(4)].map((_, i) => (
+            {[...Array(6)].map((_, i) => (
               <CollectionItemSkeleton key={`album-${i}`} />
             ))}
           </div>

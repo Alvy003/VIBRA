@@ -134,7 +134,7 @@ const SongRow = memo(({
         </div>
         <div className="flex flex-col min-w-0 flex-1">
           <div className={cn(
-            "text-sm font-medium line-clamp-1",
+            "text-sm font-medium line-clamp-1 leading-snug",
             isCurrentSong ? "text-violet-400" : "text-white"
           )}>
             {song.title}
@@ -165,20 +165,20 @@ const SongRow = memo(({
     >
       {/* Index / Play / Current */}
       <div className="w-10 flex justify-center shrink-0">
-        <div className="relative flex items-center justify-center text-sm text-zinc-400 tabular-nums">
+        <div className="relative flex items-center justify-center text-sm text-zinc-500 tabular-nums">
           {isCurrentSong && isPlaying ? (
             <span className="text-violet-400 animate-pulse">♫</span>
           ) : (
             <>
               <span className="group-hover:opacity-0 transition-opacity">{index + 1}</span>
-              <Play className="absolute h-4 w-4 opacity-0 group-hover:opacity-100 text-white" fill="white" />
+              <Play className="absolute h-4 w-4 opacity-0 group-hover:opacity-100 text-white" />
             </>
           )}
         </div>
       </div>
 
       {/* Image */}
-      <div className="w-10 h-10 shrink-0">
+      <div className="size-10 shrink-0">
         <img
           src={song.imageUrl}
           alt={song.title}
@@ -188,14 +188,14 @@ const SongRow = memo(({
 
       {/* Title */}
       <div className={cn(
-        "flex-1 text-base min-w-0 truncate",
+        "flex-1 min-w-0 text-sm font-medium line-clamp-1",
         isCurrentSong ? "text-violet-400" : "text-white"
       )}>
         {song.title}
       </div>
 
       {/* Artist */}
-      <div className="flex-1 text-base min-w-0 truncate text-zinc-400 hidden sm:block">
+      <div className="flex-1 min-w-0 text-sm text-zinc-400 line-clamp-1 hidden md:block">
         {song.artist}
       </div>
 

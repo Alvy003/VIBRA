@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect, memo, useRef } from "react";
 import { formatDuration } from "../AlbumPage";
 import SongOptions from "./SongOptions";
+import { Play } from "lucide-react";
 
 interface Song {
   _id: string;
@@ -193,11 +194,19 @@ export const SongRow = memo(({
         isCurrentSong && "bg-white/5"
       )}
     >
-      <div className="hidden md:flex justify-center text-zinc-400">
+      {/* Index - Desktop only */}
+      <div className="hidden md:flex items-center justify-center">
         {isCurrentSong && isPlaying ? (
-          <span className="text-violet-400 animate-pulse">♫</span>
+          <div className="w-4 h-4 flex items-center justify-center text-violet-400">
+            <span className="text-sm animate-pulse">♫</span>
+          </div>
         ) : (
-          index + 1
+          <>
+            <span className="text-zinc-500 text-sm group-hover:hidden">
+              {index + 1}
+            </span>
+            <Play className="h-4 w-4 text-zinc-300 hidden group-hover:block" />
+          </>
         )}
       </div>
 

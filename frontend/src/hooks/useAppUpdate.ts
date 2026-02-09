@@ -3,41 +3,93 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 const SW_VERSION_KEY = 'vibra_sw_version';
 const LAST_CHECK_KEY = 'vibra_last_update_check';
+const DISMISSED_VERSION_KEY = 'vibra_dismissed_update_version';
+const APPLIED_VERSION_KEY = 'vibra_applied_update_version';
 
 export const useAppUpdate = (autoCheck = false) => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [updateApplied, setUpdateApplied] = useState(false);
   const [currentVersion, setCurrentVersion] = useState<string | null>(null);
   const [newVersion, setNewVersion] = useState<string | null>(null);
   const registrationRef = useRef<ServiceWorkerRegistration | null>(null);
+  const hasCheckedWaitingRef = useRef(false);
 
-  // Get SW version via postMessage
-  const getSwVersion = useCallback((sw: ServiceWorker | null): Promise<string | null> => {
-    return new Promise((resolve) => {
-      if (!sw || sw.state === 'redundant') {
-        resolve(null);
-        return;
+  const getSwVersion = useCallback(
+    (sw: ServiceWorker | null): Promise<string | null> => {
+      return new Promise((resolve) => {
+        if (!sw || sw.state === 'redundant') {
+          resolve(null);
+          return;
+        }
+
+        const timeout = setTimeout(() => resolve(null), 2000);
+
+        const channel = new MessageChannel();
+        channel.port1.onmessage = (event) => {
+          clearTimeout(timeout);
+          resolve(event.data?.version || null);
+        };
+
+        try {
+          sw.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
+        } catch {
+          clearTimeout(timeout);
+          resolve(null);
+        }
+      });
+    },
+    []
+  );
+
+  const isGenuineUpdate = useCallback(
+    (activeVersion: string | null, waitingVersion: string | null): boolean => {
+      if (!waitingVersion || !activeVersion) return false;
+      if (waitingVersion === activeVersion) return false;
+
+      const appliedVersion = localStorage.getItem(APPLIED_VERSION_KEY);
+      if (appliedVersion === waitingVersion) return false;
+
+      const dismissedVersion = localStorage.getItem(DISMISSED_VERSION_KEY);
+      if (dismissedVersion === waitingVersion) return false;
+
+      return true;
+    },
+    []
+  );
+
+  const evaluateWaitingWorker = useCallback(
+    async (reg: ServiceWorkerRegistration): Promise<boolean> => {
+      if (!reg.waiting) return false;
+
+      const activeVersion = await getSwVersion(reg.active);
+      const waitingVersion = await getSwVersion(reg.waiting);
+
+      setCurrentVersion(activeVersion);
+      if (activeVersion) {
+        localStorage.setItem(SW_VERSION_KEY, activeVersion);
       }
 
-      const timeout = setTimeout(() => resolve(null), 2000);
-      
-      const channel = new MessageChannel();
-      channel.port1.onmessage = (event) => {
-        clearTimeout(timeout);
-        resolve(event.data?.version || null);
-      };
-
-      try {
-        sw.postMessage({ type: 'GET_VERSION' }, [channel.port2]);
-      } catch {
-        clearTimeout(timeout);
-        resolve(null);
+      if (isGenuineUpdate(activeVersion, waitingVersion)) {
+        setNewVersion(waitingVersion);
+        setUpdateAvailable(true);
+        return true;
       }
-    });
-  }, []);
 
-  // Check for updates
+      if (reg.waiting && waitingVersion && waitingVersion === activeVersion) {
+        try {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        } catch {
+          // ignore
+        }
+      }
+
+      return false;
+    },
+    [getSwVersion, isGenuineUpdate]
+  );
+
   const checkForUpdate = useCallback(async (): Promise<boolean> => {
     if (!('serviceWorker' in navigator)) {
       return false;
@@ -49,51 +101,46 @@ export const useAppUpdate = (autoCheck = false) => {
       const reg = await navigator.serviceWorker.ready;
       registrationRef.current = reg;
 
-      // Get current active version
       const activeVersion = await getSwVersion(reg.active);
       setCurrentVersion(activeVersion);
       if (activeVersion) {
         localStorage.setItem(SW_VERSION_KEY, activeVersion);
       }
 
-      // Force check for updates
       await reg.update();
+      await new Promise((resolve) => setTimeout(resolve, 1500));
 
-      // Wait for update to be detected
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      // Check if there's a waiting worker
       if (reg.waiting) {
-        const waitingVersion = await getSwVersion(reg.waiting);
-        setNewVersion(waitingVersion);
-        
-        if (waitingVersion && waitingVersion !== activeVersion) {
-          setUpdateAvailable(true);
+        const found = await evaluateWaitingWorker(reg);
+        if (found) {
           setIsChecking(false);
           localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString());
           return true;
         }
       }
 
-      // Check installing worker - with null check fix
       const installingWorker = reg.installing;
       if (installingWorker) {
         await new Promise<void>((resolve) => {
           const handler = () => {
-            if (installingWorker.state === 'installed') {
+            if (
+              installingWorker.state === 'installed' ||
+              installingWorker.state === 'redundant'
+            ) {
               installingWorker.removeEventListener('statechange', handler);
               resolve();
             }
           };
           installingWorker.addEventListener('statechange', handler);
-          setTimeout(resolve, 10000);
+          setTimeout(() => {
+            installingWorker.removeEventListener('statechange', handler);
+            resolve();
+          }, 10000);
         });
 
         if (reg.waiting) {
-          const waitingVersion = await getSwVersion(reg.waiting);
-          setNewVersion(waitingVersion);
-          if (waitingVersion && waitingVersion !== activeVersion) {
-            setUpdateAvailable(true);
+          const found = await evaluateWaitingWorker(reg);
+          if (found) {
             setIsChecking(false);
             localStorage.setItem(LAST_CHECK_KEY, new Date().toISOString());
             return true;
@@ -109,67 +156,115 @@ export const useAppUpdate = (autoCheck = false) => {
       setIsChecking(false);
       return false;
     }
-  }, [getSwVersion]);
+  }, [getSwVersion, evaluateWaitingWorker]);
 
-  // Apply update
+  // Apply update — NO RELOAD, just activate and tell user to reopen
   const applyUpdate = useCallback(async () => {
     const reg = registrationRef.current;
-    
+
     if (!reg?.waiting) {
-      window.location.reload();
+      // No waiting worker, nothing to do
+      setUpdateAvailable(false);
       return;
     }
 
     setIsUpdating(true);
 
     if (newVersion) {
+      localStorage.setItem(APPLIED_VERSION_KEY, newVersion);
       localStorage.setItem(SW_VERSION_KEY, newVersion);
     }
 
+    // Tell the waiting SW to activate
     reg.waiting.postMessage({ type: 'SKIP_WAITING' });
 
-    setTimeout(() => {
-      window.location.reload();
-    }, 500);
+    // Wait for the new SW to take control
+    await new Promise<void>((resolve) => {
+      const onControllerChange = () => {
+        navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
+        resolve();
+      };
+      navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
+      // Fallback timeout
+      setTimeout(resolve, 3000);
+    });
+
+    setIsUpdating(false);
+    setUpdateAvailable(false);
+    setUpdateApplied(true);
+    sessionStorage.setItem('vibra_update_applied', '1');
   }, [newVersion]);
 
-  // Load stored version on mount + optional auto-check
   useEffect(() => {
+    if (hasCheckedWaitingRef.current) return;
+    hasCheckedWaitingRef.current = true;
+
     const storedVersion = localStorage.getItem(SW_VERSION_KEY);
     if (storedVersion) {
       setCurrentVersion(storedVersion);
     }
 
-    // Auto-check if enabled
-    if (autoCheck && 'serviceWorker' in navigator) {
-      const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
-      const oneHour = 60 * 60 * 1000;
-      const shouldCheck = !lastCheck || (Date.now() - new Date(lastCheck).getTime() > oneHour);
-      
-      if (shouldCheck) {
-        setTimeout(() => checkForUpdate(), 3000);
-      } else {
-        // Still check for waiting worker without network request
-        navigator.serviceWorker.ready.then(async (reg) => {
-          registrationRef.current = reg;
-          if (reg.waiting) {
-            const activeVersion = await getSwVersion(reg.active);
-            const waitingVersion = await getSwVersion(reg.waiting);
-            setCurrentVersion(activeVersion);
-            if (waitingVersion && waitingVersion !== activeVersion) {
-              setNewVersion(waitingVersion);
-              setUpdateAvailable(true);
-            }
+    const appliedVersion = localStorage.getItem(APPLIED_VERSION_KEY);
+    const wasUpdateApplied = sessionStorage.getItem('vibra_update_applied') === '1';
+
+    if (!('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker.ready
+      .then(async (reg) => {
+        registrationRef.current = reg;
+
+        const activeVersion = await getSwVersion(reg.active);
+        if (activeVersion) {
+          setCurrentVersion(activeVersion);
+          localStorage.setItem(SW_VERSION_KEY, activeVersion);
+
+          if (appliedVersion === activeVersion) {
+            // Update successfully applied — the active SW is the new version
+            localStorage.removeItem(APPLIED_VERSION_KEY);
+            sessionStorage.removeItem('vibra_update_applied');
+            // Don't show "reopen" banner since it's already active
+          } else if (wasUpdateApplied && appliedVersion && appliedVersion !== activeVersion) {
+            // Update was applied (skipWaiting sent) but the new SW
+            // hasn't taken control yet — show the reopen message
+            setUpdateApplied(true);
           }
-        }).catch(() => {});
-      }
-    }
-  }, [autoCheck, checkForUpdate, getSwVersion]);
+        }
+
+        if (reg.waiting) {
+          await evaluateWaitingWorker(reg);
+        }
+
+        if (autoCheck) {
+          const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
+          const oneHour = 60 * 60 * 1000;
+          const shouldCheck =
+            !lastCheck ||
+            Date.now() - new Date(lastCheck).getTime() > oneHour;
+
+          if (shouldCheck) {
+            setTimeout(() => checkForUpdate(), 3000);
+          }
+        }
+
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && reg.waiting) {
+              evaluateWaitingWorker(reg);
+            }
+          });
+        });
+      })
+      .catch(() => {});
+  }, []);
 
   return {
     updateAvailable,
     isChecking,
     isUpdating,
+    updateApplied,
     currentVersion,
     newVersion,
     checkForUpdate,

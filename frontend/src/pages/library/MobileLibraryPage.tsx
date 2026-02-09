@@ -5,14 +5,12 @@ import { usePlaylistStore } from "@/stores/usePlaylistStore";
 import { SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Heart, ListMusic, Disc3, Library, ChevronRight } from "lucide-react";
+import { Heart, ListMusic, Disc3, Library, ChevronRight, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreatePlaylistDialog } from "@/components/CreatePlaylistDialog";
 import { AnimatePresence, motion } from "framer-motion";
 import { Song } from "@/types";
 import Topbar from "@/components/Topbar";
-import { axiosInstance } from "@/lib/axios";
-import { usePlayerStore } from "@/stores/usePlayerStore";
 import { MobileOverlaySpacer } from "@/components/MobileOverlaySpacer";
 import MobileSubHeader from "@/components/MobileSubHeader";
 import MobileLibraryPageSkeleton from "./components/MobileLibraryPageSkeleton";
@@ -56,25 +54,25 @@ const FilterChip = ({
 );
 
 // Mosaic Thumbnail Component
-const MosaicThumbnail = ({ 
+const MosaicThumbnail = ({
   previewImages,
   songs,
   imageUrl,
   name,
-  type
-}: { 
+  type,
+}: {
   previewImages?: string[];
   songs?: Song[];
   imageUrl?: string | null;
   name: string;
-  type: 'playlist' | 'album';
+  type: "playlist" | "album";
 }) => {
   const Icon = type === "playlist" ? ListMusic : Disc3;
 
   if (imageUrl) {
     return (
-      <div className="size-12 rounded-lg overflow-hidden bg-zinc-800">
-        <img src={imageUrl} alt={name} className="w-full h-full object-cover" />
+      <div className="size-12 rounded-md overflow-hidden bg-zinc-800">
+        <img src={imageUrl} alt={name} loading="lazy" className="w-full h-full object-cover" />
       </div>
     );
   }
@@ -82,7 +80,7 @@ const MosaicThumbnail = ({
   const covers =
     previewImages?.length
       ? previewImages.slice(0, 4)
-      : (songs || []).map(s => s.imageUrl).filter(Boolean).slice(0, 4);
+      : (songs || []).map((s) => s.imageUrl).filter(Boolean).slice(0, 4);
 
   if (covers.length === 0) {
     const gradientClass =
@@ -93,7 +91,7 @@ const MosaicThumbnail = ({
     return (
       <div
         className={cn(
-          "size-12 rounded-lg flex items-center justify-center bg-gradient-to-br",
+          "size-12 rounded-md flex items-center justify-center bg-gradient-to-br",
           gradientClass
         )}
       >
@@ -104,17 +102,22 @@ const MosaicThumbnail = ({
 
   if (covers.length < 4) {
     return (
-      <div className="size-12 rounded-lg overflow-hidden bg-zinc-800">
-        <img src={covers[0]} alt={name} className="w-full h-full object-cover" />
+      <div className="size-12 rounded-md overflow-hidden bg-zinc-800">
+        <img
+          src={covers[0]}
+          alt={name}
+          loading="lazy"
+          className="w-full h-full object-cover"
+        />
       </div>
     );
   }
 
   return (
-    <div className="size-12 rounded-lg overflow-hidden bg-zinc-800">
+    <div className="size-12 rounded-md overflow-hidden bg-zinc-800">
       <div className="w-full h-full grid grid-cols-2 grid-rows-2 gap-0.5 bg-zinc-800">
         {covers.slice(0, 4).map((cover, i) => (
-          <img key={i} src={cover} alt="" className="w-full h-full object-cover" />
+          <img key={i} src={cover} alt="" loading="lazy" className="w-full h-full object-cover" />
         ))}
       </div>
     </div>
@@ -133,7 +136,7 @@ const SectionHeader = ({
   showSeeAll?: boolean;
   seeAllLink?: string;
 }) => (
-  <div className="flex items-center justify-between mb-3">
+  <div className="flex items-center justify-between mb-2">
     <div className="flex items-center gap-2">
       <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
         {title}
@@ -186,21 +189,26 @@ const EmptyState = ({
 );
 
 const MobileLibraryPage = () => {
-  const { albums, fetchAlbums, likedSongs, fetchLikedSongs, isLoading: isAlbumLoading } = useMusicStore();
+  const {
+    albums,
+    fetchAlbums,
+    likedSongs,
+    fetchLikedSongs,
+    isLoading: isAlbumLoading,
+  } = useMusicStore();
   const {
     playlists,
     fetchUserPlaylists,
     isLoading: isPlaylistLoading,
   } = usePlaylistStore();
   const { isSignedIn, isLoaded } = useUser();
-  const { playSong } = usePlayerStore();
-
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
-  
+
   // Track if we've done the initial load
   const hasInitiallyLoadedRef = useRef(false);
-  const [showSkeleton, setShowSkeleton] = useState(!hasInitiallyLoadedRef.current);
+  const [showSkeleton, setShowSkeleton] = useState(
+    !hasInitiallyLoadedRef.current
+  );
 
   useEffect(() => {
     fetchAlbums();
@@ -210,16 +218,6 @@ const MobileLibraryPage = () => {
     if (isLoaded && isSignedIn) {
       fetchUserPlaylists();
       fetchLikedSongs();
-
-      const fetchHistory = async () => {
-        try {
-          const { data } = await axiosInstance.get("/history/recently-played?limit=10");
-          setRecentlyPlayed(data);
-        } catch (error) {
-          console.error("Failed to fetch history:", error);
-        }
-      };
-      fetchHistory();
     }
   }, [fetchUserPlaylists, fetchLikedSongs, isLoaded, isSignedIn]);
 
@@ -232,18 +230,19 @@ const MobileLibraryPage = () => {
   }, [isLoaded, isPlaylistLoading, isAlbumLoading]);
 
   const showPlaylistsSection =
-    libraryFilter === "playlists" || (libraryFilter === "all" && (playlists.length > 0 || isSignedIn));
+    libraryFilter === "playlists" ||
+    (libraryFilter === "all" && (playlists.length > 0 || isSignedIn));
 
   const showAlbumsSection =
     libraryFilter === "albums" || (libraryFilter === "all" && albums.length > 0);
 
-  const showRecentlyPlayed = libraryFilter === "all" && recentlyPlayed.length > 0;
-
   // Show skeleton only on first load when there's no cached data
-  const shouldShowSkeleton = showSkeleton && 
-    !hasInitiallyLoadedRef.current && 
+  const shouldShowSkeleton =
+    showSkeleton &&
+    !hasInitiallyLoadedRef.current &&
     (!isLoaded || (isSignedIn && (isPlaylistLoading || isAlbumLoading))) &&
-    albums.length === 0 && playlists.length === 0;
+    albums.length === 0 &&
+    playlists.length === 0;
 
   if (shouldShowSkeleton) {
     return <MobileLibraryPageSkeleton />;
@@ -254,13 +253,26 @@ const MobileLibraryPage = () => {
       <Topbar />
 
       <ScrollArea className="h-[calc(100vh-45px)] lg:h-[calc(100vh-180px)]">
-        {/* Library Header with Create Playlist Button using MobileSubHeader */}
-        <MobileSubHeader 
-          title="Your Library" 
+        {/* Library Header with Recent & Create Playlist Buttons */}
+        <MobileSubHeader
+          title="Your Library"
           className="ml-1"
           rightSlot={
             <SignedIn>
-              <div className="pr-2">
+              <div className="flex items-center gap-2 pr-2">
+                {/* Recent Button */}
+                <Link
+                  to="/library/recently-played"
+                  className={cn(
+                    "flex items-center justify-center size-9 rounded-full",
+                    "bg-zinc-800/80 active:bg-zinc-700 transition-colors"
+                  )}
+                  aria-label="Recently played"
+                >
+                  <Clock className="size-[18px] text-zinc-300" />
+                </Link>
+
+                {/* Create Playlist Button */}
                 <CreatePlaylistDialog />
               </div>
             </SignedIn>
@@ -269,9 +281,11 @@ const MobileLibraryPage = () => {
 
         <div className="px-4 pb-4 space-y-5">
           {/* Filter Chips */}
-          <div className="sticky top-11 z-10 backdrop-blur
+          <div
+            className="sticky top-11 z-10 backdrop-blur
                 flex items-center gap-2 overflow-x-auto scrollbar-none
-                -mx-4 px-4 py-2">
+                -mx-4 px-4 py-2"
+          >
             <FilterChip
               label="All"
               isActive={libraryFilter === "all"}
@@ -293,50 +307,6 @@ const MobileLibraryPage = () => {
             />
           </div>
 
-          {/* Recently Played - No slide animation */}
-          <SignedIn>
-            <AnimatePresence>
-              {showRecentlyPlayed && (
-                <motion.section
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="space-y-1"
-                >
-                  <SectionHeader 
-                    title="Recently Played"
-                    showSeeAll={recentlyPlayed.length > 3}
-                    seeAllLink="/library/recently-played"
-                  />
-
-                  <div className="space-y-0.5">
-                    {recentlyPlayed.slice(0, 3).map((song, index) => (
-                      <div
-                        key={`${song._id}-${index}`}
-                        onClick={() => playSong(song)}
-                        className="flex items-center gap-3 p-2 -mx-2 rounded-xl active:bg-white/5 transition-colors cursor-pointer"
-                      >
-                        <div className="size-12 rounded-lg overflow-hidden bg-zinc-800 shrink-0">
-                          <img
-                            src={song.imageUrl}
-                            alt={song.title}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium text-white text-sm line-clamp-1">
-                            {song.title}
-                          </p>
-                          <p className="text-xs text-zinc-400 line-clamp-1">{song.artist}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </motion.section>
-              )}
-            </AnimatePresence>
-          </SignedIn>
-
           {/* Playlists Section (including Liked Songs) */}
           <SignedIn>
             <AnimatePresence>
@@ -354,7 +324,10 @@ const MobileLibraryPage = () => {
                   {isPlaylistLoading && playlists.length === 0 ? (
                     <div className="space-y-2">
                       {[1, 2, 3].map((i) => (
-                        <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                        <div
+                          key={i}
+                          className="flex items-center gap-3 p-2 animate-pulse"
+                        >
                           <div className="size-12 bg-zinc-800 rounded-lg" />
                           <div className="flex-1 space-y-2">
                             <div className="h-4 bg-zinc-800 rounded w-3/4" />
@@ -371,7 +344,7 @@ const MobileLibraryPage = () => {
                           to="/favorites"
                           className="flex items-center gap-3 p-2 -mx-2 rounded-xl active:bg-white/5 transition-colors"
                         >
-                          <div className="size-12 rounded-lg bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center shrink-0">
+                          <div className="size-12 rounded-md bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center shrink-0">
                             <Heart className="size-6 text-white" fill="white" />
                           </div>
                           <div className="flex-1 min-w-0">
@@ -442,7 +415,10 @@ const MobileLibraryPage = () => {
                 {isAlbumLoading && albums.length === 0 ? (
                   <div className="space-y-2">
                     {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center gap-3 p-2 animate-pulse">
+                      <div
+                        key={i}
+                        className="flex items-center gap-3 p-2 animate-pulse"
+                      >
                         <div className="size-12 bg-zinc-800 rounded-lg" />
                         <div className="flex-1 space-y-2">
                           <div className="h-4 bg-zinc-800 rounded w-3/4" />
@@ -476,7 +452,9 @@ const MobileLibraryPage = () => {
                             type="album"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm text-white line-clamp-1">{album.title}</p>
+                            <p className="font-medium text-sm text-white line-clamp-1">
+                              {album.title}
+                            </p>
                             <p className="text-xs text-zinc-400 line-clamp-1">
                               Album • {album.artist}
                             </p>

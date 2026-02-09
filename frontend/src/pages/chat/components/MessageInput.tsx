@@ -124,7 +124,7 @@ function EmojiPicker({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 10, scale: 0.95 }}
       transition={{ duration: 0.15 }}
-      className="absolute bottom-full mb-2 left-0 right-0 sm:left-0 sm:right-auto sm:w-[340px] z-50"
+      className="absolute bottom-full mb-0.5 left-2 right-2 sm:left-2 md:right-auto md:left-2 sm:right-auto sm:w-[340px] z-50"
     >
       <div className="bg-[#1c1c24] rounded-2xl border border-[#2a2a35] shadow-2xl overflow-hidden">
         {/* Search bar placeholder - optional */}
@@ -534,7 +534,7 @@ const MessageInput = ({ onFocus }: Props) => {
   return (
     <>
       {/* Fully Transparent Container */}
-      <div className="px-2 pt-2 pb-4 sm:px-3 sm:pb-2 relative">
+      <div className="px-2 pt-1.5 pb-1.5 md:px-3 md:pb-2 relative">
         {/* File Previews */}
         <AnimatePresence>
           {selectedFiles.length > 0 && (
@@ -621,7 +621,7 @@ const MessageInput = ({ onFocus }: Props) => {
         {/* Main Input Island - Glass Effect */}
         <div className="flex items-end gap-2">
           {/* Text Input Container */}
-          <div className="flex-1 flex items-center bg-[#1c1c24]/90 backdrop-blur-md rounded-full border border-[#2a2a35]/60 shadow-xl overflow-hidden min-h-[48px]">
+          <div className="flex-1 flex items-center bg-[#1c1c24]/90 backdrop-blur-md rounded-full border border-[#2a2a35]/60 shadow-xl min-h-[48px]">
             {/* Emoji Button */}
             <button
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
@@ -666,10 +666,10 @@ const MessageInput = ({ onFocus }: Props) => {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isUploading || selectedFiles.length >= MAX_FILES || isRecording}
-              className="shrink-0 p-3 text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
+              className="shrink-0 p-3 pr-3.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors disabled:opacity-40"
               title="Attach files"
             >
-              <Paperclip className="size-5" />
+              <Paperclip className="size-[18px] sm:size-5" />
             </button>
 
             <input

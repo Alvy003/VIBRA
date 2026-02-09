@@ -32,10 +32,10 @@ const MainLayout = () => {
   // Mobile Layout
   if (isMobile) {
     return (
-      <div className="h-[100dvh] bg-black text-white flex flex-col overflow-hidden">
+      <div className="h-[100dvh] bg-zinc-900 text-white flex flex-col overflow-hidden">
         <AudioPlayer />
         
-        <main className="flex-1 overflow-hidden p-2">
+        <main className="flex-1 overflow-hidden p-0">
           <Outlet />
         </main>
 

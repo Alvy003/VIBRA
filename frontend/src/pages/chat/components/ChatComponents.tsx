@@ -43,7 +43,7 @@ export const shouldShowDateSeparator = (currentMsg: any, prevMsg: any) => {
 export function DateSeparator({ date }: { date: string }) {
   return (
     <div className="flex items-center justify-center py-3">
-      <div className="bg-[#1c1c24]/90 backdrop-blur-sm text-zinc-400 text-[11px] font-medium px-3 py-1.5 rounded-lg border border-[#2a2a35]/50">
+      <div className="bg-[#11111a]/90 backdrop-blur-sm text-zinc-400/90 text-[11px] font-medium px-3 py-1.5 rounded-lg border border-[#2a2a35]/40">
         {formatDateSeparator(date)}
       </div>
     </div>

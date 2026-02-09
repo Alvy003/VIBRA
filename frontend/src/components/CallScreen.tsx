@@ -71,15 +71,22 @@ export function CallScreen() {
     }
   }, [status]);
 
-  // Lock body scroll when full screen is open
+  // Lock body scroll
   useEffect(() => {
     if (showOverlay && !minimized) {
       document.body.style.overflow = 'hidden';
+      // Prevent overscroll/rubber-banding on iOS
+      document.body.style.position = 'fixed';
+      document.body.style.width = '100%';
     } else {
       document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
     }
     return () => {
       document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.width = '';
     };
   }, [showOverlay, minimized]);
 
@@ -91,315 +98,184 @@ export function CallScreen() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 flex items-center justify-center overflow-hidden"
-        style={{ zIndex: 99999 }}
+        transition={{ duration: 0.2 }}
+        className="fixed inset-0 flex items-center justify-center overflow-hidden bg-black touch-none"
+        style={{ 
+          // Max safe integer z-index to ensure it's always on top
+          zIndex: 2147483647 
+        }}
       >
-        {/* Animated gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-zinc-950 via-zinc-900 to-black" />
-        
-        {/* Animated blobs */}
-        <motion.div
-          className="absolute top-1/4 -left-32 w-96 h-96 rounded-full bg-violet-600/20 blur-[100px]"
-          animate={{ 
-            x: [0, 50, 0], 
-            y: [0, 30, 0],
-            scale: [1, 1.1, 1]
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full bg-violet-600/20 blur-[100px]"
-          animate={{ 
-            x: [0, -50, 0], 
-            y: [0, -30, 0],
-            scale: [1.1, 1, 1.1]
-          }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        {isIncoming && (
-          <motion.div
-            className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-emerald-500/10 blur-[120px]"
-            animate={{ 
-              scale: [1, 1.3, 1],
-              opacity: [0.3, 0.6, 0.3]
-            }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
+        {/* Static Background - Removed animations, added solid bg-black fallback */}
+        <div className="absolute inset-0 bg-zinc-950">
+           <div className="absolute inset-0 bg-gradient-to-br from-zinc-900 via-zinc-950 to-black opacity-90" />
+           {/* Static Blobs - much lighter on GPU than animated ones */}
+           <div className="absolute top-1/4 -left-32 w-96 h-96 rounded-full bg-violet-900/20 blur-[60px]" />
+           <div className="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full bg-violet-900/10 blur-[60px]" />
+        </div>
 
         {/* Top bar */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 pt-[max(env(safe-area-inset-top),16px)]">
-          {/* Call quality indicator */}
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 pt-[max(env(safe-area-inset-top),16px)] z-10">
           {status === "connected" && (
-            <motion.div 
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 backdrop-blur-sm"
-            >
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-zinc-800/50 backdrop-blur-sm border border-white/5">
               <Signal className="w-4 h-4 text-emerald-400" />
-              <span className="text-xs text-zinc-400">HD Voice</span>
-            </motion.div>
+              <span className="text-xs text-zinc-400">HD</span>
+            </div>
           )}
           {status !== "connected" && <div />}
 
-          {/* Minimize button */}
-          <motion.button
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+          <button
             onClick={() => actions.setMinimized(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 backdrop-blur-sm text-white hover:bg-zinc-700/50 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-zinc-800/50 active:bg-zinc-700/50 transition-colors border border-white/5"
           >
             <Minimize2 className="w-4 h-4" />
             <span className="text-sm">Minimize</span>
-          </motion.button>
+          </button>
         </div>
 
         {/* Main content */}
-        <div className="relative w-full max-w-md px-6 text-center text-white">
-          {/* Avatar section */}
-          <motion.div 
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: "spring", damping: 20 }}
-            className="relative mb-8"
-          >
-            {/* Outer pulsing rings for incoming */}
-            {isIncoming && (
-              <>
-                <motion.div
-                  className="absolute inset-0 -m-8 rounded-full border-2 border-violet-500/30"
-                  animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity }}
-                />
-                <motion.div
-                  className="absolute inset-0 -m-8 rounded-full border-2 border-violet-500/30"
-                  animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
-                  transition={{ duration: 1.5, repeat: Infinity, delay: 0.5 }}
-                />
-              </>
-            )}
-
-            {/* Glow effect */}
-            <motion.div
-              className={`absolute inset-0 -m-4 rounded-full blur-2xl ${
-                isIncoming ? "bg-violet-500/30" : 
-                status === "connected" ? "bg-violet-500/30" : "bg-yellow-500/20"
-              }`}
-              animate={{ 
-                opacity: [0.4, 0.7, 0.4],
-                scale: [1, 1.05, 1]
-              }}
-              transition={{ 
-                duration: status === "connected" ? 3 : 1.5, 
-                repeat: Infinity, 
-                ease: "easeInOut" 
-              }}
+        <div className="relative w-full max-w-md px-6 text-center text-white z-10 flex flex-col items-center">
+          
+          {/* Avatar section - Simplified */}
+          <div className="relative mb-8">
+            {/* Simple static glow instead of pulsing animation */}
+            <div className={`absolute inset-0 -m-4 rounded-full blur-2xl opacity-40 ${
+                isIncoming ? "bg-violet-500" : 
+                status === "connected" ? "bg-violet-900" : "bg-yellow-600"
+              }`} 
             />
 
-            {/* Avatar with ring */}
-            <motion.div
-              animate={
-                status !== "connected"
-                  ? { scale: [1, 1.03, 1] }
-                  : {}
-              }
-              transition={{
-                duration: 1.5,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-              className="relative"
-            >
-              <Avatar className={`size-36 mx-auto ring-4 ${
-                isIncoming ? "ring-violet-500/60" :
-                status === "connected" ? "ring-violet-500/60" : "ring-yellow-500/40"
-              } shadow-2xl`}>
-                <AvatarImage src={avatar} className="object-cover" />
-                <AvatarFallback className="text-4xl bg-zinc-800">{name?.[0] || "U"}</AvatarFallback>
-              </Avatar>
+            {/* Avatar */}
+            <Avatar className={`size-36 mx-auto ring-4 ${
+              isIncoming ? "ring-violet-500/60" :
+              status === "connected" ? "ring-violet-500/60" : "ring-yellow-500/40"
+            } shadow-2xl relative bg-zinc-900`}>
+              <AvatarImage src={avatar} className="object-cover" />
+              <AvatarFallback className="text-4xl bg-zinc-800">{name?.[0] || "U"}</AvatarFallback>
+            </Avatar>
 
-              {/* Status badge */}
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-medium ${
-                  isIncoming ? "bg-violet-600 text-white" :
-                  status === "connected" ? "bg-violet-600 text-white" : "bg-yellow-600 text-black"
-                }`}
-              >
-                {isIncoming ? "Incoming" : status === "connected" ? "Connected" : "Calling"}
-              </motion.div>
-            </motion.div>
-          </motion.div>
+            {/* Simple Status Badge */}
+            <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-xs font-medium border border-white/10 ${
+              isIncoming ? "bg-violet-600 text-white" :
+              status === "connected" ? "bg-violet-950 text-violet-200" : "bg-yellow-900 text-yellow-200"
+            }`}>
+              {isIncoming ? "Incoming" : status === "connected" ? "Connected" : "Calling"}
+            </div>
+          </div>
 
           {/* Name and status */}
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.1 }}
-          >
-            <h2 className="text-2xl font-bold mb-2">{name}</h2>
+          <div className="mb-4">
+            <h2 className="text-2xl font-bold mb-2 tracking-tight">{name}</h2>
             <div className="flex items-center justify-center gap-2">
-              {status === "connected" ? (
-                <p className="text-lg text-violet-400 font-mono tracking-wider">{formatTime(elapsed)}</p>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <motion.div
-                    className={`size-2 rounded-full ${isIncoming ? "bg-violet-500" : "bg-yellow-500"}`}
-                    animate={{ opacity: [1, 0.3, 1] }}
-                    transition={{ duration: 0.8, repeat: Infinity }}
-                  />
-                  <p className={`text-lg ${isIncoming ? "text-violet-400" : "text-yellow-400"}`}>
-                    {getStatusText()}
-                    <motion.span
-                      animate={{ opacity: [1, 0, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                    >...</motion.span>
-                  </p>
+              <p className={`text-lg font-medium ${
+                status === "connected" ? "text-violet-400 font-mono" : 
+                isIncoming ? "text-violet-300" : "text-yellow-400"
+              }`}>
+                {getStatusText()}
+              </p>
+            </div>
+          </div>
+
+          {/* Connected Controls - Mute/Speaker Status */}
+          {status === "connected" && (
+            <div className="flex items-center justify-center gap-3 mt-2 mb-8 min-h-[32px]">
+              {(isMuted) && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/20 text-red-400">
+                  <MicOff className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Muted</span>
+                </div>
+              )}
+              {(!speakerMode) && (
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800 text-zinc-400">
+                  <VolumeX className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Earpiece</span>
                 </div>
               )}
             </div>
-          </motion.div>
-
-          {/* Status indicators */}
-          {status === "connected" && (isMuted || !speakerMode) && (
-            <motion.div
-              initial={{ y: 10, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              className="flex items-center justify-center gap-4 mt-4"
-            >
-              {isMuted && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-500/20">
-                  <MicOff className="w-4 h-4 text-red-400" />
-                  <span className="text-sm text-red-400">Muted</span>
-                </div>
-              )}
-              {!speakerMode && (
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-zinc-800/50">
-                  <VolumeX className="w-4 h-4 text-zinc-400" />
-                  <span className="text-sm text-zinc-400">Earpiece</span>
-                </div>
-              )}
-            </motion.div>
           )}
 
-          {/* Control buttons */}
-          <motion.div
-            initial={{ y: 30, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2 }}
-            className="mt-12"
-          >
+          {/* Action Buttons Area */}
+          <div className="mt-8 w-full">
             {isIncoming ? (
-              /* Incoming call controls */
-              <div className="flex justify-center items-center gap-8">
+              <div className="flex justify-center items-center gap-12">
                 <div className="flex flex-col items-center gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                  <button
                     onClick={actions.declineCall}
-                    className="p-5 rounded-full bg-red-600 hover:bg-red-500 transition-colors shadow-lg shadow-red-500/30"
-                    aria-label="Decline"
+                    className="p-5 rounded-full bg-red-600/90 active:bg-red-700 text-white transition-colors"
                   >
                     <PhoneOff className="w-8 h-8" />
-                  </motion.button>
-                  <span className="text-sm text-zinc-400">Decline</span>
+                  </button>
+                  <span className="text-xs text-zinc-400">Decline</span>
                 </div>
 
                 <div className="flex flex-col items-center gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                  <button
                     onClick={() => {
                       actions.acceptCall();
                       actions.setMinimized(false);
                     }}
-                    className="p-5 rounded-full bg-emerald-600 hover:bg-emerald-500 transition-colors shadow-lg shadow-emerald-500/30"
-                    aria-label="Accept"
-                    animate={{
-                      boxShadow: [
-                        "0 0 0 0 rgba(16, 185, 129, 0.4)",
-                        "0 0 0 15px rgba(16, 185, 129, 0)",
-                      ],
-                    }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
+                    className="p-5 rounded-full bg-emerald-600/90 active:bg-emerald-700 text-white transition-colors animate-pulse"
                   >
                     <PhoneIncoming className="w-8 h-8" />
-                  </motion.button>
-                  <span className="text-sm text-zinc-400">Accept</span>
+                  </button>
+                  <span className="text-xs text-zinc-400">Accept</span>
                 </div>
               </div>
             ) : status === "connected" ? (
-              /* Connected call controls */
-              <div className="flex justify-center items-center gap-4">
+              <div className="flex justify-center items-center gap-6">
                 {/* Speaker */}
                 <div className="flex flex-col items-center gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                  <button
                     onClick={toggleSpeaker}
-                    className={`p-4 rounded-full transition-all shadow-lg ${
+                    className={`p-4 rounded-full transition-colors ${
                       speakerMode 
-                        ? "bg-violet-600 hover:bg-violet-500 shadow-violet-500/30" 
-                        : "bg-zinc-800 hover:bg-zinc-700 shadow-zinc-900/50"
+                        ? "bg-violet-600 text-white" 
+                        : "bg-zinc-800 text-zinc-400"
                     }`}
-                    aria-label={speakerMode ? "Switch to earpiece" : "Switch to speaker"}
                   >
                     {speakerMode ? <Volume2 className="w-6 h-6" /> : <VolumeX className="w-6 h-6" />}
-                  </motion.button>
-                  <span className="text-xs text-zinc-400">Speaker</span>
+                  </button>
+                  <span className="text-xs text-zinc-500">Speaker</span>
                 </div>
 
                 {/* Mute */}
                 <div className="flex flex-col items-center gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                  <button
                     onClick={actions.toggleMute}
-                    className={`p-4 rounded-full transition-all shadow-lg ${
+                    className={`p-4 rounded-full transition-colors ${
                       isMuted 
-                        ? "bg-red-600 hover:bg-red-500 shadow-red-500/30" 
-                        : "bg-zinc-800 hover:bg-zinc-700 shadow-zinc-900/50"
+                        ? "bg-white text-black" 
+                        : "bg-zinc-800 text-zinc-400"
                     }`}
-                    aria-label={isMuted ? "Unmute" : "Mute"}
                   >
                     {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-                  </motion.button>
-                  <span className="text-xs text-zinc-400">{isMuted ? "Unmute" : "Mute"}</span>
+                  </button>
+                  <span className="text-xs text-zinc-500">Mute</span>
                 </div>
 
-                {/* End call - larger */}
+                {/* End Call */}
                 <div className="flex flex-col items-center gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
+                  <button
                     onClick={actions.endCall}
-                    className="p-5 rounded-full bg-red-600 hover:bg-red-500 transition-colors shadow-lg shadow-red-500/30"
-                    aria-label="End call"
+                    className="p-4 rounded-full bg-red-600/90 active:bg-red-700 text-white transition-colors"
                   >
-                    <PhoneOff className="w-7 h-7" />
-                  </motion.button>
-                  <span className="text-xs text-zinc-400">End</span>
+                    <PhoneOff className="w-6 h-6" />
+                  </button>
+                  <span className="text-xs text-zinc-500">End</span>
                 </div>
               </div>
             ) : (
-              /* Calling/Connecting controls */
+              /* Calling / Connecting */
               <div className="flex flex-col items-center gap-2">
-                <motion.button
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.9 }}
+                <button
                   onClick={actions.endCall}
-                  className="p-5 rounded-full bg-red-600 hover:bg-red-500 transition-colors shadow-lg shadow-red-500/30"
-                  aria-label="Cancel call"
+                  className="p-5 rounded-full bg-red-600/90 active:bg-red-700 text-white transition-colors"
                 >
                   <PhoneOff className="w-8 h-8" />
-                </motion.button>
+                </button>
                 <span className="text-sm text-zinc-400">Cancel</span>
               </div>
             )}
-          </motion.div>
+          </div>
         </div>
 
         {/* Bottom safe area padding */}
@@ -408,6 +284,5 @@ export function CallScreen() {
     </AnimatePresence>
   );
 
-  // Render via portal to ensure highest stacking context
   return createPortal(callContent, document.body);
 }

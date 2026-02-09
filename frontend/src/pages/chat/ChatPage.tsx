@@ -8,7 +8,7 @@ import UsersList from "./components/UsersList";
 import ChatHeader from "./components/ChatHeader";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import MessageInput from "./components/MessageInput";
-import { ArrowDown, X } from "lucide-react";
+import { ChevronDown, X, ChevronsDown } from "lucide-react";
 import { axiosInstance } from "@/lib/axios";
 import type { Message } from "@/types";
 import { MessageBubble } from "./components/MessageBubble";
@@ -235,7 +235,7 @@ const ChatPage = () => {
       if (!nearBottom && messages.length > 0) {
         setShowScrollButton(true);
         if (scrollButtonTimeoutRef.current) clearTimeout(scrollButtonTimeoutRef.current);
-        scrollButtonTimeoutRef.current = window.setTimeout(() => setShowScrollButton(false), 3000);
+        // scrollButtonTimeoutRef.current = window.setTimeout(() => setShowScrollButton(false), 3000);
       } else {
         setShowScrollButton(false);
         if (scrollButtonTimeoutRef.current) clearTimeout(scrollButtonTimeoutRef.current);
@@ -462,7 +462,7 @@ const ChatPage = () => {
   return (
     <main className="h-full rounded-lg overflow-hidden bg-[#121318]/85">
       <Topbar className="hidden md:flex bg-[#121318]/85" />
-      <div className="grid h-[100dvh] sm:h-[calc(100vh-180px)] grid-cols-1 lg:grid-cols-[300px_1fr]">
+      <div className="grid h-[100dvh] md:h-[calc(100vh-180px)] grid-cols-1 lg:grid-cols-[300px_1fr]">
         <div className={`${selectedUser ? "hidden lg:block" : "block"} border-r border-zinc-800 bg-[#121318]/85`}>
           <Topbar className="flex md:hidden bg-[#121318]/85" />
           <UsersList />
@@ -599,9 +599,10 @@ const ChatPage = () => {
                         animate={{ opacity: 1, scale: 1 }}
                         exit={{ opacity: 0, scale: 0.8 }}
                         onClick={() => { scrollToBottom("smooth"); setShowScrollButton(false); }}
-                        className="absolute bottom-24 right-4 z-40 bg-[#121318]/50 backdrop-blur-sm hover:bg-[#2a2a35] text-white rounded-full p-2.5 shadow-lg border border-[#2a2a35]/60"
+                        className="absolute bottom-20 right-4 z-30 bg-[#1c1c24]/90 backdrop-blur-md rounded-full border border-[#2a2a35]/60 shadow-xl text-zinc-400 p-2.5"
                       >
-                        <ArrowDown className="h-5 w-5" />
+                        <ChevronsDown className="md:hidden h-5 w-5" />
+                        <ChevronDown className="hidden md:block h-5 w-5" />
                       </motion.button>
                     )}
                   </AnimatePresence>
@@ -612,7 +613,7 @@ const ChatPage = () => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute bottom-[70px] md:bottom-[65px] left-2 right-2 sm:left-3 sm:right-3 z-10"
+                        className="absolute bottom-[60px] md:bottom-[65px] left-2 right-[60px] sm:left-3 sm:right-[62px] z-10"  
                       >
                         <div className="flex items-center gap-2 px-4 py-2 bg-[#1c1c24]/95 backdrop-blur-sm border border-[#2a2a35]/60 rounded-2xl shadow-lg">
                           <div className="w-1 h-8 bg-violet-500 rounded-full" />
@@ -620,8 +621,8 @@ const ChatPage = () => {
                             <p className="text-xs text-violet-400 font-medium">Reply to message</p>
                             <p className="text-sm text-zinc-400 truncate">
                               {replyingTo.type === "audio" ? "🎤 Voice message" :
-                               replyingTo.type === "file" ? "📎 File" :
-                               replyingTo.content?.substring(0, 50) + (replyingTo.content && replyingTo.content.length > 50 ? "..." : "")}
+                              replyingTo.type === "file" ? "📎 File" :
+                              replyingTo.content?.substring(0, 50) + (replyingTo.content && replyingTo.content.length > 50 ? "..." : "")}
                             </p>
                           </div>
                           <button onClick={() => setReplyingTo(null)} className="p-1.5 hover:bg-[#2a2a35] rounded-full transition-colors">

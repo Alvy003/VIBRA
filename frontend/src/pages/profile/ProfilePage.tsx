@@ -15,6 +15,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { usePreferencesStore } from "@/stores/usePreferencesStore";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useAppUpdate } from "@/hooks/useAppUpdate";
 
 const ProfilePage = () => {
   const { user } = useUser();
@@ -22,6 +23,7 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   
   const { showMusicActivityInChat, setShowMusicActivityInChat } = usePreferencesStore();
+  const { currentVersion } = useAppUpdate();
 
   const handleBack = () => {
     navigate(-1);
@@ -138,7 +140,7 @@ const ProfilePage = () => {
 
             {/* App Version */}
             <div className="text-center pt-4">
-                <p className="text-xs text-white/50">Vibra v3.0.0</p>
+              <p className="text-xs text-white/50">Vibra v{currentVersion || '...'}</p>
             </div>
             </div>
         </ScrollArea>

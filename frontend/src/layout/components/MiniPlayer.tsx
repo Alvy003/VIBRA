@@ -6,8 +6,8 @@ import {
   Play, Pause, SkipBack, SkipForward, ChevronDown, 
   Shuffle, Repeat, ListMusic, MoreVertical
 } from "lucide-react";
-import { motion, AnimatePresence, useMotionValue, PanInfo } from "framer-motion";
-import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { motion, AnimatePresence, useMotionValue, useTransform, PanInfo } from "framer-motion";
+import { useState, useEffect, useCallback, lazy, Suspense, useRef } from "react";
 import LikeButton from "@/pages/home/components/LikeButton";
 import { cn } from "@/lib/utils";
 import PlaybackControlsSongOptions from "./PlaybackControlsSongOptions";
@@ -16,24 +16,6 @@ import { useChatStore } from "@/stores/useChatStore";
 import SleepTimer from "@/components/SleepTimer";
 import MarqueeText from "@/components/ui/MarqueeText";
 
-// function useDeferredMount(open: boolean, delay = 50) {
-//   const [mounted, setMounted] = useState(false);
-
-//   useEffect(() => {
-//     if (!open) {
-//       setMounted(false);
-//       return;
-//     }
-//     // Small delay to let the animation start first
-//     const timeout = setTimeout(() => {
-//       requestAnimationFrame(() => setMounted(true));
-//     }, delay);
-//     return () => clearTimeout(timeout);
-//   }, [open, delay]);
-
-//   return mounted;
-// }
-
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return "0:00";
   const minutes = Math.floor(seconds / 60);
@@ -41,13 +23,10 @@ const formatTime = (seconds: number) => {
   return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 
-// Lazy load Queue component
 const LazyQueue = lazy(() => import("@/pages/home/components/Queue"));
 
-// Queue Loading Skeleton
 const QueueSkeleton = () => (
   <div className="px-4 py-3 space-y-4 animate-in fade-in duration-200">
-    {/* Now Playing skeleton */}
     <div>
       <div className="h-3 w-20 bg-zinc-800 rounded mb-3" />
       <div className="flex items-center gap-3 p-2 rounded-lg bg-zinc-800/30">
@@ -58,8 +37,6 @@ const QueueSkeleton = () => (
         </div>
       </div>
     </div>
-    
-    {/* Next up skeleton */}
     <div>
       <div className="h-3 w-16 bg-zinc-800 rounded mb-3" />
       <div className="space-y-2">
@@ -108,7 +85,6 @@ const DraggableQueueSheet = ({ onClose }: { onClose: () => void }) => {
 
   return (
     <>
-      {/* Backdrop */}
       <motion.div
         className="fixed inset-0 bg-black/60 z-[80]"
         initial={{ opacity: 0 }}
@@ -118,7 +94,6 @@ const DraggableQueueSheet = ({ onClose }: { onClose: () => void }) => {
         onClick={onClose}
       />
 
-      {/* Sheet */}
       <motion.div
         initial={{ y: "100%" }}
         animate={{ y: 0, height: `${currentSnap * 100}vh` }}
@@ -132,7 +107,6 @@ const DraggableQueueSheet = ({ onClose }: { onClose: () => void }) => {
         style={{ y }}
         className="fixed inset-x-0 bottom-0 z-[81] bg-zinc-900 rounded-t-3xl shadow-2xl flex flex-col"
       >
-        {/* Drag Handle */}
         <motion.div 
           drag="y"
           dragConstraints={{ top: 0, bottom: 0 }}
@@ -143,7 +117,6 @@ const DraggableQueueSheet = ({ onClose }: { onClose: () => void }) => {
           <div className="w-10 h-1 bg-white/20 rounded-full" />
         </motion.div>
 
-        {/* Content with Suspense */}
         <div className="flex-1 overflow-hidden">
           <Suspense fallback={<QueueSkeleton />}>
             <LazyQueue />
@@ -154,11 +127,12 @@ const DraggableQueueSheet = ({ onClose }: { onClose: () => void }) => {
   );
 };
 
-// Main Mini Player Component
+// ─── Swipe-to-dismiss expanded player ───
+const DISMISS_THRESHOLD = 120;
+
 const MiniPlayer = () => {
   const location = useLocation();
   const { selectedUser } = useChatStore();
-  // const tier = useDeviceTier();
 
   const { 
     currentSong, isPlaying, togglePlay, playNext, playPrevious,
@@ -170,6 +144,27 @@ const MiniPlayer = () => {
   const [queueOpen, setQueueOpen] = useState(false);
   const [songOptionsOpen, setSongOptionsOpen] = useState(false);
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+
+  // Swipe-to-dismiss state
+  const dragY = useMotionValue(0);
+  const expandedOpacity = useTransform(dragY, [0, DISMISS_THRESHOLD * 1.5], [1, 0.3]);
+  const expandedScale = useTransform(dragY, [0, DISMISS_THRESHOLD * 2], [1, 0.92]);
+  const artScale = useTransform(dragY, [0, DISMISS_THRESHOLD], [1, 0.85]);
+  const isDismissing = useRef(false);
+
+  const handleExpandedDragEnd = useCallback((_: any, info: PanInfo) => {
+    if (info.offset.y > DISMISS_THRESHOLD || info.velocity.y > 800) {
+      isDismissing.current = true;
+      setIsExpanded(false);
+      // Reset after animation
+      setTimeout(() => {
+        isDismissing.current = false;
+        dragY.set(0);
+      }, 300);
+    } else {
+      dragY.set(0);
+    }
+  }, [dragY]);
 
   const toggleBrowserFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -205,12 +200,55 @@ const MiniPlayer = () => {
     setSongOptionsOpen(false);
   }, [currentSong?._id]);
 
-  const handleSeek = (value: number[]) => {
+  const handleSeek = useCallback((value: number[]) => {
     const newTime = value[0];
     setCurrentTime(newTime);
     const audio = document.querySelector("audio") as HTMLAudioElement | null;
     if (audio) audio.currentTime = newTime;
-  };
+  }, [setCurrentTime]);
+
+  // Swipe left/right to skip on expanded player album art
+  const artSwipeStartX = useRef<number | null>(null);
+  const artSwipeStartY = useRef<number | null>(null);
+  const isHorizontalSwipe = useRef(false);
+
+  const handleArtTouchStart = useCallback((e: React.TouchEvent) => {
+    artSwipeStartX.current = e.touches[0].clientX;
+    artSwipeStartY.current = e.touches[0].clientY;
+    isHorizontalSwipe.current = false;
+  }, []);
+
+  const handleArtTouchMove = useCallback((e: React.TouchEvent) => {
+    if (artSwipeStartX.current === null || artSwipeStartY.current === null) return;
+    const dx = Math.abs(e.touches[0].clientX - artSwipeStartX.current);
+    const dy = Math.abs(e.touches[0].clientY - artSwipeStartY.current);
+    if (dx > 15 && dx > dy * 1.5) {
+      isHorizontalSwipe.current = true;
+    }
+  }, []);
+
+  const handleArtTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!isHorizontalSwipe.current || artSwipeStartX.current === null) {
+      artSwipeStartX.current = null;
+      artSwipeStartY.current = null;
+      return;
+    }
+
+    const endX = e.changedTouches[0].clientX;
+    const dx = endX - artSwipeStartX.current;
+
+    if (Math.abs(dx) > 60) {
+      if (dx < 0) {
+        playNext();
+      } else {
+        playPrevious();
+      }
+    }
+
+    artSwipeStartX.current = null;
+    artSwipeStartY.current = null;
+    isHorizontalSwipe.current = false;
+  }, [playNext, playPrevious]);
 
   // Hide when in active chat conversation
   const isInActiveChat = location.pathname.startsWith("/chat") && selectedUser;
@@ -221,7 +259,7 @@ const MiniPlayer = () => {
 
   return (
     <>
-      {/* Mini Player Bar - positioned ABOVE bottom nav */}
+      {/* Mini Player Bar */}
       <AnimatePresence>
         {!isExpanded && (
           <motion.div
@@ -239,7 +277,7 @@ const MiniPlayer = () => {
                 background: 'linear-gradient(135deg, rgba(39,39,42,0.98) 0%, rgba(24,24,27,0.98) 100%)',
               }}
             >
-              {/* Subtle album art blur in background */}
+              {/* Background blur */}
               <div
                 className="absolute inset-0 opacity-30"
                 style={{ 
@@ -250,12 +288,11 @@ const MiniPlayer = () => {
                 }}
               />
 
-              {/* Content */}
-              <div className="relative flex items-center gap-3 px-3 w-full">
+              <div className="relative flex items-center gap-3 px-2 mb-1 w-full">
                 <img
                   src={currentSong.imageUrl}
                   alt={currentSong.title}
-                  className="w-11 h-11 object-cover rounded-xl shadow-lg"
+                  className="w-11 h-11 object-cover rounded-md shadow-lg"
                 />
 
                 <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
@@ -265,7 +302,6 @@ const MiniPlayer = () => {
                     speed={25}
                     pauseDuration={2500}
                     gap={80}
-                    fadeWidth={32}
                   />
                   <MarqueeText
                     text={currentSong.artist}
@@ -273,7 +309,6 @@ const MiniPlayer = () => {
                     speed={22}
                     pauseDuration={3000}
                     gap={80}
-                    fadeWidth={28}
                   />
                 </div>
                 <div className="flex items-center gap-0.5">
@@ -283,7 +318,7 @@ const MiniPlayer = () => {
 
                   <Button
                     size="icon"
-                    className="bg-transparent text-white active:bg-white/10 rounded-full h-9 w-9 shadow-lg hover:scale-105 transition-transform"
+                    className="bg-transparent text-white active:bg-white/10 rounded-full h-9 w-9 shadow-lg transition-transform"
                     onClick={(e) => { e.stopPropagation(); togglePlay(); }}
                   >
                     {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4 ml-0.5" />}
@@ -296,15 +331,10 @@ const MiniPlayer = () => {
                       e.stopPropagation();
                       playNext();
                     }}
-                    className="
-                      text-white h-9 w-9 rounded-full
-                      active:bg-white/20
-                      transition-colors duration-200
-                    "
+                    className="text-white h-9 w-9 rounded-full active:bg-white/20 transition-colors duration-200"
                   >
                     <SkipForward className="h-4 w-4" />
                   </Button>
-
                 </div>
               </div>
 
@@ -324,54 +354,54 @@ const MiniPlayer = () => {
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-          key="expanded-player"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="fixed inset-0 z-[100] md:hidden"
-          style={{ willChange: 'opacity' }}
+            key="expanded-player"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] md:hidden"
+            style={{ willChange: 'opacity' }}
           >
-        {/* Background - richer but still performant */}
-        <div className="absolute inset-0 bg-black" style={{ willChange: 'transform' }}>
+            {/* Background */}
+            <div className="absolute inset-0 bg-black" style={{ willChange: 'transform' }}>
+              <div
+                className="absolute inset-0 scale-110 opacity-60"
+                style={{
+                  backgroundImage: `url(${currentSong.imageUrl})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  filter: "blur(38px) saturate(1.25)",
+                  transform: "translateZ(0)",
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 via-transparent to-fuchsia-500/10" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.10),rgba(0,0,0,0.0)_40%)]" />
+              <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/60 to-black" />
+              <div className="absolute inset-x-0 bottom-0 h-[45vh] bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
+            </div>
 
-        {/* 1) Slightly blurred cover layer (keep blur modest) */}
-        <div
-            className="absolute inset-0 scale-110 opacity-60"
-            style={{
-            backgroundImage: `url(${currentSong.imageUrl})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            filter: "blur(38px) saturate(1.25)", // was 80px; 35–45 is a good sweet spot
-            transform: "translateZ(0)", // helps GPU compositing sometimes
-            }}
-        />
-
-        <div className="absolute inset-0 bg-gradient-to-tr from-violet-500/10 via-transparent to-fuchsia-500/10" />
-
-        {/* 2) Vignette + contrast (cheap, makes it feel less flat) */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,0.10),rgba(0,0,0,0.0)_40%)]" />
-
-        {/* 3) Darkening gradient like Spotify */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/60 to-black" />
-
-        {/* 4) Extra bottom depth so controls pop */}
-        <div className="absolute inset-x-0 bottom-0 h-[45vh] bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-        </div>
-
-            {/* Content Container */}
+            {/* Swipe-to-dismiss wrapper */}
             <motion.div
-             initial={{ y: 30, opacity: 0 }}
+              drag="y"
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.4 }}
+              onDragEnd={handleExpandedDragEnd}
+              style={{ 
+                y: dragY, 
+                opacity: expandedOpacity,
+                scale: expandedScale,
+                willChange: 'transform, opacity',
+              }}
+              initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              exit={{ y: 30, opacity: 0 }}
+              exit={{ y: 60, opacity: 0 }}
               transition={{ 
                 type: "spring", 
                 damping: 30, 
                 stiffness: 350, 
                 delay: 0.05 
               }}
-              className="relative h-full flex flex-col"
-              style={{ willChange: 'transform, opacity' }}
+              className="relative h-full flex flex-col touch-pan-x"
             >
               {/* Header */}
               <div 
@@ -387,7 +417,7 @@ const MiniPlayer = () => {
                   <ChevronDown className="h-7 w-7" />
                 </Button>
                 
-                <span className="text-[10px] text-white/50 font-normal uppercase tracking-wider">
+                <span className="text-[10px] text-white/50 font-medium uppercase tracking-wider">
                   Now Playing
                 </span>
                 
@@ -401,61 +431,81 @@ const MiniPlayer = () => {
                 </Button>
               </div>
 
-              {/* Album Art */}
-              <div className="flex-1 flex items-center justify-center px-4 py-4">
+              {/* Album Art — swipe left/right to skip */}
+              <div 
+                className="flex-1 flex items-center justify-center px-4 py-4"
+                onTouchStart={handleArtTouchStart}
+                onTouchMove={handleArtTouchMove}
+                onTouchEnd={handleArtTouchEnd}
+              >
                 <motion.div
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ type: "spring", damping: 20, stiffness: 200, delay: 0.15 }}
+                  style={{ scale: artScale }}
                   className={cn(
                     "relative aspect-square w-full",
-                    "max-w-[min(88vw,85vh-290px)]",  // Constrain by both width AND height
-                    "max-h-[calc(100vh-400px)]"       // Ensure controls always have ~400px space
+                    "max-w-[min(88vw,85vh-290px)]",
+                    "max-h-[calc(100vh-400px)]"
                   )}
                 >
-                  <img
-                    src={currentSong.imageUrl}
-                    alt={currentSong.title}
-                    className="w-full h-full object-cover rounded-lg shadow-2xl"
-                  />
+                  {/* Album art crossfade on song change */}
+                  <AnimatePresence mode="wait">
+                    <motion.img
+                      key={currentSong._id}
+                      src={currentSong.imageUrl}
+                      alt={currentSong.title}
+                      initial={{ opacity: 0, scale: 1.02 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      transition={{ duration: 0.3 }}
+                      className="w-full h-full object-cover rounded-lg shadow-2xl"
+                    />
+                  </AnimatePresence>
                 </motion.div>
               </div>
 
               {/* Song Info + Controls */}
               <div className="px-6 pb-6" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom) + 24px)' }}>
-                {/* Song Info */}
+                {/* Song Info with crossfade */}
                 <div className="flex items-center justify-between gap-4 mb-6">
                   <div className="flex-1 min-w-0 overflow-hidden">
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2 }}
-                      className="w-full"
-                    >
-                      <MarqueeText
-                    text={currentSong.title}
-                    className="text-xl font-medium text-white"
-                    speed={25}
-                    pauseDuration={2500}
-                    gap={80}
-                    fadeWidth={32}
-                      />
-                    </motion.div>
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.25 }}
-                      className="w-full mt-1"
-                    >
-                      <MarqueeText
-                    text={currentSong.artist}
-                    className="text-base text-white/60"
-                    speed={22}
-                    pauseDuration={3000}
-                    gap={80}
-                    fadeWidth={28}
-                      />
-                    </motion.div>
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={`title-${currentSong._id}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.2 }}
+                        className="w-full"
+                      >
+                        <MarqueeText
+                          text={currentSong.title}
+                          className="text-xl font-medium text-white"
+                          speed={25}
+                          pauseDuration={2500}
+                          gap={80}
+                        />
+                      </motion.div>
+                    </AnimatePresence>
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={`artist-${currentSong._id}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -8 }}
+                        transition={{ duration: 0.2, delay: 0.05 }}
+                        className="w-full"
+                      >
+                        <MarqueeText
+                          text={currentSong.artist}
+                          className="text-base text-white/60"
+                          speed={22}
+                          pauseDuration={3000}
+                          gap={80}
+                        />
+                      </motion.div>
+                    </AnimatePresence>
                   </div>
                   <div className="flex-shrink-0">
                     <LikeButton songId={currentSong._id} />
@@ -487,7 +537,7 @@ const MiniPlayer = () => {
                     size="icon" 
                     variant="ghost" 
                     className={cn(
-                      "h-12 w-12 transition-all",
+                      "h-12 w-12 transition-all active:scale-90",
                       isShuffle
                         ? "text-violet-400 scale-105"
                         : "text-white/70"
@@ -500,7 +550,7 @@ const MiniPlayer = () => {
                   <Button 
                     size="icon" 
                     variant="ghost" 
-                    className="text-white h-14 w-14 active:bg-white/10"
+                    className="text-white h-14 w-14 active:bg-white/10 active:scale-90 transition-transform"
                     onClick={playPrevious}
                   >
                     <SkipBack className="h-7 w-7" fill="white" />
@@ -508,7 +558,7 @@ const MiniPlayer = () => {
 
                   <Button
                     size="icon"
-                    className="bg-white text-black rounded-full h-16 w-16 shadow-xl hover:scale-105 active:scale-95 transition-transform"
+                    className="bg-white text-black rounded-full h-16 w-16 shadow-xl active:scale-95 transition-transform"
                     onClick={togglePlay}
                   >
                     {isPlaying ? (
@@ -521,7 +571,7 @@ const MiniPlayer = () => {
                   <Button 
                     size="icon" 
                     variant="ghost" 
-                    className="text-white h-14 w-14 active:bg-white/10"
+                    className="text-white h-14 w-14 active:bg-white/10 active:scale-90 transition-transform"
                     onClick={playNext}
                   >
                     <SkipForward className="h-7 w-7" fill="white" />
@@ -531,10 +581,10 @@ const MiniPlayer = () => {
                     size="icon" 
                     variant="ghost" 
                     className={cn(
-                      "h-12 w-12 transition-all",
+                      "h-12 w-12 transition-all active:scale-90",
                       isRepeat
-                      ? "text-violet-400 scale-105" 
-                      : "text-white/70"
+                        ? "text-violet-400 scale-105" 
+                        : "text-white/70"
                     )}
                     onClick={toggleRepeat}
                   >
@@ -549,7 +599,7 @@ const MiniPlayer = () => {
                   <Button
                     size="icon"
                     variant="ghost"
-                    className="text-white/80 h-12 w-12"
+                    className="text-white/80 h-12 w-12 active:scale-90 transition-transform"
                     onClick={() => setQueueOpen(true)}
                   >
                     <ListMusic className="h-6 w-6" />
@@ -604,7 +654,7 @@ const MiniPlayer = () => {
                         song={currentSong}
                         onClose={() => setSongOptionsOpen(false)}
                         variant="mobile-sheet"
-                        onToggleFullscreen={toggleBrowserFullscreen} // Add this
+                        onToggleFullscreen={toggleBrowserFullscreen}
                         isFullscreen={isBrowserFullscreen}
                       />
                     </div>

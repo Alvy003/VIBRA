@@ -1,4 +1,4 @@
-// components/Queue.tsx
+// src/components/Queue.tsx
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -20,12 +20,10 @@ import {
 } from "@dnd-kit/sortable";
 import { useIsTouchDevice } from "@/hooks/useIsTouchDevice";
 import { usePlayerStore } from "@/stores/usePlayerStore";
-import { useMusicStore } from "@/stores/useMusicStore";
-import { Trash2, Plus, Music2, RefreshCw } from "lucide-react";
+import { Trash2, Music2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Song } from "@/types";
 
-// Spotify-style horizontal drag handle (3 lines)
 const DragHandle = ({ className }: { className?: string }) => (
   <svg
     width="16"
@@ -114,7 +112,7 @@ const SortableItem = ({
       style={style}
       className={cn(
         "group relative flex items-center gap-3 px-2 py-2 rounded-lg transition-all duration-200",
-        "hover:bg-zinc-800/60",
+        isTouchDevice ? "active:bg-zinc-800/60" : "hover:bg-zinc-800/60",
         isCurrent && "bg-zinc-800/40 ring-1 ring-violet-500/20",
         isDragging && "shadow-xl shadow-black/40 bg-zinc-800"
       )}
@@ -125,7 +123,6 @@ const SortableItem = ({
         if (!isSwiping.current && Math.abs(swipeX) < 10) playSong(song);
       }}
     >
-      {/* Delete button revealed on swipe (touch devices) */}
       {isTouchDevice && swipeX < -10 && (
         <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
           <div className={cn(
@@ -137,7 +134,6 @@ const SortableItem = ({
         </div>
       )}
 
-      {/* Album Art */}
       <div className="relative shrink-0">
         <img
           src={song.imageUrl}
@@ -160,34 +156,21 @@ const SortableItem = ({
         )}
       </div>
 
-      {/* Song Info */}
-      <div className="flex-1 min-w-0">
-        <p
-          className={cn(
-            "font-normal text-sm truncate transition-[max-width,color] duration-200",
-            !isTouchDevice &&
-              "max-w-full group-hover:max-w-[calc(100%-2rem)]",
-            isTouchDevice && "max-w-full",
-            isCurrent ? "text-violet-400" : "text-zinc-200"
-          )}
-        >
+      <div className={cn(
+        "flex-1 min-w-0 transition-all duration-200",
+        !isTouchDevice && "pr-0 group-hover:pr-[60px]"
+      )}>
+        <p className={cn(
+          "font-normal text-sm line-clamp-1 transition-colors duration-200",
+          isCurrent ? "text-violet-400" : "text-zinc-200"
+        )}>
           {song.title}
         </p>
-
-        <p
-          className={cn(
-            "text-xs text-zinc-400/80 truncate transition-[max-width] duration-200",
-            !isTouchDevice &&
-              "max-w-full group-hover:max-w-[calc(100%-2rem)]",
-            isTouchDevice && "max-w-full"
-          )}
-        >
+        <p className="text-xs text-zinc-400/80 line-clamp-1">
           {song.artist}
         </p>
       </div>
 
-
-      {/* Touch Device: Drag Handle on right (always visible) */}
       {isTouchDevice && (
         <div
           ref={setActivatorNodeRef}
@@ -206,9 +189,12 @@ const SortableItem = ({
         </div>
       )}
 
-      {/* Desktop: Delete + Drag Handle on right (hover only) */}
       {!isTouchDevice && (
-        <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className={cn(
+          "absolute right-2 top-1/2 -translate-y-1/2",
+          "flex items-center gap-0.5 shrink-0",
+          "opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+        )}>
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -216,7 +202,7 @@ const SortableItem = ({
             }}
             className={cn(
               "p-1.5 rounded-lg transition-all",
-              "text-zinc-400 hover:text-red-400 hover:bg-red-400/10"
+              "text-zinc-400/80 hover:text-red-400 hover:bg-red-400/10"
             )}
             aria-label="Remove from queue"
           >
@@ -228,7 +214,7 @@ const SortableItem = ({
             {...attributes}
             className={cn(
               "p-1 cursor-grab active:cursor-grabbing transition-colors",
-              "text-zinc-600 hover:text-zinc-300",
+              "text-zinc-400/80 hover:text-zinc-300",
               isDragging && "text-violet-400"
             )}
             onClick={(e) => e.stopPropagation()}
@@ -250,77 +236,40 @@ const Queue = () => {
     currentIndex,
     playSong,
     removeFromQueue,
-    addSongToQueue,
     displayQueue,
     reorderQueue,
   } = usePlayerStore();
 
-  const { songs: allSongs } = useMusicStore();
-  
   const isTouchDevice = useIsTouchDevice();
-  
-  // State for refreshing suggestions
-  const [suggestionSeed, setSuggestionSeed] = useState(0);
 
-  // ✅ FIXED: Get next songs (excluding current song to prevent duplicates)
+  // Get next songs (after current, excluding current)
   const nextSongs = useMemo(() => {
+    if (currentIndex === -1 || displayQueue.length === 0) return [];
+
+    const upcoming = displayQueue.slice(currentIndex + 1);
+
     const seen = new Set<string>();
-    
-    // Start from the song AFTER current
-    const upcoming = displayQueue.slice(currentIndex + 1).filter((s) => {
+    const deduped = upcoming.filter((s) => {
       if (seen.has(s._id)) return false;
       seen.add(s._id);
       return true;
     });
 
-    // Calculate how many more songs we need to reach 11 total
-    const shortfall = 11 - upcoming.length;
-    
-    if (shortfall > 0 && allSongs.length > 0) {
-      // Exclude: current song, already in queue, and already in upcoming
-      const exclude = new Set([
-        currentSong?._id,
-        ...displayQueue.map((s) => s._id),
-        ...upcoming.map((s) => s._id),
-      ].filter(Boolean) as string[]);
-      
-      // Fill with random songs from library
-      const available = allSongs.filter((s) => !exclude.has(s._id));
-      const fills = available
-        .sort(() => Math.random() - 0.5) // Shuffle
-        .slice(0, shortfall);
-      
-      return [...upcoming, ...fills];
-    }
-    
-    return upcoming.slice(0, 11);
-  }, [displayQueue, currentIndex, allSongs, currentSong?._id]);
+    return deduped.slice(0, 20);
+  }, [displayQueue, currentIndex]);
 
-  // ✅ FIXED: Better suggestions with refresh capability
-  const suggestions = useMemo(() => {
-    // Exclude: current song, queue, displayQueue, and nextSongs
-    const exclude = new Set([
-      currentSong?._id,
-      ...queue.map((s) => s._id),
-      ...displayQueue.map((s) => s._id),
-      ...nextSongs.map((s) => s._id),
-    ].filter(Boolean) as string[]);
-    
-    const available = allSongs.filter((s) => !exclude.has(s._id));
-    
-    // Shuffle and take 5
-    return available
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 5);
-  }, [queue, displayQueue, nextSongs, currentSong?._id, allSongs, suggestionSeed]);
 
-  // ✅ Fixed: Use functional setState to prevent infinite loop
+
+
+
+
+
+  // DnD items
   const [items, setItems] = useState<string[]>([]);
 
   useEffect(() => {
     const newIds = nextSongs.map((s) => s._id);
     setItems(prevItems => {
-      // Only update if actually different
       if (
         newIds.length !== prevItems.length ||
         newIds.some((id, idx) => id !== prevItems[idx])
@@ -331,22 +280,15 @@ const Queue = () => {
     });
   }, [nextSongs]);
 
-  // ✅ Stable sensors with both pointer and touch
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
+      activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: {
-        delay: 150,
-        tolerance: 5,
-      },
+      activationConstraint: { delay: 150, tolerance: 5 },
     })
   );
 
-  // ✅ FIXED: Improved drag end handler to prevent duplicates
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -354,18 +296,16 @@ const Queue = () => {
     setItems(prevItems => {
       const oldIndex = prevItems.indexOf(active.id as string);
       const newIndex = prevItems.indexOf(over.id as string);
-      
+
       if (oldIndex === -1 || newIndex === -1) return prevItems;
-      
+
       const newItems = arrayMove(prevItems, oldIndex, newIndex);
 
-      // Use queueMicrotask to avoid "setState during render" warning
       queueMicrotask(() => {
         const reordered = newItems
           .map((id) => nextSongs.find((s) => s._id === id))
           .filter((s): s is Song => s !== undefined);
-        
-        // Only reorder if we have valid songs
+
         if (reordered.length > 0) {
           reorderQueue(reordered);
         }
@@ -375,17 +315,12 @@ const Queue = () => {
     });
   }, [nextSongs, reorderQueue]);
 
-  // ✅ Memoize song lookup map
   const songMap = useMemo(() => {
     const map = new Map<string, Song>();
     nextSongs.forEach(song => map.set(song._id, song));
     return map;
   }, [nextSongs]);
 
-  // Refresh suggestions handler
-  const handleRefreshSuggestions = useCallback(() => {
-    setSuggestionSeed(prev => prev + 1);
-  }, []);
 
   return (
     <div className="text-white h-full flex flex-col bg-zinc-900/20 rounded-lg overflow-hidden">
@@ -423,10 +358,10 @@ const Queue = () => {
                 </div>
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-sm truncate text-violet-300">
+                <p className="font-medium text-sm line-clamp-1 text-violet-300">
                   {currentSong.title}
                 </p>
-                <p className="text-xs text-zinc-400 truncate">
+                <p className="text-xs text-zinc-400 line-clamp-1">
                   {currentSong.artist}
                 </p>
               </div>
@@ -487,69 +422,6 @@ const Queue = () => {
                     </ul>
                   </SortableContext>
                 </DndContext>
-              </div>
-            )}
-
-            {/* Suggestions Section */}
-            {suggestions.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2 px-2">
-                  <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                    Add to Queue
-                  </p>
-                  <button
-                    onClick={handleRefreshSuggestions}
-                    className={cn(
-                      "p-1 rounded-lg transition-all",
-                      "text-zinc-500 active:text-zinc-300 active:bg-zinc-800/60",
-                      "active:scale-95"
-                    )}
-                    aria-label="Refresh suggestions"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <ul className="space-y-1">
-                  {suggestions.map((song) => (
-                    <li
-                      key={song._id}
-                      onClick={() => addSongToQueue(song)}
-                      className={cn(
-                        "group flex items-center gap-3 px-2 py-2 rounded-lg",
-                        "cursor-pointer transition-all duration-200",
-                        "hover:bg-zinc-800/60"
-                      )}
-                    >
-
-                      {/* Album Art */}
-                      <img
-                        src={song.imageUrl}
-                        alt={song.title}
-                        loading="lazy"
-                        className="size-9 rounded object-cover ring-1 ring-white/5 group-hover:ring-violet-500/20 transition-all"
-                      />
-
-                      {/* Song Info */}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-normal text-sm line-clamp-1 text-zinc-200 transition-colors">
-                          {song.title}
-                        </p>
-                        <p className="text-xs text-zinc-400/80 line-clamp-1">
-                          {song.artist}
-                        </p>
-                      </div>
-
-                      {/* Add Icon */}
-                      <div className={cn(
-                        "shrink-0 p-1 rounded-lg transition-all",
-                        "bg-zinc-800 group-hover:bg-zinc-700"
-                      )}>
-                        <Plus className="size-4 md:size-3.7 text-zinc-400/80 group-hover:text-white transition-colors" />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
               </div>
             )}
           </div>

@@ -189,28 +189,30 @@ const LeftSidebar = () => {
   }) => (
     <Tooltip delayDuration={0}>
       <TooltipTrigger asChild>
-        <NavLink
-          to={to}
-          end={end}
-          className={({ isActive }) =>
-            cn(
-              "flex items-center justify-center size-10 rounded-lg transition-colors",
-              "text-zinc-400 hover:text-white hover:bg-zinc-800/60",
-              isActive && "bg-zinc-800/60 text-white"
-            )
-          }
-        >
-          {({ isActive }) => (
-            <Icon 
-              className={cn(
-                "size-4 flex-shrink-0",
-                isActive && "text-white",
-                badge && !isActive && "text-violet-400",
-                !isActive && !badge && "text-zinc-400 hover:text-white/95"
-              )} 
-            />
-          )}
-        </NavLink>
+        <div>
+          <NavLink
+            to={to}
+            end={end}
+            className={({ isActive }) =>
+              cn(
+                "flex items-center justify-center size-10 rounded-lg transition-colors",
+                "text-zinc-400 hover:text-white hover:bg-zinc-800/60",
+                isActive && "bg-zinc-800/60 text-white"
+              )
+            }
+          >
+            {({ isActive }) => (
+              <Icon 
+                className={cn(
+                  "size-4 flex-shrink-0",
+                  isActive && "text-white",
+                  badge && !isActive && "text-violet-400",
+                  !isActive && !badge && "text-zinc-400 hover:text-white/95"
+                )} 
+              />
+            )}
+          </NavLink>
+        </div>
       </TooltipTrigger>
       <TooltipContent side="right" sideOffset={12} className="bg-zinc-900 text-white border-zinc-800">
         {label}
@@ -255,7 +257,7 @@ const LeftSidebar = () => {
           onMouseLeave={() => !isTouch && setIsHovered(false)}
         >
           {/* Navigation */}
-          <div className="rounded-lg bg-zinc-900 p-0 pl-6 pt-6 flex flex-col items-center">
+          <div className="rounded-lg bg-zinc-900 p-0 py-3 flex flex-col items-center">
             <CollapsedNavItem to="/" icon={HomeIcon} label="Home" end />
             <SignedIn>
               <CollapsedNavItem to="/chat" icon={MessageCircle} label="Messages" badge={totalUnread > 0} />
@@ -536,7 +538,7 @@ const LeftSidebar = () => {
                           <Heart className="size-5 text-white" fill="white" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-normal truncate text-sm text-white/90">
+                          <p className="font-normal truncate text-sm text-white">
                             Liked Songs
                           </p>
                           <p className="text-xs text-zinc-400/90 truncate">
@@ -565,7 +567,7 @@ const LeftSidebar = () => {
                             type="playlist"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="font-normal truncate text-sm text-white/90">
+                            <p className="font-normal truncate text-sm text-white">
                               {playlist.name}
                             </p>
                             <p className="text-xs text-zinc-400/90 truncate">
@@ -616,7 +618,7 @@ const LeftSidebar = () => {
                             type="album"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="font-normal truncate text-sm text-white/90">
+                            <p className="font-normal truncate text-sm text-white">
                               {album.title}
                             </p>
                             <p className="text-xs text-zinc-400/90 truncate">

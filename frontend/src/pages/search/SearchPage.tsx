@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { usePreferencesStore } from "@/stores/usePreferencesStore";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useFuzzySearch } from "@/hooks/useFuzzySearch";
 import SongsTable from "../admin/components/SongsTable";
@@ -16,6 +16,7 @@ import SongOptions from "../album/components/SongOptions";
 
 const SearchPage = () => {
   const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
   const debouncedQuery = useDebounce(query, 300);
   const { songs, fetchSongs } = useMusicStore();
   const { initializeQueue } = usePlayerStore();
@@ -45,7 +46,13 @@ const SearchPage = () => {
   const hasResults = searchResults.length > 0;
   const hasRecentSongs = recentlyPlayedFromSearch.length > 0;
 
-  const clearSearch = () => setQuery("");
+  const clearSearch = () => {
+    setQuery("");
+    // Keep keyboard open by refocusing input
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+  };
 
   // Play from search results - track it
   const handlePlayFromSearch = (allSongs: Song[], index: number) => {
@@ -95,7 +102,7 @@ const SearchPage = () => {
 
       <div className="h-[calc(100vh-145px)] lg:h-[calc(100vh-180px)]">
         <ScrollArea className="h-[calc(100vh-70px)] lg:h-[calc(100vh-180px)]">
-          <div className="px-4 sm:px-6">
+          <div className="px-2 sm:px-6">
             {/* Sticky search bar */}
             <div className="sticky top-0 z-20 -mx-4 sm:-mx-6 px-4 sm:px-6 bg-gradient-to-b from-zinc-900/95 to-zinc-900/80 backdrop-blur-md">
               <div className="py-3">
@@ -105,6 +112,7 @@ const SearchPage = () => {
                     size={18}
                   />
                   <Input
+                    ref={inputRef}
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder="What do you wanna listen to?"
@@ -112,7 +120,10 @@ const SearchPage = () => {
                   />
                   {query.length > 0 && (
                     <button
-                      onClick={clearSearch}
+                      onPointerDown={(e) => {
+                        e.preventDefault(); // Prevents input blur on mobile
+                        clearSearch();
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full text-zinc-400 active:text-zinc-200 active:bg-zinc-600/50 transition-colors"
                       aria-label="Clear search"
                     >
@@ -200,17 +211,6 @@ const RecentlyPlayedSection = ({
   onRemove: (id: string) => void;
   onClear: () => void;
 }) => {
-  const getTimeAgo = (timestamp: number) => {
-    const diff = Date.now() - timestamp;
-    const mins = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-    
-    if (mins < 1) return "Just now";
-    if (mins < 60) return `${mins}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    return `${days}d ago`;
-  };
 
   // Convert to Song format for SongOptions
   const songsAsSongType: Song[] = songs.map(s => ({
@@ -226,11 +226,11 @@ const RecentlyPlayedSection = ({
   }));
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-1">
       {/* Header */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-medium text-zinc-200/50">Recent Searches</h2>
+          <h2 className="text-xs font-medium text-zinc-200/50 tracking-wide">Recent Searches</h2>
         </div>
         <button
           onClick={onClear}
@@ -262,8 +262,6 @@ const RecentlyPlayedSection = ({
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-zinc-400">
                   <span className="line-clamp-1">{song.artist}</span>
-                  <span className="text-zinc-600">•</span>
-                  <span className="text-zinc-500 shrink-0">{getTimeAgo(song.playedAt)}</span>
                 </div>
               </div>
             </div>

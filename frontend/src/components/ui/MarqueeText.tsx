@@ -16,18 +16,17 @@ const MarqueeText = ({
   text,
   className,
   speed = 25,
-  pauseDuration = 2500,
-  gap = 80,
+  pauseDuration = 2000,
+  gap = 60,
   disabled = false,
-  fadeWidth = 36,
+  fadeWidth = 3, // Reduced to 20px so text is closer to the edge
 }: MarqueeTextProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
   const [shouldScroll, setShouldScroll] = useState(false);
   const [textWidth, setTextWidth] = useState(0);
   const [translateX, setTranslateX] = useState(0);
-  const [phase, setPhase] = useState<'paused' | 'scrolling'>('paused');
-  const [showFade, setShowFade] = useState(false);
+  const [isPaused, setIsPaused] = useState(true);
   
   const animationRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -37,60 +36,37 @@ const MarqueeText = ({
     
     const containerWidth = containerRef.current.offsetWidth;
     const measuredTextWidth = textRef.current.offsetWidth;
+    const contentVisibleWidth = containerWidth - (fadeWidth * 2);
     
     setTextWidth(measuredTextWidth);
-    setShouldScroll(measuredTextWidth > containerWidth + 2);
-  }, []);
+    setShouldScroll(measuredTextWidth > contentVisibleWidth);
+  }, [fadeWidth]);
 
   useEffect(() => {
-    const timer = setTimeout(checkOverflow, 100);
-    return () => clearTimeout(timer);
-  }, [text, checkOverflow]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    
+    checkOverflow();
     const resizeObserver = new ResizeObserver(() => {
       checkOverflow();
       setTranslateX(0);
-      setPhase('paused');
-      setShowFade(false);
+      setIsPaused(true);
     });
     
-    resizeObserver.observe(container);
+    if (containerRef.current) resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
-  }, [checkOverflow]);
+  }, [text, checkOverflow]);
 
   useEffect(() => {
     setTranslateX(0);
-    setPhase('paused');
-    setShowFade(false);
-    
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
+    setIsPaused(true);
+    if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, [text]);
 
   useEffect(() => {
-    if (!shouldScroll || disabled || textWidth === 0) {
-      return;
-    }
+    if (!shouldScroll || disabled || textWidth === 0) return;
 
     const cleanup = () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
 
     cleanup();
@@ -98,87 +74,61 @@ const MarqueeText = ({
     const cycleDistance = textWidth + gap;
     const totalDuration = (cycleDistance / speed) * 1000;
 
-    if (phase === 'paused') {
-      setShowFade(false);
+    if (isPaused) {
       timeoutRef.current = setTimeout(() => {
-        setPhase('scrolling');
+        setIsPaused(false);
       }, pauseDuration);
-    } else if (phase === 'scrolling') {
-      // Fade in the masks smoothly
-      requestAnimationFrame(() => setShowFade(true));
-      
+    } else {
       const startTime = performance.now();
 
       const animate = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / totalDuration, 1);
         
-        if (progress >= 1) {
-          // Fade out masks before resetting
-          setShowFade(false);
-          
-          timeoutRef.current = setTimeout(() => {
-            setTranslateX(0);
-            setPhase('paused');
-          }, 300); // Wait for fade out transition
-          return;
-        }
-        
-        // Very subtle easing - almost linear but smooth start/end
         let easedProgress = progress;
-        const easeZone = 0.04;
+        const easeZone = 0.05;
         
         if (progress < easeZone) {
           const t = progress / easeZone;
-          easedProgress = easeZone * (t * t);
+          easedProgress = easeZone * (t * t); 
         } else if (progress > 1 - easeZone) {
           const t = (progress - (1 - easeZone)) / easeZone;
           easedProgress = (1 - easeZone) + easeZone * (1 - (1 - t) * (1 - t));
         }
-        
+
         setTranslateX(-easedProgress * cycleDistance);
-        animationRef.current = requestAnimationFrame(animate);
+
+        if (progress < 1) {
+          animationRef.current = requestAnimationFrame(animate);
+        } else {
+          timeoutRef.current = setTimeout(() => {
+            setTranslateX(0);
+            setIsPaused(true);
+          }, 100);
+        }
       };
 
       animationRef.current = requestAnimationFrame(animate);
     }
 
     return cleanup;
-  }, [phase, shouldScroll, disabled, textWidth, gap, speed, pauseDuration]);
+  }, [isPaused, shouldScroll, disabled, textWidth, gap, speed, pauseDuration]);
 
-  useEffect(() => {
-    return () => {
-      if (animationRef.current) cancelAnimationFrame(animationRef.current);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    };
-  }, []);
+  const maskStyle = shouldScroll ? `linear-gradient(
+    to right,
+    transparent 0px,
+    black ${fadeWidth}px,
+    black calc(100% - ${fadeWidth}px),
+    transparent 100%
+  )` : undefined;
 
-  // Generate mask style - fades to transparent at edges
-  const getMaskStyle = () => {
-    if (!showFade) return 'none';
-  
-    return `linear-gradient(
-      to right,
-      transparent 0%,
-      rgba(0,0,0,0.15) ${fadeWidth * 0.35}px,
-      rgba(0,0,0,1) ${fadeWidth}px,
-      rgba(0,0,0,1) calc(100% - ${fadeWidth}px),
-      rgba(0,0,0,0.15) calc(100% - ${fadeWidth * 0.35}px),
-      transparent 100%
-    )`;
-  };
-  
-  // Non-scrolling - simple render
   if (!shouldScroll) {
     return (
       <div ref={containerRef} className={cn("overflow-hidden", className)}>
-        <span 
-          ref={textRef} 
+        <span
+          ref={textRef}
           className="whitespace-nowrap inline-block"
-          style={{
-            WebkitFontSmoothing: 'antialiased',
-            MozOsxFontSmoothing: 'grayscale',
-          }}
+          style={{ paddingLeft: fadeWidth }}
         >
           {text}
         </span>
@@ -189,25 +139,19 @@ const MarqueeText = ({
   return (
     <div 
       ref={containerRef} 
-      className={cn("overflow-hidden", className)}
+      className={cn("overflow-hidden relative select-none", className)}
       style={{
-        maskImage: getMaskStyle(),
-        WebkitMaskImage: getMaskStyle(),
-        maskSize: '100% 100%',
-        WebkitMaskSize: '100% 100%',
-        transition: showFade 
-          ? 'mask-image 0.5s ease, -webkit-mask-image 0.5s ease' 
-          : 'mask-image 0.3s ease, -webkit-mask-image 0.3s ease',
+        maskImage: maskStyle,
+        WebkitMaskImage: maskStyle,
       }}
     >
       <div 
-        className="flex whitespace-nowrap"
+        className="flex whitespace-nowrap will-change-transform"
         style={{ 
           transform: `translate3d(${translateX}px, 0, 0)`,
-          WebkitFontSmoothing: 'antialiased',
-          MozOsxFontSmoothing: 'grayscale',
-          backfaceVisibility: 'hidden',
-          willChange: phase === 'scrolling' ? 'transform' : 'auto',
+          // Padding matches fade width exactly
+          paddingLeft: fadeWidth, 
+          paddingRight: fadeWidth, 
         }}
       >
         <span ref={textRef} className="inline-block flex-shrink-0">

@@ -643,15 +643,18 @@ export const PlaybackControls = () => {
           >
             {/* Background Image */}
             <div className="absolute inset-0">
+            <AnimatePresence mode="wait">
               <motion.img
                 key={currentSong._id}
                 src={currentSong.imageUrl}
                 alt=""
                 className="w-full h-full object-cover"
-                initial={{ scale: 1.1, opacity: 0 }}
+                initial={{ scale: 1.05, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.4 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
               />
+            </AnimatePresence>
               <div className="absolute inset-0 bg-black/50" />
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/60 to-black/30" />
               <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/70" />
@@ -890,12 +893,9 @@ export const PlaybackControls = () => {
                           </button>
                           
                           <div className="w-20 lg:w-24">
-                            <ProgressSlider
+                            <VolumeSlider
                               value={volume}
-                              max={100}
                               onChange={handleVolumeChange}
-                              trackColor="bg-white/20"
-                              progressColor="bg-white/95"
                             />
                           </div>
                         </div>
@@ -912,11 +912,7 @@ export const PlaybackControls = () => {
                       animate={{ width: 380, opacity: 1 }}
                       exit={{ width: 0, opacity: 0 }}
                       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                      className="h-full border-l border-white/5 overflow-hidden shrink-0 hidden lg:block"
-                      style={{ 
-                        background: 'rgba(0, 0, 0, 0.6)',
-                        backdropFilter: 'blur(20px)',
-                      }}
+                      className="h-full border-l border-white/5 overflow-hidden  backdrop-blur-xl shrink-0 hidden lg:block"
                     >
                       <div className="w-[380px] h-full">
                         <Queue />
@@ -935,7 +931,7 @@ export const PlaybackControls = () => {
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 top-16 z-[10] bg-zinc-950/95 backdrop-blur-xl lg:hidden"
+                  className="fixed inset-x-0 bottom-0 top-16 z-[10] backdrop-blur-md lg:hidden"
                 >
                   <Queue />
                 </motion.div>

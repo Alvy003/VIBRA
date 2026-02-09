@@ -20,16 +20,13 @@ interface PlayerStore {
   isRepeat: boolean;
   hasTrackedCurrentSong: boolean;
 
-  // Internal queues
   mainQueue: Song[];
   nextUpQueue: Song[];
   laterQueue: Song[];
 
-  // Auto-refill tracking
   _isRefilling: boolean;
   _lastRefillTime: number;
 
-  // Resume state
   _hasRestoredFromCache: boolean;
   _pendingResumePosition: number | null;
 
@@ -58,7 +55,6 @@ interface PlayerStore {
 
   autoRefillQueue: () => Promise<void>;
 
-  // New: Resume functionality
   restoreFromCache: () => boolean;
   saveToCache: () => void;
   getPendingResumePosition: () => number | null;
@@ -77,9 +73,19 @@ const shuffleArray = <T,>(array: T[]): T[] => {
 };
 
 const REFILL_DEBOUNCE_MS = 5000;
-const SAVE_POSITION_DEBOUNCE_MS = 5000; // Save position every 5 seconds
+const SAVE_POSITION_DEBOUNCE_MS = 5000;
 
 let savePositionTimeout: NodeJS.Timeout | null = null;
+
+const emitActivity = (activity: string) => {
+  const socket = useChatStore.getState().socket;
+  if (socket?.auth) {
+    socket.emit("update_activity", {
+      userId: socket.auth.userId,
+      activity,
+    });
+  }
+};
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
   currentSong: null,
@@ -91,7 +97,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   duration: 0,
   currentTime: 0,
-  volume: usePreferencesStore.getState().volume, // Initialize from preferences
+  volume: usePreferencesStore.getState().volume,
   isShuffle: usePreferencesStore.getState().isShuffle,
   isRepeat: usePreferencesStore.getState().isRepeat,
   hasTrackedCurrentSong: false,
@@ -108,59 +114,63 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   _rebuildDisplay: () => {
     const state = get();
     const { mainQueue, nextUpQueue, laterQueue, currentSong } = state;
-    const mainCurrentIndex =
-      typeof state.currentIndex === "number" ? state.currentIndex : -1;
-  
-    // 🔥 STEP 2: always remove currentSong from future queues
-    const filteredMain = mainQueue.filter(s => s._id !== currentSong?._id);
-    const filteredNext = nextUpQueue.filter(s => s._id !== currentSong?._id);
-    const filteredLater = laterQueue.filter(s => s._id !== currentSong?._id);
-  
-    const historyBeforeCurrent = filteredMain.slice(
-      0,
-      Math.max(0, mainCurrentIndex)
-    );
-  
-    const remainingMainAfter = filteredMain.slice(
-      Math.max(0, mainCurrentIndex + 1)
-    );
-  
-    let display: Song[] = [];
-  
-    if (currentSong) {
-      display = [
-        ...historyBeforeCurrent,
-        currentSong,
-        ...filteredNext,
-        ...remainingMainAfter,
-        ...filteredLater,
-      ];
-  
-      set({
-        displayQueue: display,
-        queue: [...display],
-        currentIndex: historyBeforeCurrent.length,
-      });
-    } else {
-      display = [...filteredNext, ...filteredMain, ...filteredLater];
+    const mainCurrentIndex = state.currentIndex;
+
+    if (!currentSong) {
+      const display = [...nextUpQueue, ...mainQueue, ...laterQueue];
       set({
         displayQueue: display,
         queue: [...display],
         currentIndex: -1,
       });
+      return;
     }
+
+    const currentId = currentSong._id;
+
+    const history = mainQueue
+      .slice(0, Math.max(0, mainCurrentIndex))
+      .filter(s => s._id !== currentId);
+
+    const upcomingMain = mainQueue
+      .slice(Math.max(0, mainCurrentIndex + 1))
+      .filter(s => s._id !== currentId);
+
+    const filteredNext = nextUpQueue.filter(s => s._id !== currentId);
+    const filteredLater = laterQueue.filter(s => s._id !== currentId);
+
+    const display = [
+      ...history,
+      currentSong,
+      ...filteredNext,
+      ...upcomingMain,
+      ...filteredLater,
+    ];
+
+    const seen = new Set<string>();
+    const deduped = display.filter(s => {
+      if (seen.has(s._id)) return false;
+      seen.add(s._id);
+      return true;
+    });
+
+    const newCurrentIndex = deduped.findIndex(s => s._id === currentId);
+
+    set({
+      displayQueue: deduped,
+      queue: [...deduped],
+      currentIndex: newCurrentIndex,
+    });
   },
 
   setHasTrackedCurrentSong: (value: boolean) => set({ hasTrackedCurrentSong: value }),
 
-  // Restore last played song from cache
   restoreFromCache: () => {
     const prefs = usePreferencesStore.getState();
     const lastPlayed = prefs.lastPlayed;
 
     if (!lastPlayed?.song) return false;
 
-    // Check if not too old (24 hours)
     const age = Date.now() - lastPlayed.timestamp;
     if (age > 24 * 60 * 60 * 1000) {
       prefs.clearLastPlayed();
@@ -170,17 +180,18 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     set({
       currentSong: lastPlayed.song,
       mainQueue: [lastPlayed.song],
+      nextUpQueue: [],
+      laterQueue: [],
       currentIndex: 0,
       _hasRestoredFromCache: true,
       _pendingResumePosition: lastPlayed.position,
-      isPlaying: false, // Don't auto-play on restore
+      isPlaying: false,
     });
 
     get()._rebuildDisplay();
     return true;
   },
 
-  // Save current state to cache
   saveToCache: () => {
     const state = get();
     if (state.currentSong && state.currentTime > 10) {
@@ -189,12 +200,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   getPendingResumePosition: () => get()._pendingResumePosition,
-
   clearPendingResume: () => set({ _pendingResumePosition: null }),
 
   initializeQueue: (songs: Song[], startIndexOrSong: number | Song = 0, autoplay = false) => {
     if (!Array.isArray(songs) || songs.length === 0) return;
-    const socket = useChatStore.getState().socket;
 
     let startIndex = 0;
     if (typeof startIndexOrSong === "number") {
@@ -204,28 +213,23 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       startIndex = idx === -1 ? 0 : idx;
     }
 
+    const song = songs[startIndex];
+
     set({
       mainQueue: [...songs],
       nextUpQueue: [],
       laterQueue: [],
-      currentSong: songs[startIndex],
+      currentSong: song,
       currentIndex: startIndex,
       hasTrackedCurrentSong: false,
-      _pendingResumePosition: null, // Clear any pending resume
+      _pendingResumePosition: null,
+      currentTime: 0,
     });
 
-    if (socket?.auth) {
-      const cs = songs[startIndex];
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${cs.title} by ${cs.artist}`,
-      });
-    }
-
+    emitActivity(`Playing ${song.title} by ${song.artist}`);
     get()._rebuildDisplay();
     set({ isPlaying: autoplay });
 
-    // Save to cache
     if (autoplay) {
       get().saveToCache();
     }
@@ -235,7 +239,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (!Array.isArray(songs) || songs.length === 0) return;
     const idx = clamp(startIndex, 0, songs.length - 1);
     const song = songs[idx];
-    const socket = useChatStore.getState().socket;
 
     set({
       mainQueue: [...songs],
@@ -245,17 +248,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentIndex: idx,
       hasTrackedCurrentSong: false,
       _pendingResumePosition: null,
+      currentTime: 0,
     });
 
     get()._rebuildDisplay();
-
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${song.title} by ${song.artist}`,
-      });
-    }
-
+    emitActivity(`Playing ${song.title} by ${song.artist}`);
     set({ isPlaying: true });
     get().saveToCache();
   },
@@ -265,13 +262,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       set({ currentSong: null, isPlaying: false, currentIndex: -1 });
       return;
     }
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${song.title} by ${song.artist}`,
-      });
-    }
+
+    emitActivity(`Playing ${song.title} by ${song.artist}`);
 
     const state = get();
     const mainIdx = state.mainQueue.findIndex((s) => s._id === song._id);
@@ -281,6 +273,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       currentIndex: mainIdx !== -1 ? mainIdx : state.currentIndex,
       hasTrackedCurrentSong: false,
       _pendingResumePosition: null,
+      currentTime: 0,
     });
 
     get()._rebuildDisplay();
@@ -289,16 +282,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 
   reset: () => {
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: "Idle",
-      });
-    }
-
-    // Save current state before reset
     get().saveToCache();
+    emitActivity("Idle");
 
     set({
       currentSong: null,
@@ -318,16 +303,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   togglePlay: () => {
     const willStart = !get().isPlaying;
     const current = get().currentSong;
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: willStart && current ? `Playing ${current.title} by ${current.artist}` : "Idle",
-      });
-    }
+
+    emitActivity(
+      willStart && current
+        ? `Playing ${current.title} by ${current.artist}`
+        : "Idle"
+    );
+
     set({ isPlaying: willStart });
 
-    // Save when pausing
     if (!willStart) {
       get().saveToCache();
     }
@@ -336,121 +320,70 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   playNext: async () => {
     const state = get();
 
-    // Shuffle mode
-    if (state.isShuffle && state.displayQueue.length > 0) {
-      const currentIdx = state.currentIndex;
-
-      if (state.isRepeat && state.displayQueue[currentIdx]) {
-        set({
-          currentSong: state.displayQueue[currentIdx],
-          isPlaying: true,
-          hasTrackedCurrentSong: false,
-          currentTime: 0,
-        });
-        return;
-      }
-
-      if (currentIdx + 1 < state.displayQueue.length) {
-        const nextSong = state.displayQueue[currentIdx + 1];
-        set({
-          currentSong: nextSong,
-          currentIndex: currentIdx + 1,
-          isPlaying: true,
-          hasTrackedCurrentSong: false,
-          currentTime: 0,
-        });
-
-        const socket = useChatStore.getState().socket;
-        if (socket?.auth) {
-          socket.emit("update_activity", {
-            userId: socket.auth.userId,
-            activity: `Playing ${nextSong.title} by ${nextSong.artist}`,
-          });
-        }
-        get().saveToCache();
-        return;
-      } else {
-        const upcomingCount = Math.max(0, state.displayQueue.length - (currentIdx + 1));
-        if (upcomingCount < 5) {
-          await get().autoRefillQueue();
-          const newState = get();
-          if (newState.displayQueue && currentIdx + 1 < newState.displayQueue.length) {
-            const nextSong = newState.displayQueue[currentIdx + 1];
-            set({
-              currentSong: nextSong,
-              currentIndex: currentIdx + 1,
-              isPlaying: true,
-              hasTrackedCurrentSong: false,
-              currentTime: 0,
-            });
-            get().saveToCache();
-            return;
-          }
-        }
-        return;
-      }
-    }
-
-    // Non-shuffle mode
-    if (
-      state.mainQueue.length === 0 &&
-      state.nextUpQueue.length === 0 &&
-      state.laterQueue.length === 0
-    ) {
+    // Handle repeat
+    if (state.isRepeat && state.currentSong) {
+      set({
+        isPlaying: true,
+        hasTrackedCurrentSong: false,
+        currentTime: 0,
+      });
       return;
-    }
-
-    if (state.isRepeat && state.displayQueue[state.currentIndex]) {
-      const song = state.displayQueue[state.currentIndex];
-      set({ currentSong: song, isPlaying: true, hasTrackedCurrentSong: false, currentTime: 0 });
-      return;
-    }
-
-    const upcomingCount = Math.max(0, state.displayQueue.length - (state.currentIndex + 1));
-    if (upcomingCount < 5) {
-      await get().autoRefillQueue();
     }
 
     let nextSong: Song | null = null;
 
+    // 1. Check nextUpQueue (user-added "play next" songs)
     if (state.nextUpQueue.length > 0) {
-      const shifted = [...state.nextUpQueue];
-      nextSong = shifted.shift()!;
-      set({ nextUpQueue: shifted });
-    } else {
-      // const mainIdx = state.currentIndex;
-      if (state.nextUpQueue.length > 0) {
-        nextSong = state.nextUpQueue.shift()!;
-        set({ nextUpQueue: [...state.nextUpQueue] });
-      } else if (state.mainQueue.length > 0) {
-        nextSong = state.mainQueue[0];
-        set({ mainQueue: state.mainQueue.slice(1) });
-      }
-      else if (state.laterQueue.length > 0) {
-        const later = [...state.laterQueue];
-        nextSong = later.shift()!;
-        set({ laterQueue: later });
-      }
+      const newNextUp = [...state.nextUpQueue];
+      nextSong = newNextUp.shift()!;
+      set({ nextUpQueue: newNextUp });
+    }
+    // 2. Check mainQueue (album/playlist songs after current)
+    else if (state.currentIndex + 1 < state.mainQueue.length) {
+      const newIndex = state.currentIndex + 1;
+      nextSong = state.mainQueue[newIndex];
+      set({ currentIndex: newIndex });
+    }
+    // 3. Check laterQueue (user-added "add to queue" songs)
+    else if (state.laterQueue.length > 0) {
+      const newLater = [...state.laterQueue];
+      nextSong = newLater.shift()!;
+      set({ laterQueue: newLater });
     }
 
+    // 4. If no next song found, try auto-refill
     if (!nextSong) {
       await get().autoRefillQueue();
-      const st2 = get();
-      if (st2.nextUpQueue.length > 0) {
-        const shifted = [...st2.nextUpQueue];
-        nextSong = shifted.shift()!;
-        set({ nextUpQueue: shifted });
-      } else if (st2.laterQueue.length > 0) {
-        const later = [...st2.laterQueue];
-        nextSong = later.shift()!;
-        set({ laterQueue: later });
-      } else if (st2.currentIndex + 1 < st2.mainQueue.length) {
-        nextSong = st2.mainQueue[st2.currentIndex + 1];
-        set({ currentIndex: st2.currentIndex + 1 });
+      const refreshed = get();
+
+      if (refreshed.laterQueue.length > 0) {
+        const newLater = [...refreshed.laterQueue];
+        nextSong = newLater.shift()!;
+        set({ laterQueue: newLater });
       }
     }
 
     if (!nextSong) return;
+
+    // Safety: ensure we don't replay the same song
+    if (nextSong._id === state.currentSong?._id) {
+      const afterState = get();
+      if (afterState.nextUpQueue.length > 0) {
+        const skip = [...afterState.nextUpQueue];
+        nextSong = skip.shift()!;
+        set({ nextUpQueue: skip });
+      } else if (afterState.currentIndex + 1 < afterState.mainQueue.length) {
+        const newIdx = afterState.currentIndex + 1;
+        nextSong = afterState.mainQueue[newIdx];
+        set({ currentIndex: newIdx });
+      } else if (afterState.laterQueue.length > 0) {
+        const skip = [...afterState.laterQueue];
+        nextSong = skip.shift()!;
+        set({ laterQueue: skip });
+      } else {
+        return;
+      }
+    }
 
     set({
       currentSong: nextSong,
@@ -460,16 +393,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     get()._rebuildDisplay();
-
-    const socket = useChatStore.getState().socket;
-    if (socket?.auth) {
-      socket.emit("update_activity", {
-        userId: socket.auth.userId,
-        activity: `Playing ${nextSong.title} by ${nextSong.artist}`,
-      });
-    }
-
+    emitActivity(`Playing ${nextSong.title} by ${nextSong.artist}`);
     get().saveToCache();
+
+    // Pre-emptively refill if running low
+    const postState = get();
+    const upcomingCount =
+      postState.nextUpQueue.length +
+      Math.max(0, postState.mainQueue.length - (postState.currentIndex + 1)) +
+      postState.laterQueue.length;
+
+    if (upcomingCount < 5) {
+      get().autoRefillQueue();
+    }
   },
 
   playPrevious: () => {
@@ -492,26 +428,19 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   removeFromQueue: (id: string) => {
     const state = get();
 
+    // Don't remove the currently playing song via queue remove
+    if (state.currentSong?._id === id) return;
+
     const newMainQueue = state.mainQueue.filter((s) => s._id !== id);
     const newNextUpQueue = state.nextUpQueue.filter((s) => s._id !== id);
     const newLaterQueue = state.laterQueue.filter((s) => s._id !== id);
 
-    let newCurrentSong = state.currentSong;
+    // Recalculate currentIndex in mainQueue
     let newCurrentIndex = state.currentIndex;
-    let newIsPlaying = state.isPlaying;
-
-    if (state.currentSong && state.currentSong._id === id) {
-      if (newNextUpQueue.length > 0) {
-        newCurrentSong = newNextUpQueue.shift()!;
-      } else if (newCurrentIndex + 1 < newMainQueue.length) {
-        newCurrentIndex = Math.min(newCurrentIndex, newMainQueue.length - 1);
-        newCurrentSong = newMainQueue[newCurrentIndex];
-      } else if (newLaterQueue.length > 0) {
-        newCurrentSong = newLaterQueue.shift()!;
-      } else {
-        newCurrentSong = null;
-        newCurrentIndex = -1;
-        newIsPlaying = false;
+    if (state.currentSong) {
+      const idx = newMainQueue.findIndex(s => s._id === state.currentSong!._id);
+      if (idx !== -1) {
+        newCurrentIndex = idx;
       }
     }
 
@@ -519,9 +448,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       mainQueue: newMainQueue,
       nextUpQueue: newNextUpQueue,
       laterQueue: newLaterQueue,
-      currentSong: newCurrentSong,
       currentIndex: newCurrentIndex,
-      isPlaying: newIsPlaying,
     });
 
     get()._rebuildDisplay();
@@ -529,35 +456,49 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   playSong: (song: Song) => {
     const state = get();
-  
-    // Remove song from ALL queues
-    const newMain = state.mainQueue.filter(s => s._id !== song._id);
-    const newNext = state.nextUpQueue.filter(s => s._id !== song._id);
-    const newLater = state.laterQueue.filter(s => s._id !== song._id);
-  
-    set({
-      mainQueue: newMain,
-      nextUpQueue: newNext,
-      laterQueue: newLater,
-      currentSong: song,
-      currentIndex: -1, // 🔥 important: not pointing into mainQueue
-      hasTrackedCurrentSong: false,
-      currentTime: 0,
-      _pendingResumePosition: null,
-      isPlaying: true,
-    });
-  
+
+    // Check if this song is in mainQueue
+    const mainIdx = state.mainQueue.findIndex(s => s._id === song._id);
+
+    if (mainIdx !== -1) {
+      // Song is in the main queue — just move the cursor
+      set({
+        currentSong: song,
+        currentIndex: mainIdx,
+        hasTrackedCurrentSong: false,
+        currentTime: 0,
+        _pendingResumePosition: null,
+        isPlaying: true,
+      });
+    } else {
+      // Song is not in main queue — remove from other queues and set as current
+      const newNext = state.nextUpQueue.filter(s => s._id !== song._id);
+      const newLater = state.laterQueue.filter(s => s._id !== song._id);
+
+      set({
+        nextUpQueue: newNext,
+        laterQueue: newLater,
+        currentSong: song,
+        hasTrackedCurrentSong: false,
+        currentTime: 0,
+        _pendingResumePosition: null,
+        isPlaying: true,
+      });
+    }
+
     get()._rebuildDisplay();
+    emitActivity(`Playing ${song.title} by ${song.artist}`);
     get().saveToCache();
   },
 
   addSongToQueue: (song: Song) => {
     const state = get();
+
     const exists =
+      (state.currentSong && state.currentSong._id === song._id) ||
       state.mainQueue.some((s) => s._id === song._id) ||
       state.nextUpQueue.some((s) => s._id === song._id) ||
-      state.laterQueue.some((s) => s._id === song._id) ||
-      (state.currentSong && state.currentSong._id === song._id);
+      state.laterQueue.some((s) => s._id === song._id);
 
     if (exists) return;
 
@@ -567,33 +508,40 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   reorderQueue: (newUpcomingSongs: Song[]) => {
     const state = get();
-    const currentSong = state.currentSong;
+    const currentId = state.currentSong?._id;
 
     const seen = new Set<string>();
     const cleaned = newUpcomingSongs
       .filter(Boolean)
-      .filter((s) => !currentSong || s._id !== currentSong._id)
+      .filter((s) => s._id !== currentId)
       .filter((s) => {
         if (seen.has(s._id)) return false;
         seen.add(s._id);
         return true;
       });
 
-    set({ nextUpQueue: cleaned });
+    set({
+      nextUpQueue: cleaned,
+      mainQueue: state.mainQueue.slice(0, state.currentIndex + 1),
+      laterQueue: [],
+    });
+
     get()._rebuildDisplay();
   },
 
   addSongNext: (song: Song) => {
     const state = get();
+
     const exists =
+      (state.currentSong && state.currentSong._id === song._id) ||
       state.mainQueue.some((s) => s._id === song._id) ||
       state.nextUpQueue.some((s) => s._id === song._id) ||
-      state.laterQueue.some((s) => s._id === song._id) ||
-      (state.currentSong && state.currentSong._id === song._id);
+      state.laterQueue.some((s) => s._id === song._id);
 
     if (exists) return;
 
-    set({ nextUpQueue: [...state.nextUpQueue, song] });
+    // Add to FRONT of nextUpQueue
+    set({ nextUpQueue: [song, ...state.nextUpQueue] });
     get()._rebuildDisplay();
   },
 
@@ -682,7 +630,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   setCurrentTime: (t: number) => {
     set({ currentTime: t });
 
-    // Debounced save to cache
     if (savePositionTimeout) {
       clearTimeout(savePositionTimeout);
     }
@@ -700,7 +647,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   },
 }));
 
-// Initialize from preferences on first load
 const initFromPreferences = () => {
   const prefs = usePreferencesStore.getState();
   usePlayerStore.setState({
@@ -710,8 +656,6 @@ const initFromPreferences = () => {
   });
 };
 
-// Run initialization
 if (typeof window !== "undefined") {
-  // Wait for preferences to hydrate
   setTimeout(initFromPreferences, 100);
 }

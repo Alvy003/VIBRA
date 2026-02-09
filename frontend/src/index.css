@@ -2,83 +2,193 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   PWA VIEWPORT STABILITY FIX
+   ============================================ */
+
+html {
+  overscroll-behavior: none;
+  scroll-behavior: auto;
+  height: 100%;
+  height: 100dvh;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
+
+body {
+  min-height: 100%;
+  min-height: 100dvh;
+  height: 100%;
+  height: 100dvh;
+  overscroll-behavior-y: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  -webkit-overflow-scrolling: touch;
+  /* user-select is applied separately below */
+}
+
+#root {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+@supports (padding-top: env(safe-area-inset-top)) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+@media all and (display-mode: standalone) {
+  html, body {
+    overscroll-behavior: none;
+    overflow: hidden;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  
+  body {
+    touch-action: pan-x pan-y;
+  }
+}
+
+@supports (-webkit-touch-callout: none) {
+  html {
+    height: -webkit-fill-available;
+  }
+  
+  body {
+    min-height: -webkit-fill-available;
+  }
+  
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* ============================================
+   TAILWIND BASE LAYER
+   ============================================ */
+
 @layer base {
-	:root {
+  :root {
     --background: 0 0% 100%;
     --foreground: 240 10% 3.9%;
     --card: 0 0% 100%;
     --card-foreground: 240 10% 3.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 240 10% 3.9%;
-    --primary: 270 70% 40%; /* changed from green to violet */
+    --primary: 270 70% 40%;
     --primary-foreground: 0 0% 97.3%;
     --secondary: 240 4.8% 95.9%;
     --secondary-foreground: 240 5.9% 10%;
     --muted: 240 4.8% 95.9%;
     --muted-foreground: 240 3.8% 46.1%;
-    --accent: 270 50% 65%; /* changed from green to violet */
+    --accent: 270 50% 65%;
     --accent-foreground: 240 5.9% 10%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
     --input: 240 5.9% 90%;
-    --ring: 270 70% 40%; /* changed from green to violet */
+    --ring: 270 70% 40%;
     --radius: 0.5rem;
-    --chart-1: 270 60% 60%; /* changed from green to violet */
-    --chart-2: 280 60% 50%; /* changed from green to violet */
+    --chart-1: 270 60% 60%;
+    --chart-2: 280 60% 50%;
     --chart-3: 240 37% 24%;
     --chart-4: 280 65% 60%;
-    --chart-5: 270 80% 60%; /* changed from green to violet */
-}
+    --chart-5: 270 80% 60%;
+  }
 
-.dark {
+  .dark {
     --background: 20 14.3% 4.1%;
     --foreground: 0 0% 95%;
     --card: 24 9.8% 10%;
     --card-foreground: 0 0% 95%;
     --popover: 0 0% 9%;
     --popover-foreground: 0 0% 95%;
-    --primary: 270 70% 45%; /* changed from green to violet */
+    --primary: 270 70% 45%;
     --primary-foreground: 144.9 80.4% 10%;
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 0 0% 15%;
     --muted-foreground: 240 5% 64.9%;
-    --accent: 270 50% 40%; /* changed from green to violet */
+    --accent: 270 50% 40%;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 85.7% 97.3%;
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
-    --ring: 270 60% 40%; /* changed from green to violet */
-    --chart-1: 280 70% 50%; /* changed from green to violet */
-    --chart-2: 270 60% 50%; /* changed from green to violet */
+    --ring: 270 60% 40%;
+    --chart-1: 280 70% 50%;
+    --chart-2: 270 60% 50%;
     --chart-3: 220 40% 30%;
     --chart-4: 290 70% 50%;
-    --chart-5: 270 60% 50%; /* changed from green to violet */
+    --chart-5: 270 60% 50%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
 }
 
+/* ============================================
+   APP-LIKE FEEL: DISABLE SELECTION & CALLOUTS
+   ============================================ */
 
+body {
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 
-@layer base {
-	* {
-		@apply border-border;
-	}
-	body {
-		@apply bg-background text-foreground;
-	}
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: text;
+  -khtml-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
 }
 
-/* Hide scrollbars cross-browser for a specific container */
-.no-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none; /* Firefox */
+* {
+  -webkit-touch-callout: none;
 }
-.no-scrollbar::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+
+img {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -khtml-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  pointer-events: none;
 }
+
+.group img,
+button img,
+a img {
+  pointer-events: none;
+}
+
+/* ============================================
+   SHIMMER SKELETON ANIMATION
+   ============================================ */
 
 @keyframes shimmer {
   0% {
@@ -111,7 +221,6 @@
   animation: shimmer 1.5s infinite ease-in-out;
 }
 
-/* Stagger animation for skeleton rows */
 .animate-shimmer:nth-child(1)::after { animation-delay: 0ms; }
 .animate-shimmer:nth-child(2)::after { animation-delay: 75ms; }
 .animate-shimmer:nth-child(3)::after { animation-delay: 150ms; }
@@ -123,64 +232,10 @@
 .animate-shimmer:nth-child(9)::after { animation-delay: 600ms; }
 .animate-shimmer:nth-child(10)::after { animation-delay: 675ms; }
 
-/* Disable image context menu (open in new tab, save image, etc.) */
-img {
-  -webkit-touch-callout: none;
-  -webkit-user-select: none;
-  -khtml-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-  pointer-events: none;
-}
+/* ============================================
+   CHAT STYLES
+   ============================================ */
 
-/* Re-enable pointer events for images that need to be clickable */
-/* The parent container handles the click */
-.group img,
-button img,
-a img {
-  pointer-events: none;
-}
-
-/* Disable text selection globally for app-like feel */
-/* But allow it in specific areas like search inputs */
-body {
-  -webkit-user-select: none;
-  -khtml-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-
-/* Allow text selection in inputs and textareas */
-input,
-textarea,
-[contenteditable="true"] {
-  -webkit-user-select: text;
-  -khtml-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
-  user-select: text;
-}
-
-/* Disable long-press context menu on touch devices */
-* {
-  -webkit-touch-callout: none;
-}
-
-/* Hide scrollbars but keep functionality */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* globals.css */
-
-/* Chat background pattern - simple version */
 .chat-bg-pattern {
   background-color: #0a0a0f;
   background-image: url('/chat-pattern.svg');
@@ -188,16 +243,6 @@ textarea,
   background-size: 120px 120px;
 }
 
-/* Hide scrollbar */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-
-/* Chat scroll - even thinner */
 .chat-scroll::-webkit-scrollbar {
   width: 3px;
 }
@@ -213,10 +258,9 @@ textarea,
 }
 
 /* ============================================
-   SPOTIFY-STYLE SCROLLBAR
+   SPOTIFY-STYLE SCROLLBAR (Desktop)
    ============================================ */
 
-/* For Webkit browsers (Chrome, Safari, Edge) */
 ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
@@ -249,7 +293,6 @@ textarea,
   background: transparent;
 }
 
-/* Firefox */
 * {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
@@ -259,7 +302,6 @@ textarea,
    SCROLLBAR VARIANTS
    ============================================ */
 
-/* Thin scrollbar variant */
 .scrollbar-thin::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -269,7 +311,6 @@ textarea,
   border: 2px solid transparent;
 }
 
-/* Auto-hide scrollbar - shows on hover */
 .scrollbar-auto-hide::-webkit-scrollbar-thumb {
   background: transparent;
   transition: background 0.2s ease;
@@ -285,7 +326,6 @@ textarea,
   background: rgba(255, 255, 255, 0.35);
 }
 
-/* Violet accent scrollbar (matches your theme) */
 .scrollbar-violet::-webkit-scrollbar-thumb {
   background: rgba(139, 92, 246, 0.4);
   border: 3px solid transparent;
@@ -304,16 +344,14 @@ textarea,
   background-clip: padding-box;
 }
 
-/* Firefox violet variant */
 .scrollbar-violet {
   scrollbar-color: rgba(139, 92, 246, 0.4) transparent;
 }
 
 /* ============================================
-   RADIX SCROLL AREA CUSTOMIZATION
+   RADIX SCROLL AREA
    ============================================ */
 
-/* Target Radix ScrollArea viewport */
 [data-radix-scroll-area-viewport]::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -329,7 +367,6 @@ textarea,
   border-radius: 10px;
   border: 2px solid transparent;
   background-clip: padding-box;
-  transition: background 0.15s ease;
 }
 
 [data-radix-scroll-area-viewport]::-webkit-scrollbar-thumb:hover {
@@ -344,14 +381,13 @@ textarea,
   background-clip: padding-box;
 }
 
-/* Firefox for Radix */
 [data-radix-scroll-area-viewport] {
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 /* ============================================
-   MOBILE - HIDE SCROLLBAR
+   MOBILE — HIDE ALL SCROLLBARS
    ============================================ */
 
 @media (max-width: 768px) {
@@ -359,12 +395,12 @@ textarea,
     width: 0px;
     height: 0px;
   }
-  
+
   [data-radix-scroll-area-viewport]::-webkit-scrollbar {
     width: 0px;
     height: 0px;
   }
-  
+
   * {
     scrollbar-width: none;
   }
@@ -374,7 +410,6 @@ textarea,
    UTILITY CLASSES
    ============================================ */
 
-/* Completely hide scrollbar but keep scroll functionality */
 .no-scrollbar::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -386,12 +421,10 @@ textarea,
   scrollbar-width: none;
 }
 
-/* Gutter stable - prevents layout shift */
 .scrollbar-gutter-stable {
   scrollbar-gutter: stable;
 }
 
-/* Utility to completely hide scrollbar */
 .scrollbar-none {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;

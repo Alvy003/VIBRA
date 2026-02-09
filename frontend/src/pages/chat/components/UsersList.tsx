@@ -26,25 +26,32 @@ import { getUserPreview } from "@/layout/components/getUserPreview";
 import { usePreferencesStore } from "@/stores/usePreferencesStore";
 
 // Human label for list (Today/Yesterday/Date)
-function listTimeLabel(dateStr?: string) {
+const listTimeLabel = (dateStr?: string) => {
   if (!dateStr) return "";
   const d = new Date(dateStr);
   const now = new Date();
   const oneDay = 24 * 60 * 60 * 1000;
+  
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   const startOfDate = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const diffDays = Math.round((startOfToday - startOfDate) / oneDay);
 
   if (diffDays === 0) {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    // UPDATED: Forced en-US and hour12 to match MessageBubble
+    return d.toLocaleTimeString("en-US", { 
+      hour: "2-digit", 
+      minute: "2-digit",
+      hour12: true 
+    });
   }
+
   if (diffDays === 1) return "Yesterday";
 
   const day = String(d.getDate()).padStart(2, "0");
   const month = String(d.getMonth() + 1).padStart(2, "0");
   const year = String(d.getFullYear()).slice(-2);
   return `${day}/${month}/${year}`;
-}
+};
 
 // ✅ Get message preview with reaction support
 function getMessagePreview(
@@ -273,7 +280,7 @@ const UsersList = () => {
 
   return (
 <div
-  className={`md:border-r border-zinc-800 h-full bg-[#121318]/85
+  className={`md:border-r md:border-zinc-800 h-full bg-[#121318]/85
     ${selectedUser ? "hidden sm:hidden lg:block" : "block"}`}
 >
 

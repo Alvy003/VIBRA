@@ -413,6 +413,7 @@ const UpdateCard = ({
   updateAvailable,
   isChecking,
   isUpdating,
+  updateApplied,
   currentVersion,
   newVersion,
   checkForUpdate,
@@ -422,6 +423,7 @@ const UpdateCard = ({
   updateAvailable: boolean;
   isChecking: boolean;
   isUpdating: boolean;
+  updateApplied: boolean;
   currentVersion: string | null;
   newVersion: string | null;
   checkForUpdate: () => void;
@@ -431,36 +433,41 @@ const UpdateCard = ({
   <div className={cn(
     "rounded-xl border transition-all duration-300",
     isStacked ? "p-4" : "p-5",
-    updateAvailable 
-      ? "bg-gradient-to-br from-violet-600/15 to-purple-600/10 border-violet-500/30" 
-      : "bg-zinc-800/40 border-zinc-700/50 hover:border-zinc-600/50"
+    updateApplied
+      ? "bg-gradient-to-br from-emerald-600/15 to-green-600/10 border-emerald-500/30"
+      : updateAvailable 
+        ? "bg-gradient-to-br from-violet-600/15 to-purple-600/10 border-violet-500/30" 
+        : "bg-zinc-800/40 border-zinc-700/50 hover:border-zinc-600/50"
   )}>
     <div className="flex items-start justify-between mb-4">
       <div className="flex items-center gap-3">
         <div className={cn(
           "rounded-xl flex items-center justify-center shrink-0",
           isStacked ? "w-10 h-10" : "w-11 h-11",
-          updateAvailable ? "bg-violet-500/20" : "bg-zinc-700/50"
+          updateApplied ? "bg-emerald-500/20"
+            : updateAvailable ? "bg-violet-500/20" : "bg-zinc-700/50"
         )}>
-          {updateAvailable ? (
+          {updateApplied ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+          ) : updateAvailable ? (
             <Sparkles className="w-5 h-5 text-violet-400" />
           ) : (
             <RefreshCw className="w-5 h-5 text-white/80" />
           )}
         </div>
         <div className="min-w-0">
-          <h3 className={cn(
-            "font-semibold text-white/90",
-            isStacked ? "text-sm" : "text-sm"
-          )}>
-            {updateAvailable ? 'Update Available' : 'App Version'}
+          <h3 className="text-sm font-semibold text-white/90">
+            {updateApplied ? 'Update Installed' 
+              : updateAvailable ? 'Update Available' : 'App Version'}
           </h3>
           <p className="text-xs text-zinc-400 mt-0.5 truncate">
-            {currentVersion ? `Currently v${currentVersion}` : 'Vibra Music'}
+            {updateApplied 
+              ? `v${newVersion || currentVersion} installed`
+              : currentVersion ? `Currently v${currentVersion}` : 'Vibra Music'}
           </p>
         </div>
       </div>
-      {!updateAvailable && !isChecking && (
+      {!updateAvailable && !updateApplied && !isChecking && (
         <div className="flex items-center gap-1.5 px-2 py-1 bg-violet-500/10 rounded-full shrink-0">
           <CheckCircle2 className="w-3 h-3 text-violet-400" />
           <span className="text-xs text-violet-400">Up to date</span>
@@ -468,7 +475,16 @@ const UpdateCard = ({
       )}
     </div>
 
-    {updateAvailable ? (
+    {updateApplied ? (
+      <div className="space-y-3">
+        <div className="flex items-center gap-2 px-3 py-2 bg-emerald-500/10 rounded-lg border border-emerald-500/20">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span className="text-sm text-emerald-200">
+            Close & reopen the app to use v{newVersion || currentVersion}
+          </span>
+        </div>
+      </div>
+    ) : updateAvailable ? (
       <div className="space-y-3">
         <div className="flex items-center gap-2 px-3 py-2 bg-violet-500/10 rounded-lg border border-violet-500/20">
           <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse shrink-0" />
@@ -482,7 +498,7 @@ const UpdateCard = ({
           {isUpdating ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin" />
-              Installing Update...
+              Installing...
             </>
           ) : (
             <>
@@ -605,6 +621,7 @@ const DownloadsPage = () => {
     updateAvailable,
     isChecking,
     isUpdating,
+    updateApplied,
     currentVersion,
     newVersion,
     checkForUpdate,
@@ -868,22 +885,27 @@ const DownloadsPage = () => {
                 WebkitOverflowScrolling: 'touch'
               }}
             >
-              {/* Card 1: App Update */}
-              <div 
+                            {/* Card 1: App Update */}
+                            <div 
                 className={cn(
                   "flex-shrink-0 snap-start rounded-2xl p-3 border backdrop-blur-sm",
-                  updateAvailable 
-                    ? "bg-gradient-to-br from-violet-600/20 via-violet-500/10 to-purple-600/20 border-violet-500/30" 
-                    : "bg-zinc-800/40 border-zinc-700/50"
+                  updateApplied
+                    ? "bg-gradient-to-br from-emerald-600/20 via-emerald-500/10 to-green-600/20 border-emerald-500/30"
+                    : updateAvailable 
+                      ? "bg-gradient-to-br from-violet-600/20 via-violet-500/10 to-purple-600/20 border-violet-500/30" 
+                      : "bg-zinc-800/40 border-zinc-700/50"
                 )}
                 style={{ width: 'calc(100% - 37px)', minWidth: 'calc(100% - 37px)' }}
               >
                 <div className="flex items-center gap-3 mb-4">
                   <div className={cn(
                     "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-                    updateAvailable ? "bg-violet-500/20" : "bg-zinc-700/60"
+                    updateApplied ? "bg-emerald-500/20"
+                      : updateAvailable ? "bg-violet-500/20" : "bg-zinc-700/60"
                   )}>
-                    {updateAvailable ? (
+                    {updateApplied ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                    ) : updateAvailable ? (
                       <Sparkles className="w-5 h-5 text-violet-400" />
                     ) : (
                       <RefreshCw className="w-5 h-5 text-white/80" />
@@ -891,18 +913,28 @@ const DownloadsPage = () => {
                   </div>
                   <div className="flex-1 min-w-0">
                     <h3 className="text-base font-semibold text-white/90">
-                      {updateAvailable ? 'Update Ready' : 'App Version'}
+                      {updateApplied ? 'Update Installed' 
+                        : updateAvailable ? 'Update Ready' : 'App Version'}
                     </h3>
                     <p className="text-xs text-zinc-400 mt-1 truncate">
-                      {currentVersion ? `v${currentVersion}` : 'Vibra Music'}
+                      {updateApplied 
+                        ? `v${newVersion || currentVersion}`
+                        : currentVersion ? `v${currentVersion}` : 'Vibra Music'}
                     </p>
                   </div>
-                  {!updateAvailable && !isChecking && (
+                  {!updateAvailable && !updateApplied && !isChecking && (
                     <CheckCircle2 className="w-5 h-5 text-violet-400 shrink-0" />
                   )}
                 </div>
 
-                {updateAvailable ? (
+                {updateApplied ? (
+                  <div className="flex items-center gap-2 px-3 py-2.5 bg-emerald-500/10 rounded-xl border border-emerald-500/20">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-sm text-emerald-200">
+                      Close & reopen app to apply
+                    </span>
+                  </div>
+                ) : updateAvailable ? (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 px-3 py-2 bg-violet-500/10 rounded-lg">
                       <div className="w-2 h-2 rounded-full bg-violet-400 animate-pulse shrink-0" />
@@ -1018,16 +1050,17 @@ const DownloadsPage = () => {
             "hidden sm:grid gap-3 mb-6 transition-all duration-300",
             isStacked ? "grid-cols-1" : "grid-cols-2"
           )}>
-            <UpdateCard
-              updateAvailable={updateAvailable}
-              isChecking={isChecking}
-              isUpdating={isUpdating}
-              currentVersion={currentVersion}
-              newVersion={newVersion}
-              checkForUpdate={checkForUpdate}
-              applyUpdate={applyUpdate}
-              isStacked={isStacked}
-            />
+          <UpdateCard
+            updateAvailable={updateAvailable}
+            isChecking={isChecking}
+            isUpdating={isUpdating}
+            updateApplied={updateApplied}
+            currentVersion={currentVersion}
+            newVersion={newVersion}
+            checkForUpdate={checkForUpdate}
+            applyUpdate={applyUpdate}
+            isStacked={isStacked}
+          />
             
             {storage && (
               <StorageCard
