@@ -1,13 +1,29 @@
 // src/pages/home/HomePage.tsx
 import Topbar from "@/components/Topbar";
 import { useMusicStore } from "@/stores/useMusicStore";
+import { useStreamStore } from "@/stores/useStreamStore";
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
+import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, Sparkles, TrendingUp, Music2, Disc3, ChevronLeft, ChevronRight, Clock, Loader2 } from "lucide-react";
+import {
+  Play,
+  Sparkles,
+  TrendingUp,
+  Music2,
+  Disc3,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Loader2,
+  ListMusic,
+  Star,
+  BarChart3,
+  WifiOff,
+} from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { Song, Album } from "@/types";
+import { Song, Album, ExternalAlbum, ExternalPlaylist } from "@/types";
 import { useSongContextMenu } from "@/hooks/useSongContextMenu";
 import SongOptions from "../album/components/SongOptions";
 import HomePageSkeleton from "./components/HomePageSkeleton.tsx";
@@ -15,8 +31,18 @@ import { useIsTouchDevice } from "@/hooks/useIsTouchDevice";
 import GeneratedAlbumCover from "@/components/GeneratedAlbumCover";
 import { SignedIn, useUser } from "@clerk/clerk-react";
 import { axiosInstance } from "@/lib/axios";
+import OnboardingModal from "@/components/OnboardingModal";
+import { Button } from "@/components/ui/button.tsx";
 
-// ─── Intersection Observer hook for lazy sections ───
+// ─── Session-level flags to prevent re-animation ───
+let hasAnimatedThisSession = false;
+
+// ─── Cached recently played to avoid refetching ───
+let cachedRecentlyPlayed: Song[] | null = null;
+let recentlyPlayedFetchedAt = 0;
+const RECENTLY_PLAYED_CACHE_MS = 5 * 60 * 1000; // 5 minutes
+
+// ─── Intersection Observer for lazy sections ───
 const useInView = (options?: IntersectionObserverInit) => {
   const ref = useRef<HTMLDivElement>(null);
   const [isInView, setIsInView] = useState(false);
@@ -24,14 +50,15 @@ const useInView = (options?: IntersectionObserverInit) => {
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsInView(true);
-        observer.unobserve(el); // Once visible, stop observing
-      }
-    }, { rootMargin: '200px 0px', ...options });
-
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true);
+          observer.unobserve(el);
+        }
+      },
+      { rootMargin: "200px 0px", ...options }
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
@@ -39,7 +66,7 @@ const useInView = (options?: IntersectionObserverInit) => {
   return { ref, isInView };
 };
 
-// ─── Lazy Image with native loading="lazy" + fade ───
+// ─── Lazy Image ───
 const LazyImage = ({
   src,
   alt,
@@ -50,7 +77,6 @@ const LazyImage = ({
   className?: string;
 }) => {
   const [loaded, setLoaded] = useState(false);
-
   return (
     <img
       src={src}
@@ -58,16 +84,12 @@ const LazyImage = ({
       loading="lazy"
       decoding="async"
       onLoad={() => setLoaded(true)}
-      className={cn(
-        className,
-        "transition-opacity duration-300",
-        loaded ? "opacity-100" : "opacity-0"
-      )}
+      className={cn(className, "transition-opacity duration-300", loaded ? "opacity-100" : "opacity-0")}
     />
   );
 };
 
-// Hero Background Component
+// ─── Hero Background ───
 const HeroBackground = ({ imageUrl, isLoaded }: { imageUrl: string; isLoaded: boolean }) => (
   <div className="absolute inset-0 overflow-hidden">
     <AnimatePresence mode="wait">
@@ -79,14 +101,9 @@ const HeroBackground = ({ imageUrl, isLoaded }: { imageUrl: string; isLoaded: bo
         transition={{ duration: 0.8, ease: "easeOut" }}
         className="absolute inset-0 scale-[1.01]"
       >
-        <img
-          src={imageUrl}
-          alt=""
-          className="w-full h-full object-cover"
-        />
+        <img src={imageUrl} alt="" className="w-full h-full object-cover" />
       </motion.div>
     </AnimatePresence>
-
     <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-black/30 to-zinc-900" />
     <div className="absolute inset-0 bg-gradient-to-t from-zinc-900 via-zinc-900/70 to-transparent" />
     <div className="hidden md:block absolute inset-0 bg-gradient-to-r from-zinc-900/30 via-transparent to-zinc-900/30" />
@@ -96,40 +113,41 @@ const HeroBackground = ({ imageUrl, isLoaded }: { imageUrl: string; isLoaded: bo
     </div>
     <div
       className="absolute inset-0 opacity-40"
-      style={{
-        background: "radial-gradient(ellipse at center, transparent 20%, rgba(24,24,27,0.8) 100%)"
-      }}
+      style={{ background: "radial-gradient(ellipse at center, transparent 20%, rgba(24,24,27,0.8) 100%)" }}
     />
   </div>
 );
 
-// Featured Song Card
-const FeaturedSongPill = ({ song, onClick, isTouchDevice }: { isTouchDevice: boolean; song: Song; onClick: () => void }) => (
+// ─── Featured Song Pill ───
+const FeaturedSongPill = ({
+  song,
+  onClick,
+  isTouchDevice,
+}: {
+  song: Song;
+  onClick: () => void;
+  isTouchDevice: boolean;
+}) => (
   <motion.button
     onClick={onClick}
-    whileHover={{ scale: 1 }}
     whileTap={{ scale: 0.98 }}
     className={cn(
-      "flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full pl-1 pr-4 py-1 transition-all border border-white/10 group",
+      "flex items-center gap-3 bg-white/10 backdrop-blur-md rounded-full pl-1 pr-4 py-1 transition-all border border-white/10 group w-full max-w-[320px]",
       isTouchDevice ? "active:bg-white/20" : "hover:bg-white/20"
     )}
   >
-    <img
-      src={song.imageUrl}
-      alt={song.title}
-      className="w-10 h-10 rounded-full object-cover ring-2 ring-white/20"
-    />
-    <div className="text-left">
-      <p className="text-sm font-medium text-white line-clamp-1">{song.title}</p>
-      <p className="text-xs text-white/60 line-clamp-1">{song.artist}</p>
+    <img src={song.imageUrl} alt={song.title} className="w-10 h-10 rounded-full object-cover ring-2 ring-white/20 shrink-0" />
+    <div className="text-left flex-1 min-w-0">
+      <p className="text-sm font-medium text-white truncate">{song.title}</p>
+      <p className="text-xs text-white/60 truncate">{song.artist}</p>
     </div>
-    <div className="w-8 h-8 rounded-full bg-transparent flex items-center justify-center ml-2 transition-colors">
+    <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0">
       <Play className="w-4 h-4 text-white ml-0.5" fill="white" />
     </div>
   </motion.button>
 );
 
-// Quick Pick Card
+// ─── Quick Pick Card ───
 const QuickPickCard = ({
   song,
   onClick,
@@ -156,26 +174,12 @@ const QuickPickCard = ({
     onTouchMove={onTouchMove}
     onTouchEnd={onTouchEnd}
   >
-    <LazyImage
-      src={song.imageUrl}
-      alt={song.title}
-      className="w-12 h-12 object-cover flex-shrink-0"
-    />
+    <LazyImage src={song.imageUrl} alt={song.title} className="w-12 h-12 object-cover flex-shrink-0" />
     <div className="flex-1 min-w-0 pr-2">
-      <p
-        className={cn(
-          "font-medium text-sm truncate transition-[max-width,color] duration-200 text-white",
-          !isTouchDevice && "max-w-full group-hover:max-w-[calc(100%-2.5rem)]"
-        )}
-      >
+      <p className={cn("font-medium text-sm truncate text-white", !isTouchDevice && "group-hover:max-w-[calc(100%-2.5rem)]")}>
         {song.title}
       </p>
-      <p
-        className={cn(
-          "text-xs text-zinc-400 truncate transition-[max-width] duration-200",
-          !isTouchDevice && "max-w-full group-hover:max-w-[calc(100%-2.5rem)]"
-        )}
-      >
+      <p className={cn("text-xs text-zinc-400 truncate", !isTouchDevice && "group-hover:max-w-[calc(100%-2.5rem)]")}>
         {song.artist}
       </p>
     </div>
@@ -189,7 +193,7 @@ const QuickPickCard = ({
   </motion.div>
 );
 
-// Horizontal Rail Component
+// ─── Horizontal Rail ───
 const HorizontalRail = ({
   children,
   className,
@@ -215,31 +219,23 @@ const HorizontalRail = ({
     const el = scrollRef.current;
     if (!el) return;
     checkScrollability();
-    el.addEventListener('scroll', checkScrollability, { passive: true });
-    const resizeObserver = new ResizeObserver(checkScrollability);
-    resizeObserver.observe(el);
+    el.addEventListener("scroll", checkScrollability, { passive: true });
+    const ro = new ResizeObserver(checkScrollability);
+    ro.observe(el);
     return () => {
-      el.removeEventListener('scroll', checkScrollability);
-      resizeObserver.disconnect();
+      el.removeEventListener("scroll", checkScrollability);
+      ro.disconnect();
     };
   }, [checkScrollability]);
 
-  const scroll = (direction: 'left' | 'right') => {
+  const scroll = (direction: "left" | "right") => {
     const el = scrollRef.current;
     if (!el) return;
-    const scrollAmount = el.clientWidth * 0.8;
-    el.scrollBy({
-      left: direction === 'left' ? -scrollAmount : scrollAmount,
-      behavior: 'smooth'
-    });
+    el.scrollBy({ left: direction === "left" ? -el.clientWidth * 0.8 : el.clientWidth * 0.8, behavior: "smooth" });
   };
 
   return (
-    <div
-      className={cn("relative", className)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
+    <div className={cn("relative", className)} onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}>
       <AnimatePresence>
         {!isTouchDevice && isHovered && canScrollLeft && (
           <motion.button
@@ -266,36 +262,21 @@ const HorizontalRail = ({
           </motion.button>
         )}
       </AnimatePresence>
-      <div
-        ref={scrollRef}
-        className="overflow-x-auto scrollbar-none scroll-smooth"
-        style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-      >
-        <div className="flex gap-4 pb-2">
-          {children}
-        </div>
+      <div ref={scrollRef} className="overflow-x-auto scrollbar-none scroll-smooth" style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
+        <div className="flex gap-4 pb-2">{children}</div>
       </div>
     </div>
   );
 };
 
-// Mobile Horizontal Scroll Container
+// ─── Mobile Horizontal Scroll ───
 const MobileHorizontalScroll = ({ children }: { children: React.ReactNode }) => (
-  <div
-    className="overflow-x-auto scrollbar-none -mx-4 px-4"
-    style={{
-      scrollbarWidth: 'none',
-      msOverflowStyle: 'none',
-      WebkitOverflowScrolling: 'touch',
-    }}
-  >
-    <div className="flex gap-4 pb-2 w-max">
-      {children}
-    </div>
+  <div className="overflow-x-auto scrollbar-none -mx-4 px-4" style={{ scrollbarWidth: "none", msOverflowStyle: "none", WebkitOverflowScrolling: "touch" }}>
+    <div className="flex gap-4 pb-2 w-max">{children}</div>
   </div>
 );
 
-// Pull-to-Refresh Indicator
+// ─── Pull-to-Refresh Indicator ───
 const PullToRefreshIndicator = ({
   pullDistance,
   isRefreshing,
@@ -307,16 +288,10 @@ const PullToRefreshIndicator = ({
 }) => {
   const progress = Math.min(pullDistance / threshold, 1);
   const isReady = pullDistance >= threshold;
-
   if (pullDistance <= 0 && !isRefreshing) return null;
 
   return (
-    <div
-      className="flex items-center justify-center overflow-hidden transition-[height] duration-150"
-      style={{
-        height: isRefreshing ? 52 : Math.min(pullDistance * 0.55, 52),
-      }}
-    >
+    <div className="flex items-center justify-center overflow-hidden transition-[height] duration-150" style={{ height: isRefreshing ? 52 : Math.min(pullDistance * 0.55, 52) }}>
       {isRefreshing ? (
         <div className="flex items-center gap-2.5">
           <Loader2 className="w-[18px] h-[18px] text-violet-400 animate-spin" />
@@ -324,32 +299,13 @@ const PullToRefreshIndicator = ({
         </div>
       ) : (
         <div className="flex items-center gap-2.5">
-          <motion.div
-            animate={{ rotate: isReady ? 180 : progress * 180 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          >
-            <svg
-              className={cn(
-                "w-[18px] h-[18px] transition-colors duration-200",
-                isReady ? "text-violet-400" : "text-zinc-500"
-              )}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+          <motion.div animate={{ rotate: isReady ? 180 : progress * 180 }} transition={{ type: "spring", stiffness: 300, damping: 25 }}>
+            <svg className={cn("w-[18px] h-[18px] transition-colors", isReady ? "text-violet-400" : "text-zinc-500")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="7 13 12 18 17 13" />
               <line x1="12" y1="6" x2="12" y2="18" />
             </svg>
           </motion.div>
-          <span
-            className={cn(
-              "text-[13px] font-medium transition-colors duration-200",
-              isReady ? "text-violet-400" : "text-zinc-500"
-            )}
-          >
+          <span className={cn("text-[13px] font-medium", isReady ? "text-violet-400" : "text-zinc-500")}>
             {isReady ? "Release to refresh" : "Pull to refresh"}
           </span>
         </div>
@@ -358,61 +314,37 @@ const PullToRefreshIndicator = ({
   );
 };
 
-// Album Card
-const AlbumCard = ({
-  album,
-  isTouchDevice,
-}: {
-  album: Album;
-  isTouchDevice: boolean;
-}) => {
+// ─── Album Card ───
+const AlbumCard = ({ album, isTouchDevice }: { album: Album; isTouchDevice: boolean }) => {
   const hasCustomImage = Boolean(album.imageUrl);
-
   return (
     <Link to={`/albums/${album._id}`}>
-      <motion.div
-        whileTap={{ scale: 0.98 }}
-        transition={{ type: "spring", stiffness: 300, damping: 20 }}
-        className="group cursor-pointer"
-      >
-        <div className="relative aspect-square rounded-lg overflow-hidden shadow-lg shadow-black/40 group-hover:shadow-xl group-hover:shadow-black/50 transition-shadow duration-300 mb-3">
+      <motion.div whileTap={{ scale: 0.98 }} className="group cursor-pointer">
+        <div className="relative aspect-square rounded-lg overflow-hidden shadow-lg shadow-black/40 group-hover:shadow-xl transition-shadow mb-3">
           {hasCustomImage ? (
-            <LazyImage
-              src={album.imageUrl!}
-              alt={album.title}
-              className="w-full h-full object-cover transition-transform duration-500"
-            />
+            <LazyImage src={album.imageUrl!} alt={album.title} className="w-full h-full object-cover" />
           ) : (
-            <GeneratedAlbumCover
-              title={album.title}
-              previewImages={album.previewImages}
-              className="w-full h-full"
-              size="lg"
-            />
+            <GeneratedAlbumCover title={album.title} previewImages={album.previewImages} className="w-full h-full" size="lg" />
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
           {!isTouchDevice && (
-            <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-300">
-              <div className="w-11 h-11 rounded-full bg-violet-600 flex items-center justify-center shadow-xl shadow-black/40 transition-all duration-200">
+            <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all">
+              <div className="w-11 h-11 rounded-full bg-violet-600 flex items-center justify-center shadow-xl">
                 <Play className="w-5 h-5 text-black ml-0.5" fill="black" />
               </div>
             </div>
           )}
         </div>
         <div className="space-y-0.5 px-0.5">
-          <h3 className="font-semibold text-[15px] text-white truncate leading-tight">
-            {album.title}
-          </h3>
-          <p className="text-sm text-zinc-400 truncate group-hover:text-zinc-300 transition-colors">
-            {album.artist}
-          </p>
+          <h3 className="font-semibold text-[15px] text-white truncate leading-tight">{album.title}</h3>
+          <p className="text-sm text-zinc-400 truncate group-hover:text-zinc-300 transition-colors">{album.artist}</p>
         </div>
       </motion.div>
     </Link>
   );
 };
 
-// Song Card
+// ─── Song Card (for local songs) ───
 const SongCard = ({
   song,
   onClick,
@@ -430,25 +362,18 @@ const SongCard = ({
   onTouchEnd: () => void;
   isTouchDevice: boolean;
 }) => (
-  <motion.div
-    whileHover={{ scale: 1 }}
-    whileTap={{ scale: 0.98 }}
-    className="group cursor-pointer"
-    onClick={onClick}
-    onContextMenu={onContextMenu}
-    onTouchStart={onTouchStart}
-    onTouchMove={onTouchMove}
-    onTouchEnd={onTouchEnd}
-  >
-    <div className="relative aspect-square rounded-lg overflow-hidden shadow-lg shadow-black/40 group-hover:shadow-xl group-hover:shadow-black/50 transition-shadow duration-300 mb-3 bg-zinc-800">
-      <LazyImage
-        src={song.imageUrl}
-        alt={song.title}
-        className="w-full h-full object-cover transition-transform duration-300"
-      />
+  <motion.div whileTap={{ scale: 0.98 }} className="group cursor-pointer" onClick={onClick} onContextMenu={onContextMenu} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+    <div className="relative aspect-square rounded-lg overflow-hidden shadow-lg shadow-black/40 group-hover:shadow-xl transition-shadow mb-3 bg-zinc-800">
+      {song.imageUrl ? (
+        <LazyImage src={song.imageUrl} alt={song.title} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-zinc-700">
+          <Music2 className="w-8 h-8 text-zinc-500" />
+        </div>
+      )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
       {!isTouchDevice && (
-        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+        <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all">
           <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center shadow-xl">
             <Play className="w-5 h-5 text-black ml-0.5" fill="black" />
           </div>
@@ -460,12 +385,52 @@ const SongCard = ({
   </motion.div>
 );
 
-// Section Header
+// ─── External Card (for JioSaavn albums/playlists/charts) ───
+const ExternalCard = ({
+  title,
+  subtitle,
+  imageUrl,
+  onClick,
+  isTouchDevice,
+  fallbackIcon: FallbackIcon = Disc3,
+}: {
+  title: string;
+  subtitle?: string;
+  imageUrl?: string;
+  onClick: () => void;
+  isTouchDevice: boolean;
+  fallbackIcon?: React.ElementType;
+}) => (
+  <motion.div whileTap={{ scale: 0.98 }} className="group cursor-pointer" onClick={onClick}>
+    <div className="relative aspect-square rounded-lg overflow-hidden shadow-lg shadow-black/40 group-hover:shadow-xl transition-shadow mb-3 bg-zinc-800">
+      {imageUrl ? (
+        <LazyImage src={imageUrl} alt={title} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-800 to-purple-900">
+          <FallbackIcon className="w-10 h-10 text-white/30" />
+        </div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+      {!isTouchDevice && (
+        <div className="absolute bottom-3 right-3 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all">
+          <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center shadow-xl">
+            <Play className="w-5 h-5 text-black ml-0.5" fill="black" />
+          </div>
+        </div>
+      )}
+    </div>
+    <div className="space-y-0.5 px-0.5">
+      <h3 className="font-semibold text-sm text-white line-clamp-1">{title}</h3>
+      {subtitle && <p className="text-xs text-zinc-400 line-clamp-1">{subtitle}</p>}
+    </div>
+  </motion.div>
+);
+
+// ─── Section Header ───
 const SectionHeader = ({
   icon: Icon,
   title,
   gradient,
-  seeAllLink,
 }: {
   icon: React.ElementType;
   title: string;
@@ -476,30 +441,16 @@ const SectionHeader = ({
   <div className="flex items-center justify-between mb-3 md:mb-4">
     <div className="flex items-center gap-2">
       <div className="hidden md:block">
-        <div
-          className={cn(
-            "w-8 h-8 rounded-lg flex items-center justify-center",
-            gradient || "bg-violet-500/20"
-          )}
-        >
+        <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center", gradient || "bg-violet-500/20")}>
           <Icon className="w-4 h-4 text-violet-400" />
         </div>
       </div>
       <h2 className="text-lg sm:text-xl font-bold text-white/95">{title}</h2>
     </div>
-    {seeAllLink && (
-      <Link
-        to={seeAllLink}
-        className="text-sm text-zinc-400 hover:text-white transition-colors"
-      >
-        See all
-      </Link>
-    )}
   </div>
 );
 
-// ─── Lazy Section wrapper ───
-// Only renders children once it scrolls into view (with 200px lookahead)
+// ─── Lazy Section ───
 const LazySection = ({
   children,
   className,
@@ -510,17 +461,34 @@ const LazySection = ({
   fallbackHeight?: number;
 }) => {
   const { ref, isInView } = useInView();
-
   return (
     <div ref={ref} className={className}>
-      {isInView ? (
-        children
-      ) : (
-        <div style={{ height: fallbackHeight }} className="animate-pulse bg-zinc-800/20 rounded-xl" />
-      )}
+      {isInView ? children : <div style={{ height: fallbackHeight }} className="animate-pulse bg-zinc-800/20 rounded-xl" />}
     </div>
   );
 };
+
+// ─── Responsive Rail (mobile touch scroll + desktop arrow rail) ───
+const ResponsiveRail = ({
+  children,
+  isTouchDevice,
+}: {
+  children: React.ReactNode;
+  isTouchDevice: boolean;
+}) => (
+  <>
+    <div className="md:hidden">
+      <MobileHorizontalScroll>{children}</MobileHorizontalScroll>
+    </div>
+    <div className="hidden md:block">
+      <HorizontalRail isTouchDevice={isTouchDevice}>{children}</HorizontalRail>
+    </div>
+  </>
+);
+
+// ==================================================================
+// MAIN HOMEPAGE COMPONENT
+// ==================================================================
 
 const HomePage = () => {
   const {
@@ -534,12 +502,17 @@ const HomePage = () => {
     albums,
   } = useMusicStore();
 
+  const {
+    homepageData,
+    fetchHomepage,
+  } = useStreamStore();
+
+  const navigate = useNavigate();
+
   const randomAlbums = useMemo(() => {
     if (!albums.length) return [];
-    const sessionSeed = sessionStorage.getItem('albumShuffleSeed') || Date.now().toString();
-    if (!sessionStorage.getItem('albumShuffleSeed')) {
-      sessionStorage.setItem('albumShuffleSeed', sessionSeed);
-    }
+    const sessionSeed = sessionStorage.getItem("albumShuffleSeed") || Date.now().toString();
+    if (!sessionStorage.getItem("albumShuffleSeed")) sessionStorage.setItem("albumShuffleSeed", sessionSeed);
     const seededRandom = (seed: number) => {
       const x = Math.sin(seed++) * 10000;
       return x - Math.floor(x);
@@ -564,7 +537,63 @@ const HomePage = () => {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const { isSignedIn, isLoaded } = useUser();
-  const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>(
+    () => cachedRecentlyPlayed || []
+  );
+
+  // Track if this is the first mount this session for animations
+  const isFirstMount = useRef(!hasAnimatedThisSession);
+
+  useEffect(() => {
+    // Mark that we've animated, so subsequent mounts skip entrance animation
+    hasAnimatedThisSession = true;
+  }, []);
+
+  // ─── Track if homepage data has been attempted ───
+  // We use this to decide whether to show fallback sections
+  const homepageAttempted = useRef(false);
+  const [homepageSettled, setHomepageSettled] = useState(
+    // If we already have data cached, it's settled
+    !!homepageData
+  );
+
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, []);
+
+  // Shuffled recently played for Quick Picks — session-stable
+  const quickPickSongs = useMemo(() => {
+    if (recentlyPlayed.length === 0) return featuredSongs.slice(0, 6);
+
+    const copy = [...recentlyPlayed];
+    const seed = sessionStorage.getItem("quickPickSeed") || Date.now().toString();
+    if (!sessionStorage.getItem("quickPickSeed")) {
+      sessionStorage.setItem("quickPickSeed", seed);
+    }
+
+    const seededRandom = (s: number) => {
+      const x = Math.sin(s++) * 10000;
+      return x - Math.floor(x);
+    };
+
+    let seedNum = parseInt(seed);
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(seededRandom(seedNum++) * (i + 1));
+      [copy[i], copy[j]] = [copy[j], copy[i]];
+    }
+
+    return copy.slice(0, 6);
+  }, [recentlyPlayed, featuredSongs]);
+
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const pullStartY = useRef<number | null>(null);
@@ -586,148 +615,159 @@ const HomePage = () => {
     featuredSongs.length === 0 &&
     madeForYouSongs.length === 0 &&
     trendingSongs.length === 0 &&
-    albums.length === 0;
+    albums.length === 0 &&
+    !homepageData;
 
-  const handleScroll = useCallback((e: Event) => {
-    const target = e.target as HTMLElement;
-    const scrollTop = target.scrollTop;
-    setIsScrolled(scrollTop > heroThreshold);
-  }, [heroThreshold]);
+  const handleScroll = useCallback(
+    (e: Event) => {
+      const target = e.target as HTMLElement;
+      setIsScrolled(target.scrollTop > heroThreshold);
+    },
+    [heroThreshold]
+  );
 
   const refreshContent = useCallback(async () => {
     if (isRefreshing) return;
     setIsRefreshing(true);
-  
     try {
-      sessionStorage.removeItem('albumShuffleSeed');
-  
+      sessionStorage.removeItem("albumShuffleSeed");
+      sessionStorage.removeItem("quickPickSeed");
+      // Clear caches
+      cachedRecentlyPlayed = null;
+      recentlyPlayedFetchedAt = 0;
+      useStreamStore.setState({ homepageData: null });
+      homepageAttempted.current = false;
+      setHomepageSettled(false);
+
       await Promise.all([
         fetchFeaturedSongs(true),
         fetchMadeForYouSongs(true),
         fetchTrendingSongs(true),
         fetchAlbums(true),
-        ...(isSignedIn ? [
-          axiosInstance.get("/history/recently-played?limit=12").then(({ data }) => {
-            setRecentlyPlayed(data);
-          }).catch(() => {})
-        ] : []),
+        fetchHomepage().then(() => {
+          homepageAttempted.current = true;
+          setHomepageSettled(true);
+        }),
+        ...(isSignedIn
+          ? [
+              axiosInstance
+                .get("/history/recently-played?limit=12")
+                .then(({ data }) => {
+                  setRecentlyPlayed(data);
+                  cachedRecentlyPlayed = data;
+                  recentlyPlayedFetchedAt = Date.now();
+                })
+                .catch(() => {}),
+            ]
+          : []),
       ]);
     } catch (error) {
       console.error("Refresh failed:", error);
     } finally {
+      homepageAttempted.current = true;
+      setHomepageSettled(true);
       setTimeout(() => {
         setIsRefreshing(false);
         setPullDistance(0);
       }, 400);
     }
-  }, [isRefreshing, fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs, fetchAlbums, isSignedIn]);
+  }, [isRefreshing, fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs, fetchAlbums, fetchHomepage, isSignedIn]);
 
-  // Pull-to-refresh (touch only)
-const handlePullStart = useCallback((e: TouchEvent) => {
-  const container = mobileScrollRef.current;
-  if (!container || container.scrollTop > 5 || isRefreshing) return;
-  pullStartY.current = e.touches[0].clientY;
-  isPulling.current = false;
-}, [isRefreshing]);
+  // Pull-to-refresh handlers
+  const handlePullStart = useCallback(
+    (e: TouchEvent) => {
+      const container = mobileScrollRef.current;
+      if (!container || container.scrollTop > 5 || isRefreshing) return;
+      pullStartY.current = e.touches[0].clientY;
+      isPulling.current = false;
+    },
+    [isRefreshing]
+  );
 
-const handlePullMove = useCallback((e: TouchEvent) => {
-  if (pullStartY.current === null || isRefreshing) return;
-  const container = mobileScrollRef.current;
-  if (!container || container.scrollTop > 5) {
+  const handlePullMove = useCallback(
+    (e: TouchEvent) => {
+      if (pullStartY.current === null || isRefreshing) return;
+      const container = mobileScrollRef.current;
+      if (!container || container.scrollTop > 5) {
+        pullStartY.current = null;
+        setPullDistance(0);
+        return;
+      }
+      const diff = e.touches[0].clientY - pullStartY.current;
+      if (diff > 10) {
+        isPulling.current = true;
+        setPullDistance(diff * Math.max(0.3, 1 - diff / 400));
+      } else if (diff < 0) {
+        isPulling.current = false;
+        setPullDistance(0);
+      }
+    },
+    [isRefreshing]
+  );
+
+  const handlePullEnd = useCallback(() => {
+    if (pullStartY.current === null) return;
+    if (isPulling.current && pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      refreshContent();
+    } else {
+      setPullDistance(0);
+    }
     pullStartY.current = null;
-    setPullDistance(0);
-    return;
-  }
-
-  const diff = e.touches[0].clientY - pullStartY.current;
-
-  if (diff > 10) {
-    isPulling.current = true;
-    const resistance = Math.max(0.3, 1 - diff / 400);
-    setPullDistance(diff * resistance);
-  } else if (diff < 0) {
-    // Scrolling up, cancel pull
     isPulling.current = false;
-    setPullDistance(0);
-  }
-}, [isRefreshing]);
+  }, [pullDistance, isRefreshing, refreshContent]);
 
-const handlePullEnd = useCallback(() => {
-  if (pullStartY.current === null) return;
-
-  if (isPulling.current && pullDistance >= PULL_THRESHOLD && !isRefreshing) {
-    refreshContent();
-  } else {
-    setPullDistance(0);
-  }
-
-  pullStartY.current = null;
-  isPulling.current = false;
-}, [pullDistance, isRefreshing, refreshContent]);
-
-useEffect(() => {
-  const container = mobileScrollRef.current;
-  if (!container || !isTouchDevice) return;
-
-  container.addEventListener('touchstart', handlePullStart, { passive: true });
-  container.addEventListener('touchmove', handlePullMove, { passive: true });
-  container.addEventListener('touchend', handlePullEnd, { passive: true });
-
-  return () => {
-    container.removeEventListener('touchstart', handlePullStart);
-    container.removeEventListener('touchmove', handlePullMove);
-    container.removeEventListener('touchend', handlePullEnd);
-  };
-}, [isTouchDevice, handlePullStart, handlePullMove, handlePullEnd]);
+  useEffect(() => {
+    const container = mobileScrollRef.current;
+    if (!container || !isTouchDevice) return;
+    container.addEventListener("touchstart", handlePullStart, { passive: true });
+    container.addEventListener("touchmove", handlePullMove, { passive: true });
+    container.addEventListener("touchend", handlePullEnd, { passive: true });
+    return () => {
+      container.removeEventListener("touchstart", handlePullStart);
+      container.removeEventListener("touchmove", handlePullMove);
+      container.removeEventListener("touchend", handlePullEnd);
+    };
+  }, [isTouchDevice, handlePullStart, handlePullMove, handlePullEnd]);
 
   useEffect(() => {
     const container = mobileScrollRef.current;
     if (!container) return;
-    container.addEventListener('scroll', handleScroll, { passive: true });
-    return () => container.removeEventListener('scroll', handleScroll);
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => container.removeEventListener("scroll", handleScroll);
   }, [handleScroll]);
 
   const minSwipeDistance = 50;
-
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
     setTouchStart(e.targetTouches[0].clientX);
   };
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
-
+  const onTouchMove = (e: React.TouchEvent) => setTouchEnd(e.targetTouches[0].clientX);
   const onTouchEndSwipe = () => {
     if (!touchStart || !touchEnd) return;
     const distance = touchStart - touchEnd;
-    const isLeftSwipe = distance > minSwipeDistance;
-    const isRightSwipe = distance < -minSwipeDistance;
-    if (isLeftSwipe && featuredSongs.length > 1) {
+    if (distance > minSwipeDistance && quickPickSongs.length > 1) {
       setHeroImageLoaded(false);
-      setHeroIndex((prev) => (prev + 1) % featuredSongs.length);
+      setHeroIndex((prev) => (prev + 1) % quickPickSongs.length);
     }
-    if (isRightSwipe && featuredSongs.length > 1) {
+    if (distance < -minSwipeDistance && quickPickSongs.length > 1) {
       setHeroImageLoaded(false);
-      setHeroIndex((prev) => (prev - 1 + featuredSongs.length) % featuredSongs.length);
+      setHeroIndex((prev) => (prev - 1 + quickPickSongs.length) % quickPickSongs.length);
     }
   };
 
   const heroSong = useMemo(() => {
-    if (featuredSongs.length > 0) {
-      return featuredSongs[heroIndex % featuredSongs.length];
-    }
+    if (quickPickSongs.length > 0) return quickPickSongs[heroIndex % quickPickSongs.length];
     return null;
-  }, [featuredSongs, heroIndex]);
+  }, [quickPickSongs, heroIndex]);
 
   useEffect(() => {
-    if (featuredSongs.length <= 1) return;
+    if (quickPickSongs.length <= 1) return;
     const interval = setInterval(() => {
       setHeroImageLoaded(false);
-      setHeroIndex((prev) => (prev + 1) % featuredSongs.length);
+      setHeroIndex((prev) => (prev + 1) % quickPickSongs.length);
     }, 10000);
     return () => clearInterval(interval);
-  }, [featuredSongs.length]);
+  }, [quickPickSongs.length]);
 
   useEffect(() => {
     if (heroSong?.imageUrl) {
@@ -739,48 +779,158 @@ useEffect(() => {
 
   useEffect(() => {
     if (!currentSong && madeForYouSongs.length && featuredSongs.length && trendingSongs.length) {
-      const allSongs = [...featuredSongs, ...madeForYouSongs, ...trendingSongs];
-      initializeQueue(allSongs);
+      initializeQueue([...featuredSongs, ...madeForYouSongs, ...trendingSongs]);
     }
   }, [initializeQueue, currentSong, madeForYouSongs, featuredSongs, trendingSongs]);
 
+  // Fetch all data on mount
   useEffect(() => {
     fetchFeaturedSongs();
     fetchMadeForYouSongs();
     fetchTrendingSongs();
     fetchAlbums();
-  }, [fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs, fetchAlbums]);
 
+    // Fetch homepage and track when it settles
+    if (!homepageData) {
+      homepageAttempted.current = false;
+      fetchHomepage()
+        .then(() => {
+          homepageAttempted.current = true;
+          setHomepageSettled(true);
+        })
+        .catch(() => {
+          homepageAttempted.current = true;
+          setHomepageSettled(true);
+        });
+    } else {
+      homepageAttempted.current = true;
+      setHomepageSettled(true);
+    }
+  }, [fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs, fetchAlbums, fetchHomepage]);
+
+  // Fetch recently played with caching
   useEffect(() => {
     if (isLoaded && isSignedIn) {
-      const fetchHistory = async () => {
-        try {
-          const { data } = await axiosInstance.get("/history/recently-played?limit=12");
+      const isCacheFresh =
+        cachedRecentlyPlayed &&
+        Date.now() - recentlyPlayedFetchedAt < RECENTLY_PLAYED_CACHE_MS;
+
+      if (isCacheFresh) {
+        // Use cached data, don't refetch
+        setRecentlyPlayed(cachedRecentlyPlayed!);
+        return;
+      }
+
+      axiosInstance
+        .get("/history/recently-played?limit=12")
+        .then(({ data }) => {
           setRecentlyPlayed(data);
-        } catch (error) {
-          console.error("Failed to fetch history:", error);
-        }
-      };
-      fetchHistory();
+          cachedRecentlyPlayed = data;
+          recentlyPlayedFetchedAt = Date.now();
+        })
+        .catch(() => {});
     }
   }, [isLoaded, isSignedIn]);
 
-  const renderPageContent = () => {
-    if (isInitialLoading) {
-      return <HomePageSkeleton />;
+  // Navigation helpers
+  const goToExternalAlbum = (album: ExternalAlbum) => {
+    const id = album._id || album.externalId?.replace("jiosaavn_album_", "");
+    if (id) navigate(`/albums/external/jiosaavn/${id}`);
+  };
+
+  const goToExternalPlaylist = (playlist: ExternalPlaylist) => {
+    const id = playlist._id || playlist.externalId?.replace("jiosaavn_playlist_", "");
+    if (id) navigate(`/playlists/external/jiosaavn/${id}`);
+  };
+
+  const handlePlayRecentSong = async (song: Song) => {
+    const songCopy = { ...song };
+
+    if (
+      (songCopy.source === "jiosaavn" || songCopy._id?.startsWith("jiosaavn_")) &&
+      !songCopy.audioUrl
+    ) {
+      if (songCopy.streamUrl) {
+        songCopy.audioUrl = songCopy.streamUrl;
+      } else {
+        try {
+          const cleanId = (songCopy.externalId || songCopy._id || "").replace("jiosaavn_", "");
+          const res = await axiosInstance.get(`/stream/stream-url/jiosaavn/${cleanId}`);
+          if (res.data?.url) {
+            songCopy.audioUrl = res.data.url;
+          }
+        } catch {
+          return;
+        }
+      }
     }
+
+    if (songCopy.audioUrl) {
+      playSong(songCopy);
+    }
+  };
+
+  // ─── Animation helpers ───
+  // Only animate on first mount of the session
+  const sectionAnimation = isFirstMount.current
+    ? { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 } }
+    : { initial: { opacity: 1, y: 0 }, animate: { opacity: 1, y: 0 } };
+
+  const heroAnimation = isFirstMount.current
+    ? { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { delay: 0.2, duration: 0.5 } }
+    : { initial: { opacity: 1, y: 0 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0 } };
+
+  const dotsAnimation = isFirstMount.current
+    ? { initial: { opacity: 0 }, animate: { opacity: 1 }, transition: { delay: 0.4 } }
+    : { initial: { opacity: 1 }, animate: { opacity: 1 }, transition: { duration: 0 } };
+
+  // Should we show the fallback sections?
+  // Only show if homepage has been attempted and came back empty/failed,
+  // OR if we've waited long enough (fallback timer)
+  const [fallbackTimerExpired, setFallbackTimerExpired] = useState(false);
+
+  useEffect(() => {
+    if (homepageSettled || homepageData) return;
+    const timer = setTimeout(() => {
+      setFallbackTimerExpired(true);
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [homepageSettled, homepageData]);
+
+  const showFallbackSections =
+    !homepageData && (homepageSettled || fallbackTimerExpired);
+
+  const renderPageContent = () => {
+    if (isInitialLoading) return <HomePageSkeleton />;
     return renderContent();
   };
 
   const renderContent = () => (
     <div className="relative">
-      {/* Pull-to-Refresh (touch only) */}
       {isTouchDevice && (pullDistance > 0 || isRefreshing) && (
-        <PullToRefreshIndicator
-          pullDistance={pullDistance}
-          isRefreshing={isRefreshing}
-          threshold={PULL_THRESHOLD}
-        />
+        <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} threshold={PULL_THRESHOLD} />
+      )}
+
+      {!isOnline && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700/50 flex flex-col items-center text-center"
+        >
+          <div className="w-12 h-12 rounded-full bg-violet-500/10 flex items-center justify-center mb-3">
+            <WifiOff className="w-6 h-6 text-violet-400" />
+          </div>
+          <h3 className="text-lg font-bold text-white">You're Offline</h3>
+          <p className="text-sm text-zinc-400 mb-4 max-w-[250px]">
+            Don't worry! Your downloaded songs are ready for playback.
+          </p>
+          <Button 
+            onClick={() => navigate("/downloads")}
+            className="bg-violet-600 hover:bg-violet-500 text-white rounded-full px-6"
+          >
+            Go to Downloads
+          </Button>
+        </motion.div>
       )}
 
       {/* Hero Section */}
@@ -791,42 +941,21 @@ useEffect(() => {
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEndSwipe}
         >
-          <HeroBackground
-            imageUrl={heroSong.imageUrl}
-            isLoaded={heroImageLoaded}
-          />
+          <HeroBackground imageUrl={heroSong.imageUrl} isLoaded={heroImageLoaded} />
           <div className="relative z-10 h-full flex flex-col justify-end px-4 sm:px-6 pb-6">
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-            >
-              <FeaturedSongPill
-                song={heroSong}
-                onClick={() => playSong(heroSong)}
-                isTouchDevice={isTouchDevice}
-              />
+            <motion.div {...heroAnimation}>
+              <FeaturedSongPill song={heroSong} onClick={() => handlePlayRecentSong(heroSong)} isTouchDevice={isTouchDevice} />
             </motion.div>
-            {featuredSongs.length > 1 && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.4 }}
-                className="flex items-center gap-1.5 mt-4"
-              >
-                {featuredSongs.slice(0, 5).map((_, idx) => (
+            {quickPickSongs.length > 1 && (
+              <motion.div {...dotsAnimation} className="flex items-center gap-1.5 mt-4">
+                {quickPickSongs.map((_, idx) => (
                   <button
                     key={idx}
                     onClick={() => {
                       setHeroImageLoaded(false);
                       setHeroIndex(idx);
                     }}
-                    className={cn(
-                      "h-1.5 rounded-full transition-all duration-300",
-                      idx === heroIndex % 5
-                        ? "w-6 bg-white/90"
-                        : "w-1.5 bg-white/30 active:bg-white/50"
-                    )}
+                    className={cn("h-1.5 rounded-full transition-all duration-300", idx === heroIndex % quickPickSongs.length ? "w-6 bg-white/90" : "w-1.5 bg-white/30")}
                   />
                 ))}
               </motion.div>
@@ -839,51 +968,128 @@ useEffect(() => {
       <div className="px-4 sm:px-6 pb-6 space-y-8 bg-zinc-900 relative z-10 -mt-8">
         <div className="absolute top-0 left-0 right-0 h-8 bg-gradient-to-b from-transparent to-zinc-900 -translate-y-full pointer-events-none" />
 
-        {/* Quick Picks - Always visible (above the fold) */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="pt-0 md:pt-2"
-        >
-          <SectionHeader
-            icon={Sparkles}
-            title="Quick Picks"
-            gradient="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20"
-          />
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {featuredSongs.slice(0, 6).map((song) => (
-              <QuickPickCard
-                key={song._id}
-                song={song}
-                onClick={() => playSong(song)}
-                onContextMenu={(e) => openContextMenu(e, song)}
-                onTouchStart={(e) => handleTouchStart(e, song)}
-                onTouchMove={handleTouchMove}
-                onTouchEnd={handleTouchEnd}
-                isTouchDevice={isTouchDevice}
-              />
-            ))}
-          </div>
-        </motion.section>
+        {/* Quick Picks */}
+        {quickPickSongs.length > 0 && (
+          <motion.section
+            {...sectionAnimation}
+            transition={isFirstMount.current ? { delay: 0.3 } : { duration: 0 }}
+            className="pt-0 md:pt-2"
+          >
+            <SectionHeader icon={Sparkles} title="Quick Picks" gradient="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              {quickPickSongs.map((song) => (
+                <QuickPickCard
+                  key={song._id}
+                  song={song}
+                  onClick={() => handlePlayRecentSong(song)}
+                  onContextMenu={(e) => openContextMenu(e, song)}
+                  onTouchStart={(e) => handleTouchStart(e, song)}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  isTouchDevice={isTouchDevice}
+                />
+              ))}
+            </div>
+          </motion.section>
+        )}
 
-        {/* Recently Played - Desktop Only (Lazy) */}
+        {/* ─── JioSaavn: New Releases ─── */}
+        {homepageData?.newAlbums && homepageData.newAlbums.length > 0 && (
+          <LazySection fallbackHeight={280}>
+            <section>
+              <SectionHeader icon={Star} title="New Releases" gradient="bg-gradient-to-br from-amber-500/20 to-orange-500/20" />
+              <ResponsiveRail isTouchDevice={isTouchDevice}>
+                {homepageData.newAlbums.slice(0, 12).map((album) => (
+                  <div key={album.externalId} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                    <ExternalCard
+                      title={album.title}
+                      subtitle={album.artist}
+                      imageUrl={album.imageUrl}
+                      onClick={() => goToExternalAlbum(album)}
+                      isTouchDevice={isTouchDevice}
+                      fallbackIcon={Disc3}
+                    />
+                  </div>
+                ))}
+              </ResponsiveRail>
+            </section>
+          </LazySection>
+        )}
+
+        {/* ─── JioSaavn: Top Charts ─── */}
+        {homepageData?.charts && homepageData.charts.length > 0 && (
+          <LazySection fallbackHeight={280}>
+            <section>
+              <SectionHeader icon={BarChart3} title="Top Charts" gradient="bg-gradient-to-br from-cyan-500/20 to-blue-500/20" />
+              <ResponsiveRail isTouchDevice={isTouchDevice}>
+                {homepageData.charts.slice(0, 10).map((chart) => (
+                  <div key={chart.externalId} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                    <ExternalCard
+                      title={chart.title}
+                      subtitle={chart.description}
+                      imageUrl={chart.imageUrl}
+                      onClick={() => goToExternalPlaylist(chart)}
+                      isTouchDevice={isTouchDevice}
+                      fallbackIcon={BarChart3}
+                    />
+                  </div>
+                ))}
+              </ResponsiveRail>
+            </section>
+          </LazySection>
+        )}
+
+        {/* ─── JioSaavn: Featured Playlists ─── */}
+        {homepageData?.topPlaylists && homepageData.topPlaylists.length > 0 && (
+          <LazySection fallbackHeight={280}>
+            <section>
+              <SectionHeader icon={ListMusic} title="Featured Playlists" gradient="bg-gradient-to-br from-pink-500/20 to-rose-500/20" />
+              <ResponsiveRail isTouchDevice={isTouchDevice}>
+                {homepageData.topPlaylists.slice(0, 12).map((playlist) => (
+                  <div key={playlist.externalId} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                    <ExternalCard
+                      title={playlist.title}
+                      subtitle={playlist.description || `${playlist.songCount ?? ""} songs`}
+                      imageUrl={playlist.imageUrl}
+                      onClick={() => goToExternalPlaylist(playlist)}
+                      isTouchDevice={isTouchDevice}
+                      fallbackIcon={ListMusic}
+                    />
+                  </div>
+                ))}
+              </ResponsiveRail>
+            </section>
+          </LazySection>
+        )}
+
+        {/* Your Collection — only show after homepage data has settled */}
+        {albums.length > 0 && homepageSettled && (
+          <LazySection fallbackHeight={280}>
+            <section>
+              <SectionHeader icon={Disc3} title="Your Collection" gradient="bg-gradient-to-br from-purple-500/20 to-indigo-500/20" />
+              <ResponsiveRail isTouchDevice={isTouchDevice}>
+                {randomAlbums.slice(0, 12).map((album) => (
+                  <div key={album._id} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                    <AlbumCard album={album} isTouchDevice={isTouchDevice} />
+                  </div>
+                ))}
+              </ResponsiveRail>
+            </section>
+          </LazySection>
+        )}
+
+        {/* Recently Played - Desktop */}
         <SignedIn>
           {recentlyPlayed.length > 0 && (
             <LazySection fallbackHeight={260}>
               <section className="hidden md:block">
-                <SectionHeader
-                  icon={Clock}
-                  title="Recently Played"
-                  gradient="bg-gradient-to-br from-blue-500/20 to-cyan-500/20"
-                  seeAllLink="/library/recently-played"
-                />
+                <SectionHeader icon={Clock} title="Recently Played" gradient="bg-gradient-to-br from-blue-500/20 to-cyan-500/20" seeAllLink="/library/recently-played" />
                 <HorizontalRail isTouchDevice={isTouchDevice}>
                   {recentlyPlayed.slice(0, 12).map((song, index) => (
                     <div key={`${song._id}-${index}`} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
                       <SongCard
                         song={song}
-                        onClick={() => playSong(song)}
+                        onClick={() => handlePlayRecentSong(song)}
                         onContextMenu={(e) => openContextMenu(e, song)}
                         onTouchStart={(e) => handleTouchStart(e, song)}
                         onTouchMove={handleTouchMove}
@@ -898,137 +1104,64 @@ useEffect(() => {
           )}
         </SignedIn>
 
-        {/* Albums (Lazy) */}
-        {albums.length > 0 && (
-          <LazySection fallbackHeight={280}>
-            <section>
-              <SectionHeader
-                icon={Disc3}
-                title="Albums"
-                showAll
-                gradient="bg-gradient-to-br from-purple-500/20 to-indigo-500/20"
-              />
-              {/* Mobile: Touch scroll */}
-              <div className="md:hidden">
-                <MobileHorizontalScroll>
-                  {randomAlbums.slice(0, 10).map((album) => (
-                    <div key={album._id} className="w-36 flex-shrink-0">
-                      <AlbumCard album={album} isTouchDevice={isTouchDevice} />
-                    </div>
-                  ))}
-                </MobileHorizontalScroll>
-              </div>
-              {/* Desktop: Rail with arrows */}
-              <div className="hidden md:block">
-                <HorizontalRail isTouchDevice={isTouchDevice}>
-                  {randomAlbums.slice(0, 12).map((album) => (
-                    <div key={album._id} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
-                      <AlbumCard album={album} isTouchDevice={isTouchDevice} />
-                    </div>
-                  ))}
-                </HorizontalRail>
-              </div>
-            </section>
-          </LazySection>
+        {/* Fallback: Made For You + Trending — only when JioSaavn unavailable */}
+        {showFallbackSections && (
+          <>
+            {madeForYouSongs.length > 0 && (
+              <LazySection fallbackHeight={280}>
+                <section>
+                  <SectionHeader icon={Music2} title="Made For You" gradient="bg-gradient-to-br from-emerald-500/20 to-teal-500/20" />
+                  <ResponsiveRail isTouchDevice={isTouchDevice}>
+                    {madeForYouSongs.slice(0, 12).map((song) => (
+                      <div key={song._id} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                        <SongCard
+                          song={song}
+                          onClick={() => playSong(song)}
+                          onContextMenu={(e) => openContextMenu(e, song)}
+                          onTouchStart={(e) => handleTouchStart(e, song)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
+                          isTouchDevice={isTouchDevice}
+                        />
+                      </div>
+                    ))}
+                  </ResponsiveRail>
+                </section>
+              </LazySection>
+            )}
+
+            {trendingSongs.length > 0 && (
+              <LazySection fallbackHeight={280}>
+                <section>
+                  <SectionHeader icon={TrendingUp} title="Trending Now" gradient="bg-gradient-to-br from-orange-500/20 to-red-500/20" />
+                  <ResponsiveRail isTouchDevice={isTouchDevice}>
+                    {trendingSongs.slice(0, 12).map((song) => (
+                      <div key={song._id} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                        <SongCard
+                          song={song}
+                          onClick={() => playSong(song)}
+                          onContextMenu={(e) => openContextMenu(e, song)}
+                          onTouchStart={(e) => handleTouchStart(e, song)}
+                          onTouchMove={handleTouchMove}
+                          onTouchEnd={handleTouchEnd}
+                          isTouchDevice={isTouchDevice}
+                        />
+                      </div>
+                    ))}
+                  </ResponsiveRail>
+                </section>
+              </LazySection>
+            )}
+          </>
         )}
 
-        {/* Made For You (Lazy) */}
-        <LazySection fallbackHeight={280}>
-          <section>
-            <SectionHeader
-              icon={Music2}
-              title="Made For You"
-              showAll
-              gradient="bg-gradient-to-br from-emerald-500/20 to-teal-500/20"
-            />
-            {/* Mobile */}
-            <div className="md:hidden">
-              <MobileHorizontalScroll>
-                {madeForYouSongs.slice(0, 10).map((song) => (
-                  <div key={song._id} className="w-36 flex-shrink-0">
-                    <SongCard
-                      song={song}
-                      onClick={() => playSong(song)}
-                      onContextMenu={(e) => openContextMenu(e, song)}
-                      onTouchStart={(e) => handleTouchStart(e, song)}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={handleTouchEnd}
-                      isTouchDevice={isTouchDevice}
-                    />
-                  </div>
-                ))}
-              </MobileHorizontalScroll>
-            </div>
-            {/* Desktop */}
-            <div className="hidden md:block">
-              <HorizontalRail isTouchDevice={isTouchDevice}>
-                {madeForYouSongs.slice(0, 12).map((song) => (
-                  <div key={song._id} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
-                    <SongCard
-                      song={song}
-                      onClick={() => playSong(song)}
-                      onContextMenu={(e) => openContextMenu(e, song)}
-                      onTouchStart={(e) => handleTouchStart(e, song)}
-                      onTouchMove={onTouchMove}
-                      onTouchEnd={handleTouchEnd}
-                      isTouchDevice={isTouchDevice}
-                    />
-                  </div>
-                ))}
-              </HorizontalRail>
-            </div>
-          </section>
-        </LazySection>
+        {/* Loading indicator while waiting for homepage data (no fallback shown yet) */}
+        {!homepageData && !showFallbackSections && !isInitialLoading && (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 text-zinc-500 animate-spin" />
+          </div>
+        )}
 
-        {/* Trending (Lazy) */}
-        <LazySection fallbackHeight={280}>
-          <section>
-            <SectionHeader
-              icon={TrendingUp}
-              title="Trending Now"
-              showAll
-              gradient="bg-gradient-to-br from-orange-500/20 to-red-500/20"
-            />
-            {/* Mobile */}
-            <div className="md:hidden">
-              <MobileHorizontalScroll>
-                {trendingSongs.slice(0, 10).map((song) => (
-                  <div key={song._id} className="w-36 flex-shrink-0">
-                    <SongCard
-                      song={song}
-                      onClick={() => playSong(song)}
-                      onContextMenu={(e) => openContextMenu(e, song)}
-                      onTouchStart={(e) => handleTouchStart(e, song)}
-                      onTouchMove={handleTouchMove}
-                      onTouchEnd={handleTouchEnd}
-                      isTouchDevice={isTouchDevice}
-                    />
-                  </div>
-                ))}
-              </MobileHorizontalScroll>
-            </div>
-            {/* Desktop */}
-            <div className="hidden md:block">
-              <HorizontalRail isTouchDevice={isTouchDevice}>
-                {trendingSongs.slice(0, 12).map((song) => (
-                  <div key={song._id} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
-                    <SongCard
-                      song={song}
-                      onClick={() => playSong(song)}
-                      onContextMenu={(e) => openContextMenu(e, song)}
-                      onTouchStart={(e) => handleTouchStart(e, song)}
-                      onTouchMove={onTouchMove}
-                      onTouchEnd={handleTouchEnd}
-                      isTouchDevice={isTouchDevice}
-                    />
-                  </div>
-                ))}
-              </HorizontalRail>
-            </div>
-          </section>
-        </LazySection>
-
-        {/* Bottom spacer for mobile nav */}
         <div className="h-20 md:h-0" />
       </div>
     </div>
@@ -1036,22 +1169,12 @@ useEffect(() => {
 
   return (
     <main className="h-full bg-zinc-900 rounded-lg overflow-hidden relative">
-      <div
-        className={cn(
-          "absolute top-0 left-0 right-0 z-50 transition-all duration-300",
-          isScrolled
-            ? "bg-zinc-900 shadow-lg shadow-black/20"
-            : "bg-transparent"
-        )}
-      >
+      <div className={cn("absolute top-0 left-0 right-0 z-50 transition-all duration-300", isScrolled ? "bg-zinc-900 shadow-lg shadow-black/20" : "bg-transparent")}>
         <Topbar className="bg-transparent backdrop-blur-none" />
       </div>
 
       {/* Mobile */}
-      <div
-        ref={mobileScrollRef}
-        className="md:hidden h-full overflow-y-auto overscroll-y-contain scrollbar-none"
-      >
+      <div ref={mobileScrollRef} className="md:hidden h-full overflow-y-auto overscroll-y-contain scrollbar-none">
         {renderPageContent()}
       </div>
 
@@ -1059,23 +1182,18 @@ useEffect(() => {
       <div
         ref={desktopScrollRef}
         className="hidden md:block h-full overflow-y-auto overflow-x-hidden scrollbar-none"
-        onScroll={(e) => {
-          setIsScrolled(e.currentTarget.scrollTop > heroThreshold);
-        }}
+        onScroll={(e) => setIsScrolled(e.currentTarget.scrollTop > heroThreshold)}
       >
         {renderPageContent()}
       </div>
 
-      {/* Song Options */}
       {showOptions && contextSong && (
-        <SongOptions
-          song={contextSong}
-          forceOpen={true}
-          onClose={closeContextMenu}
-          inlineTrigger={false}
-          triggerPosition={contextMenu || undefined}
-        />
+        <SongOptions song={contextSong} forceOpen={true} onClose={closeContextMenu} inlineTrigger={false} triggerPosition={contextMenu || undefined} />
       )}
+
+      <SignedIn>
+        <OnboardingModal />
+      </SignedIn>
     </main>
   );
 };

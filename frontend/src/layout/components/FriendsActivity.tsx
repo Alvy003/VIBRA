@@ -114,7 +114,7 @@ const FriendsActivity = () => {
                             </span>
                           </div>
                           {artistName && (
-                            <span className="text-xs text-white/50 line-clamp-1 block pl-[18px]">
+                            <span className="text-xs text-white/50 line-clamp-1 pl-[18px]">
                               {artistName}
                             </span>
                           )}

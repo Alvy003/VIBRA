@@ -173,6 +173,7 @@ const SortableItem = ({
 
       {isTouchDevice && (
         <div
+          data-sortable-handle
           ref={setActivatorNodeRef}
           {...listeners}
           {...attributes}
@@ -209,6 +210,7 @@ const SortableItem = ({
             <Trash2 className="w-4 h-4" />
           </button>
           <div
+            data-sortable-handle
             ref={setActivatorNodeRef}
             {...listeners}
             {...attributes}
@@ -258,12 +260,6 @@ const Queue = () => {
     return deduped.slice(0, 20);
   }, [displayQueue, currentIndex]);
 
-
-
-
-
-
-
   // DnD items
   const [items, setItems] = useState<string[]>([]);
 
@@ -288,8 +284,11 @@ const Queue = () => {
       activationConstraint: { delay: 150, tolerance: 5 },
     })
   );
+  
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
+    window.dispatchEvent(new Event("dnd-kit-drag-end"));
+  
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -396,11 +395,18 @@ const Queue = () => {
                 </p>
 
                 <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                  modifiers={[restrictToVerticalAxis]}
-                >
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={() => {
+                      window.dispatchEvent(new Event("queue-drag-start"));
+                    }}
+                    onDragEnd={(event) => {
+                      window.dispatchEvent(new Event("queue-drag-end"));
+                      handleDragEnd(event);
+                    }}
+                    modifiers={[restrictToVerticalAxis]}
+                  >
+
                   <SortableContext items={items} strategy={verticalListSortingStrategy}>
                     <ul className="space-y-1">
                       <AnimatePresence mode="popLayout" initial={false}>

@@ -58,20 +58,59 @@ export const OfflineIndicator = () => {
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
           className="fixed bottom-[120px] md:bottom-[100px] left-0 right-0 z-[100] px-2"
         >
+        <div className="bg-violet-500 text-black rounded-lg px-4 py-2 flex items-center justify-between shadow-lg shadow-black/20">
+          <div className="flex items-center gap-3">
+            <WifiOff className="w-4 h-4 flex-shrink-0" />
+            <span className="text-sm font-semibold">
+              Offline Mode
+            </span>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => {
+                window.location.href = "/downloads";
+                setDismissed(true);
+              }}
+              className="text-xs font-bold underline underline-offset-2"
+            >
+              My Downloads
+            </button>
+            <button
+              onClick={() => setDismissed(true)}
+              className="p-1 hover:bg-black/10 rounded-full transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        </motion.div>
+      )}
+
+      {/* Back Online Toast */}
+      {showBackOnline && (
+        <motion.div
+          key="online"
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 300 }}
+          className="fixed bottom-[120px] md:bottom-[100px] left-0 right-0 z-[100] px-2"
+        >
           <div className="max-w-screen-3xl mx-auto">
-            <div className="bg-violet-500 text-black rounded-lg px-4 py-1 flex items-center justify-between shadow-lg shadow-black/20 relative">
-            {/* Text container */}
+            <div className="bg-green-500 text-black rounded-lg px-4 py-1 flex items-center justify-between shadow-lg shadow-black/20 relative">
+              {/* Text container */}
               <div className="flex items-center gap-3 w-full md:absolute md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:justify-center">
-                <WifiOff className="w-4 h-4 flex-shrink-0" />
+                <Wifi className="w-4 h-4 flex-shrink-0" />
                 <span className="text-sm font-medium text-center">
-                  You're offline. Some features may not work.
+                  You're back online
                 </span>
               </div>
 
               {/* Dismiss button */}
               <button
-                onClick={() => setDismissed(true)}
-                className="p-1 hover:bg-white/10 rounded-full transition-colors flex-shrink-0"
+                onClick={() => setShowBackOnline(false)}
+                className="p-1 hover:bg-white/20 rounded-full transition-colors flex-shrink-0"
                 aria-label="Dismiss"
               >
                 <X className="w-4 h-4" />
@@ -80,40 +119,6 @@ export const OfflineIndicator = () => {
           </div>
         </motion.div>
       )}
-
-{/* Back Online Toast */}
-{showBackOnline && (
-  <motion.div
-    key="online"
-    initial={{ y: 100, opacity: 0 }}
-    animate={{ y: 0, opacity: 1 }}
-    exit={{ y: 100, opacity: 0 }}
-    transition={{ type: "spring", damping: 25, stiffness: 300 }}
-    className="fixed bottom-[120px] md:bottom-[100px] left-0 right-0 z-[100] px-2"
-  >
-    <div className="max-w-screen-3xl mx-auto">
-      <div className="bg-green-500 text-black rounded-lg px-4 py-1 flex items-center justify-between shadow-lg shadow-black/20 relative">
-        {/* Text container */}
-        <div className="flex items-center gap-3 w-full md:absolute md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:justify-center">
-          <Wifi className="w-4 h-4 flex-shrink-0" />
-          <span className="text-sm font-medium text-center">
-            You're back online
-          </span>
-        </div>
-
-        {/* Dismiss button */}
-        <button
-          onClick={() => setShowBackOnline(false)}
-          className="p-1 hover:bg-white/20 rounded-full transition-colors flex-shrink-0"
-          aria-label="Dismiss"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
-  </motion.div>
-)}
-
     </AnimatePresence>
   );
 };

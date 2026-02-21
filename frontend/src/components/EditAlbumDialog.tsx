@@ -8,6 +8,7 @@ import { axiosInstance } from "@/lib/axios";
 import toast from "react-hot-toast";
 import { Album } from "@/types";
 import AlbumThumbnail from "./AlbumThumbnail";
+import { cn } from "@/lib/utils";
 
 interface EditAlbumDialogProps {
   isOpen: boolean;
@@ -16,7 +17,7 @@ interface EditAlbumDialogProps {
 }
 
 const EditAlbumDialog = ({ isOpen, onClose, album }: EditAlbumDialogProps) => {
-  const { fetchAlbums, fetchAlbumById, updateAlbum } = useMusicStore();
+  const { fetchAlbums, fetchAlbumById, updateAlbum, toggleAlbumActive } = useMusicStore();
   const [formData, setFormData] = useState({
     title: album.title,
     artist: album.artist,
@@ -62,7 +63,7 @@ const EditAlbumDialog = ({ isOpen, onClose, album }: EditAlbumDialogProps) => {
           animate={{ y: 0, opacity: 1 }}
           className="bg-violet-600/90 text-white px-4 py-2 rounded-full shadow-lg border border-violet-500/20"
         >
-          <span className="text-sm">Album artwork updated</span>
+          <span className="text-sm">Playlist artwork updated</span>
         </motion.div>,
         { duration: 1500 }
       );
@@ -93,7 +94,7 @@ const EditAlbumDialog = ({ isOpen, onClose, album }: EditAlbumDialogProps) => {
           animate={{ y: 0, opacity: 1 }}
           className="bg-zinc-900/95 text-white px-4 py-2 rounded-full shadow-lg border border-white/10"
         >
-          <span className="text-sm">Album artwork removed</span>
+          <span className="text-sm">Playlist artwork removed</span>
         </motion.div>,
         { duration: 1500 }
       );
@@ -133,7 +134,7 @@ const EditAlbumDialog = ({ isOpen, onClose, album }: EditAlbumDialogProps) => {
           animate={{ y: 0, opacity: 1 }}
           className="bg-violet-600/90 text-white px-4 py-2 rounded-full shadow-lg border border-violet-500/20"
         >
-          <span className="text-sm">Album updated successfully</span>
+          <span className="text-sm">Playlist updated successfully</span>
         </motion.div>,
         { duration: 1500 }
       );
@@ -178,7 +179,7 @@ const EditAlbumDialog = ({ isOpen, onClose, album }: EditAlbumDialogProps) => {
           <div className="p-5 pb-4 border-b border-zinc-800">
             <div className="flex items-center justify-between">
               <div className="min-w-0">
-                <h3 className="text-lg font-semibold text-white">Edit Album</h3>
+                <h3 className="text-lg font-semibold text-white">Edit Playlist</h3>
                 <p className="text-sm text-zinc-400 line-clamp-1">{album.title}</p>
               </div>
               <button
@@ -247,6 +248,30 @@ const EditAlbumDialog = ({ isOpen, onClose, album }: EditAlbumDialogProps) => {
                     Remove Artwork
                   </button>
                 )}
+
+                {/* Active Toggle */}
+              <div className="flex items-center justify-between px-1 py-2">
+                <div>
+                  <p className="text-sm text-white">Visible in Library</p>
+                  <p className="text-xs text-zinc-500">Toggle this playlist on/off for users</p>
+                </div>
+                <button
+                  onClick={async () => {
+                    await toggleAlbumActive(album._id);
+                    await fetchAlbumById(album._id);
+                    await fetchAlbums(true);
+                  }}
+                  className={cn(
+                    "relative w-11 h-6 rounded-full transition-colors",
+                    album.isActive !== false ? "bg-violet-600" : "bg-zinc-700"
+                  )}
+                >
+                  <div className={cn(
+                    "absolute top-0.5 w-5 h-5 rounded-full bg-white transition-transform",
+                    album.isActive !== false ? "translate-x-5" : "translate-x-0.5"
+                  )} />
+                </button>
+              </div>
 
                 {/* Mosaic Toggle */}
                 <button

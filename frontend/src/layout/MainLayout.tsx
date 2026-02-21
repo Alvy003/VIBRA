@@ -53,7 +53,7 @@ const MainLayout = () => {
 
   // Desktop Layout with fixed pixel widths
   return (
-    <div className="h-screen bg-black text-white flex flex-col">
+    <div className="h-screen bg-black/0 text-white flex flex-col">
       <AudioPlayer />
       
       <div className="flex-1 flex overflow-hidden p-2 gap-2">

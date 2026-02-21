@@ -1,6 +1,7 @@
 // controller/playlist.controller.js
 import { Playlist } from "../models/playlist.model.js";
 import { Song } from "../models/song.model.js";
+import { resolveExternalSong } from "../utils/resolveExternalSong.js";
 
 // Create playlist
 export const createPlaylist = async (req, res, next) => {
@@ -122,7 +123,7 @@ export const updatePlaylist = async (req, res, next) => {
 export const patchPlaylistSongs = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { op, songId, songs } = req.body;
+    const { op, songId, songData, songs } = req.body;
     const userId = req.auth.userId;
 
     const playlist = await Playlist.findById(id);
@@ -135,23 +136,35 @@ export const patchPlaylistSongs = async (req, res, next) => {
     }
 
     if (op === "add" && songId) {
-      // Verify song exists
-      const song = await Song.findById(songId);
+      const resolvedId = await resolveExternalSong(songId, songData || {});
+
+      const song = await Song.findById(resolvedId);
       if (!song) {
         return res.status(404).json({ message: "Song not found" });
       }
-      
-      if (!playlist.songs.includes(songId)) {
-        playlist.songs.push(songId);
+
+      if (!playlist.songs.some((s) => s.toString() === resolvedId)) {
+        playlist.songs.push(resolvedId);
       }
     } else if (op === "remove" && songId) {
-      playlist.songs = playlist.songs.filter((s) => s.toString() !== songId);
+      let removeId = songId;
+      if (!/^[0-9a-fA-F]{24}$/.test(songId)) {
+        const externalSong = await Song.findOne({ externalId: songId });
+        if (externalSong) removeId = externalSong._id.toString();
+      }
+      playlist.songs = playlist.songs.filter(
+        (s) => s.toString() !== removeId
+      );
     } else if ((op === "replace" || op === "reorder") && Array.isArray(songs)) {
-      const validCount = await Song.countDocuments({ _id: { $in: songs } });
-      if (validCount !== songs.length) {
+      const resolvedIds = [];
+      for (const sid of songs) {
+        resolvedIds.push(await resolveExternalSong(sid));
+      }
+      const validCount = await Song.countDocuments({ _id: { $in: resolvedIds } });
+      if (validCount !== resolvedIds.length) {
         return res.status(400).json({ message: "Invalid song IDs" });
       }
-      playlist.songs = songs;
+      playlist.songs = resolvedIds;
     } else {
       return res.status(400).json({ message: "Invalid operation" });
     }
@@ -160,6 +173,7 @@ export const patchPlaylistSongs = async (req, res, next) => {
     await playlist.populate("songs");
     res.json(playlist);
   } catch (err) {
+    console.error("Error patching playlist songs:", err);
     next(err);
   }
 };

@@ -27,12 +27,16 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import LikeButton from "@/pages/home/components/LikeButton";
 import { motion, AnimatePresence } from "framer-motion";
 import PlaybackControlsSongOptions from "./PlaybackControlsSongOptions";
-import SleepTimer from "@/components/SleepTimer";
+import SleepTimer, { useSleepTimerActive } from "@/components/SleepTimer";
 import { Song } from "@/types";
 import AddToPlaylistDialog from "@/components/AddToPlaylistDialog";
-import Queue from "@/pages/home/components/Queue";
 import { useDownloads } from "@/hooks/useDownloads";
 import ShareDialog from "@/components/ShareDialog";
+import { useLyricsStore } from "@/stores/useLyricsStore";
+import { useNavigate, useLocation } from "react-router-dom";
+import { MicVocal } from "lucide-react";
+import { lazy, Suspense } from "react";
+const Queue = lazy(() => import("@/pages/home/components/Queue"));
 
 const formatTime = (seconds: number) => {
   if (!seconds || isNaN(seconds)) return "0:00";
@@ -330,6 +334,42 @@ export const PlaybackControls = () => {
     }
   }, []);
 
+  const navigate = useNavigate();
+const location = useLocation();
+
+const ActiveDot = () => (
+  <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 bg-violet-400 rounded-full" />
+);
+
+const {
+  fetchForSong: fetchLyricsForSong,
+  hasLyrics,
+} = useLyricsStore();
+
+const isOnLyricsPage = location.pathname === "/lyrics";
+const sleepTimerActive = useSleepTimerActive();
+
+useEffect(() => {
+  if (!currentSong) return;
+  if (duration && duration > 0) {
+    fetchLyricsForSong(
+      currentSong._id,
+      currentSong.title,
+      currentSong.artist,
+      duration
+    );
+  } else {
+    const timer = setTimeout(() => {
+      fetchLyricsForSong(
+        currentSong._id,
+        currentSong.title,
+        currentSong.artist
+      );
+    }, 1500);
+    return () => clearTimeout(timer);
+  }
+}, [currentSong?._id, duration]);
+
   // Listen for fullscreen changes
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -401,6 +441,18 @@ export const PlaybackControls = () => {
     };
   }, [isFullscreen]);
 
+  // Prefetch next song's dominant color
+  const { queue: fsQueue, currentIndex: fsCurrentIndex } = usePlayerStore();
+  useEffect(() => {
+    if (!currentSong || fsCurrentIndex < 0 || fsQueue.length === 0) return;
+    const timer = setTimeout(() => {
+      const nextIndex = fsCurrentIndex + 1;
+      if (nextIndex < fsQueue.length) {
+      }
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [currentSong?._id, fsCurrentIndex, fsQueue]);
+
   // Seek handler
   const handleSeek = useCallback((newTime: number) => {
     setCurrentTime(newTime);
@@ -452,7 +504,7 @@ export const PlaybackControls = () => {
                 >
                   {currentSong.title}
                 </span>
-                <LikeButton songId={currentSong._id} />
+                <LikeButton song={currentSong} />
               </div>
               <span className="text-sm text-zinc-400 truncate hover:underline cursor-pointer block">
                 {currentSong.artist}
@@ -506,7 +558,7 @@ export const PlaybackControls = () => {
             className={cn(
               "h-9 w-9 rounded-full flex items-center justify-center transition-all",
               currentSong
-                ? "bg-white hover:bg-white/90 hover:scale-105 text-black"
+                ? "bg-white hover:bg-white/90 text-black"
                 : "bg-zinc-700 text-zinc-500 cursor-not-allowed"
             )}
             onClick={togglePlay}
@@ -572,6 +624,30 @@ export const PlaybackControls = () => {
 
       {/* Right: Volume & Extra Controls */}
       <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-3 min-w-[140px] sm:min-w-[160px] lg:min-w-[180px] w-[30%] justify-end">
+        {/* Lyrics Toggle */}
+        <button
+          onClick={() => {
+            if (isOnLyricsPage) {
+              navigate(-1);
+            } else {
+              navigate("/lyrics");
+            }
+          }}
+          disabled={!currentSong}
+          className={cn(
+            "p-2 rounded-lg transition-colors relative",
+            isOnLyricsPage
+              ? "text-violet-400 hover:text-violet-300"
+              : hasLyrics
+                ? "text-zinc-400 hover:text-white"
+                : "text-zinc-400/50 hover:text-white/70"
+          )}
+          title={hasLyrics ? "Lyrics" : "Lyrics"}
+        >
+          <MicVocal className="h-4 w-4" />
+          {isOnLyricsPage && <ActiveDot />}
+        </button>
+
         {/* Queue Toggle */}
         <button
           onClick={() => {
@@ -583,17 +659,21 @@ export const PlaybackControls = () => {
             }
           }}
           className={cn(
-            "p-2 rounded-lg transition-colors",
+            "p-2 rounded-lg transition-colors relative",
             sidePanelView === "queue" && !isRightSidebarCollapsed
               ? "text-violet-400 hover:text-violet-300"
               : "text-zinc-400 hover:text-white"
           )}
         >
           <ListMusic className="h-4 w-4" />
+          {sidePanelView === "queue" && !isRightSidebarCollapsed && <ActiveDot />}
         </button>
 
         {/* Sleep Timer */}
-        <SleepTimer />
+        <div className="relative">
+          <SleepTimer />
+          {sleepTimerActive && <ActiveDot />}
+        </div>
 
         {/* Volume Controls */}
         <div className="flex items-center gap-1.5">
@@ -641,24 +721,27 @@ export const PlaybackControls = () => {
             transition={{ duration: 0.2 }}
             className="fixed inset-0 z-[9999] overflow-hidden"
           >
-            {/* Background Image */}
+            {/* Background — dominant color */}
             <div className="absolute inset-0">
-            <AnimatePresence mode="wait">
-              <motion.img
-                key={currentSong._id}
-                src={currentSong.imageUrl}
-                alt=""
-                className="w-full h-full object-cover"
-                initial={{ scale: 1.05, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.6, ease: "easeOut" }}
-              />
-            </AnimatePresence>
-              <div className="absolute inset-0 bg-black/50" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/60 to-black/30" />
-              <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/70" />
-            </div>
+  <AnimatePresence mode="wait">
+    <motion.img
+      key={currentSong._id}
+      src={currentSong.imageUrl}
+      alt=""
+      className="w-full h-full object-cover"
+      initial={{ scale: 1.05, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.6, ease: "easeOut" }}
+    />
+  </AnimatePresence>
+
+  {/* Darkening layers */}
+  <div className="absolute inset-0 bg-black/50" />
+  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/60 to-black/30" />
+  <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/70" />
+</div>
+
 
             {/* Main Content */}
             <div className="relative h-full flex flex-col z-[2]">
@@ -731,7 +814,7 @@ export const PlaybackControls = () => {
                           : "w-56 h-56 lg:w-64 lg:h-64"
                       )}
                     >
-                      <div className="w-full h-full rounded-xl overflow-hidden shadow-2xl">
+                      <div className="w-full h-full rounded-xl overflow-hidden shadow-[0_10px_60px_rgba(0,0,0,0.55)]">
                         <img
                           src={currentSong.imageUrl}
                           alt={currentSong.title}
@@ -787,7 +870,7 @@ export const PlaybackControls = () => {
                           max={duration || 100}
                           onChange={handleSeek}
                           className="h-1.5"
-                          trackColor="bg-white/20"
+                          trackColor="bg-white/25"
                           progressColor="bg-white/95"
                         />
                         <div className="flex justify-between text-xs text-white/40 tabular-nums">
@@ -807,7 +890,7 @@ export const PlaybackControls = () => {
                             "p-2 rounded-full transition-all relative",
                             isShuffle 
                               ? "text-violet-400" 
-                              : "text-white/60 hover:text-white"
+                              : "text-white/70 hover:text-white"
                           )}
                         >
                           <Shuffle className="w-5 h-5" />
@@ -821,7 +904,7 @@ export const PlaybackControls = () => {
                         </button>
 
                         <motion.button
-                          whileHover={{ scale: 1.03 }}
+                          whileHover={{ scale: 1 }}
                           whileTap={{ scale: 0.95 }}
                           onClick={togglePlay}
                           className={cn(
@@ -851,7 +934,7 @@ export const PlaybackControls = () => {
                             "p-2 rounded-full transition-all relative",
                             isRepeat 
                               ? "text-violet-400" 
-                              : "text-white/60 hover:text-white"
+                              : "text-white/70 hover:text-white"
                           )}
                         >
                           <Repeat className="w-5 h-5" />
@@ -863,7 +946,7 @@ export const PlaybackControls = () => {
                         "flex items-center gap-3 pt-1",
                         "justify-center lg:justify-start"
                       )}>
-                        <LikeButton songId={currentSong._id} />
+                        <LikeButton song={currentSong} />
                         <button
                           onClick={start}
                           disabled={state === "downloading" || state === "completed"}
@@ -909,13 +992,15 @@ export const PlaybackControls = () => {
                   {showQueue && (
                     <motion.div
                       initial={{ width: 0, opacity: 0 }}
-                      animate={{ width: 380, opacity: 1 }}
+                      animate={{ width: 350, opacity: 1 }}
                       exit={{ width: 0, opacity: 0 }}
                       transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                      className="h-full border-l border-white/5 overflow-hidden  backdrop-blur-xl shrink-0 hidden lg:block"
+                      className="h-full border-l border-white/5 overflow-hidden rounded-sm  backdrop-blur-xl bg-black/10 shrink-0 hidden lg:block"
                     >
-                      <div className="w-[380px] h-full">
-                        <Queue />
+                      <div className="w-[350px] h-full">
+                        <Suspense fallback={null}>
+                          <Queue />
+                        </Suspense>
                       </div>
                     </motion.div>
                   )}
@@ -931,9 +1016,11 @@ export const PlaybackControls = () => {
                   animate={{ y: 0 }}
                   exit={{ y: "100%" }}
                   transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                  className="fixed inset-x-0 bottom-0 top-16 z-[10] backdrop-blur-md lg:hidden"
+                  className="fixed inset-x-0 bottom-0 top-16 z-[10] backdrop-blur-xl bg-black/50 lg:hidden"
                 >
-                  <Queue />
+                  <Suspense fallback={null}>
+                    <Queue />
+                  </Suspense>
                 </motion.div>
               )}
             </AnimatePresence>

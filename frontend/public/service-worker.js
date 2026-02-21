@@ -1,5 +1,5 @@
 // ✅ Version control - increment this on each deployment
-const APP_VERSION = '3.0.1';
+const APP_VERSION = '3.0.2';
 const CACHE_NAME = `vibra-cache-${APP_VERSION}`;
 const OFFLINE_PAGE = '/offline.html';
 
@@ -7,69 +7,47 @@ const OFFLINE_PAGE = '/offline.html';
 const STATIC_ASSETS = [
   "/",
   "/index.html",
-  "/vibra-192.png",
-  "/vibra-512.png",
-  "/manifest.json",
-  "/ringtone.mp3",
   "/vibra.png",
   "/google.png",
+  "/manifest.json",
+  "/chat-pattern.svg",
+  "/vibra-192.png",
+  "/vibra-512.png",
+  "/ringtone.mp3",
+  "/offline.html",
 ];
 
 // ===== INSTALL EVENT ===== 
 self.addEventListener("install", (event) => {
-  // console.log(`🔧 Installing Service Worker v${APP_VERSION}`);
-  
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        // console.log('📦 Caching app shell and static assets');
-        return cache.addAll(STATIC_ASSETS);
-      })
-      .catch((error) => {
-        console.error('❌ Cache install failed:', error);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll(STATIC_ASSETS);
+    })
   );
-  
-  // self.skipWaiting();
 });
 
 // ===== ACTIVATE EVENT ===== 
 self.addEventListener("activate", (event) => {
+  // console.log(`✅ Activating Service Worker v${APP_VERSION}`);
+  
   event.waitUntil(
+    // ✅ Clean up old caches from previous versions
     caches.keys()
       .then((cacheNames) => {
         return Promise.all(
           cacheNames
             .filter((cacheName) => {
-              // Delete ANY cache that isn't the current version
+              // Delete any cache that starts with 'vibra-cache-' but isn't current version
               return cacheName.startsWith('vibra-cache-') && cacheName !== CACHE_NAME;
             })
             .map((cacheName) => {
+              // console.log(`🗑️ Deleting old cache: ${cacheName}`);
               return caches.delete(cacheName);
             })
         );
       })
       .then(() => {
-        // Also purge stale entries from current cache
-        // (old hashed JS/CSS files that no longer exist)
-        return caches.open(CACHE_NAME).then((cache) => {
-          return cache.keys().then((requests) => {
-            return Promise.all(
-              requests
-                .filter((req) => {
-                  const url = new URL(req.url);
-                  // Remove old hashed assets (contain hash patterns like .abc123.)
-                  // Keep static assets from STATIC_ASSETS array
-                  const isHashedAsset = url.pathname.match(/\/assets\/.*\-[a-zA-Z0-9]{8,}\.(js|css)$/);
-                  const isStaticAsset = STATIC_ASSETS.includes(url.pathname);
-                  return isHashedAsset && !isStaticAsset;
-                })
-                .map((req) => cache.delete(req))
-            );
-          });
-        });
-      })
-      .then(() => {
+        // console.log('🎯 Service Worker now controlling all pages');
         return self.clients.claim();
       })
   );
@@ -432,25 +410,22 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   
-  // ✅ Network-first for JS/CSS bundles (prevents stale app from background)
+  // ✅ Stale-while-revalidate for JS/CSS bundles
   if (url.pathname.match(/\.(js|css)$/)) {
     event.respondWith(
-      fetch(request)
-        .then((networkResponse) => {
-          if (networkResponse.status === 200) {
-            const responseClone = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, responseClone);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // Only use cache as offline fallback
-          return caches.match(request).then((cachedResponse) => {
-            return cachedResponse || new Response('', { status: 503 });
-          });
-        })
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(request).then((cachedResponse) => {
+          const fetchPromise = fetch(request).then((networkResponse) => {
+            if (networkResponse.status === 200) {
+              cache.put(request, networkResponse.clone());
+            }
+            return networkResponse;
+          }).catch(() => cachedResponse); // Fallback to cache on network error
+          
+          // Return cached version immediately, update in background
+          return cachedResponse || fetchPromise;
+        });
+      })
     );
     return;
   }

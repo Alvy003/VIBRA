@@ -4,23 +4,28 @@ import { Home, Search, Library, Download, MessageCircle } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import { SignedIn } from "@clerk/clerk-react";
 import { useChatStore } from "@/stores/useChatStore";
-import { useAppUpdate } from "@/hooks/useAppUpdate";
-import { useMemo } from "react";
+import { useMemo, useState, useEffect } from "react";
 
 const BottomNav = () => {
   const location = useLocation();
+  const [mounted, setMounted] = useState(false);
   const { unreadMessagesByUser, selectedUser } = useChatStore();
-  const { updateAvailable } = useAppUpdate(true);
 
   const totalUnread = useMemo(
     () => Object.values(unreadMessagesByUser || {}).reduce((a, b) => a + b, 0),
     [unreadMessagesByUser]
   );
 
+  useEffect(() => {
+  setMounted(true);
+}, []);
+
   const hideRoutes = ["/admin"];
   const shouldHide = hideRoutes.some((route) => location.pathname.startsWith(route));
-  const isInActiveChat = location.pathname.startsWith("/chat") && selectedUser;
+  const isInActiveChat = location.pathname.startsWith("/chat") && !!selectedUser;
   if (shouldHide || isInActiveChat) return null;
+
+  if (!mounted) return null;
 
   const isActivePath = (path: string) =>
     path === "/" ? location.pathname === "/" : location.pathname.startsWith(path);
@@ -56,7 +61,6 @@ const BottomNav = () => {
             label="Downloads" 
             to="/downloads" 
             active={isActivePath("/downloads")}
-            hasUpdate={updateAvailable}
           />
         </div>
 

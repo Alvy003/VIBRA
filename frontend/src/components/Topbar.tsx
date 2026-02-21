@@ -7,6 +7,7 @@ import { useAuthStore } from "@/stores/useAuthStore";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAppUpdate } from "@/hooks/useAppUpdate";
 
 type TopbarProps = {
   className?: string;
@@ -15,6 +16,7 @@ type TopbarProps = {
 const Topbar = ({ className }: TopbarProps) => {
   const { isAdmin } = useAuthStore();
   const { user } = useUser();
+  const { updateAvailable } = useAppUpdate(true);
 
   return (
     <div
@@ -58,6 +60,15 @@ const Topbar = ({ className }: TopbarProps) => {
                 {user?.fullName?.[0] || "U"}
               </AvatarFallback>
             </Avatar>
+            {updateAvailable && (
+              <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center">
+                <span
+                  className="absolute size-3 rounded-full bg-violet-500/30 animate-ping"
+                  style={{ animationDuration: "2s" }}
+                />
+                <span className="relative size-2 rounded-full bg-violet-500" />
+              </span>
+            )}
           </Link>
         </SignedIn>
       </div>

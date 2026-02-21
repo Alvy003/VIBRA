@@ -15,7 +15,6 @@ import { Link, NavLink, useLocation } from "react-router-dom";
 import { useChatStore } from "@/stores/useChatStore";
 import { CreatePlaylistDialog } from "../../components/CreatePlaylistDialog";
 import { Song } from "@/types";
-import { useAppUpdate } from "@/hooks/useAppUpdate";
 import {
   Tooltip,
   TooltipContent,
@@ -23,6 +22,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useIsTouchDevice } from "@/hooks/useIsTouchDevice";
+import { useSavedItemsStore } from "@/stores/useSavedItemsStore";
+import { useNavigate } from "react-router-dom";
 
 const LibraryEmptyState = ({
   icon: Icon,
@@ -150,7 +151,6 @@ const LeftSidebar = () => {
   const { albums, fetchAlbums, likedSongs, fetchLikedSongs, isLoading: isAlbumLoading } = useMusicStore();
   const { playlists, fetchUserPlaylists, isLoading: isPlaylistLoading } = usePlaylistStore();
   const { unreadMessagesByUser } = useChatStore();
-  const { updateAvailable } = useAppUpdate(true);
   const { isSignedIn, isLoaded } = useUser();
   const location = useLocation();
   
@@ -158,6 +158,21 @@ const LeftSidebar = () => {
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
   const [isHovered, setIsHovered] = useState(false);
   const isTouch = useIsTouchDevice();
+
+  const { savedItems, fetchSavedItems } = useSavedItemsStore();
+  const navigate = useNavigate();
+
+  const savedAlbums = savedItems.filter((i) => i.type === "album");
+  const savedPlaylists = savedItems.filter((i) => i.type === "playlist");
+
+// Add to the useEffect that fetches user data:
+useEffect(() => {
+  if (isLoaded && isSignedIn) {
+    fetchUserPlaylists();
+    fetchLikedSongs();
+    fetchSavedItems(); // ADD THIS
+  }
+}, [fetchUserPlaylists, fetchLikedSongs, fetchSavedItems, isLoaded, isSignedIn]);
 
   useEffect(() => {
     fetchAlbums();
@@ -263,7 +278,7 @@ const LeftSidebar = () => {
               <CollapsedNavItem to="/chat" icon={MessageCircle} label="Messages" badge={totalUnread > 0} />
             </SignedIn>
             <CollapsedNavItem to="/search" icon={Search} label="Search" />
-            <CollapsedNavItem to="/downloads" icon={Download} label="Downloads" badge={updateAvailable} />
+            <CollapsedNavItem to="/downloads" icon={Download} label="Downloads" />
           </div>
 
           {/* Library */}
@@ -341,6 +356,28 @@ const LeftSidebar = () => {
                   ))}
                 </SignedIn>
 
+                {/* Collapsed: Saved Playlists */}
+                {savedPlaylists.map((item) => (
+                  <CollapsedLibraryItem
+                    key={item._id}
+                    to={`/playlists/external/${item.source}/${item.externalId.replace("jiosaavn_playlist_", "")}`}
+                    imageComponent={
+                      item.imageUrl ? (
+                        <div className="size-10 rounded-sm overflow-hidden">
+                          <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="size-10 rounded-sm bg-gradient-to-br from-violet-600/30 to-fuchsia-600/30 flex items-center justify-center">
+                          <ListMusic className="size-5 text-violet-400/70" />
+                        </div>
+                      )
+                    }
+                    title={item.title}
+                    subtitle={`Saved • Playlist`}
+                    isActive={false}
+                  />
+                ))}
+
                 {albums.map((album) => (
                   <CollapsedLibraryItem
                     key={album._id}
@@ -350,12 +387,34 @@ const LeftSidebar = () => {
                         previewImages={album.previewImages}
                         imageUrl={album.imageUrl}
                         name={album.title}
-                        type="album"
+                        type="playlist"
                       />
                     }
                     title={album.title}
-                    subtitle={`Album • ${album.artist}`}
+                    subtitle={`Playlist • Vibra`}
                     isActive={location.pathname === `/albums/${album._id}`}
+                  />
+                ))}
+
+                {/* Collapsed: Saved Albums */}
+                {savedAlbums.map((item) => (
+                  <CollapsedLibraryItem
+                    key={item._id}
+                    to={`/albums/external/${item.source}/${item.externalId.replace("jiosaavn_album_", "")}`}
+                    imageComponent={
+                      item.imageUrl ? (
+                        <div className="size-10 rounded-sm overflow-hidden">
+                          <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <div className="size-10 rounded-sm bg-gradient-to-br from-violet-500/30 to-purple-600/30 flex items-center justify-center">
+                          <Disc3 className="size-5 text-violet-400/70" />
+                        </div>
+                      )
+                    }
+                    title={item.title}
+                    subtitle={`Saved • Album`}
+                    isActive={false}
                   />
                 ))}
               </div>
@@ -449,10 +508,7 @@ const LeftSidebar = () => {
             >
               {({ isActive }) => (
                 <>
-                  <Download className={cn(
-                    "size-4",
-                    isActive ? "text-white" : updateAvailable ? "text-violet-400" : ""
-                  )} />
+                  <Download className={cn("size-4", isActive && "text-white")} />
                   <span className="font-medium text-sm">Downloads</span>
                 </>
               )}
@@ -497,160 +553,218 @@ const LeftSidebar = () => {
               onClick={() => setLibraryFilter("all")}
             />
             <SignedIn>
-              <FilterChip
-                label="Playlists"
-                isActive={libraryFilter === "playlists"}
-                onClick={() => setLibraryFilter("playlists")}
-                count={playlists.length + 1} // +1 for Liked Songs
-              />
+            <FilterChip
+              label="Playlists"
+              isActive={libraryFilter === "playlists"}
+              onClick={() => setLibraryFilter("playlists")}
+              count={playlists.length + savedPlaylists.length + albums.length + 1}
+            />
             </SignedIn>
             <FilterChip
               label="Albums"
               isActive={libraryFilter === "albums"}
               onClick={() => setLibraryFilter("albums")}
-              count={albums.length}
+              count={savedAlbums.length}
             />
           </div>
 
           {/* Library Items */}
           <ScrollArea className="flex-1 px-2" type="hover">
-            <div className="space-y-0.5">
-              {/* Liked Songs - Always at top when showing playlists */}
-              <SignedIn>
-                {showPlaylists && (
-                  <>
-                    {libraryFilter === "all" && (
-                      <div className="px-2 pt-1 pb-2">
-                        <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                          Playlists
-                        </p>
-                      </div>
-                    )}
-                    
-                    {/* Liked Songs Card */}
-                    <Link to="/favorites" className="block">
-                      <div className={cn(
-                        "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
-                        "hover:bg-zinc-800/70",
-                        location.pathname === "/favorites" && "bg-zinc-800/60"
-                      )}>
-                        <div className="size-10 rounded-sm bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center flex-shrink-0">
-                          <Heart className="size-5 text-white" fill="white" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="font-normal truncate text-sm text-white">
-                            Liked Songs
-                          </p>
-                          <p className="text-xs text-zinc-400/90 truncate">
-                            Playlist • {likedSongs?.length || 0} songs
-                          </p>
-                        </div>
-                      </div>
-                    </Link>
+  <div className="space-y-0.5">
+    
+    {/* ========== PLAYLISTS SECTION ========== */}
+    {showPlaylists && (
+      <>
+        <SignedIn>
+          {/* {libraryFilter === "all" && (
+            <div className="px-2 pt-1 pb-2">
+              <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+                Playlists
+              </p>
+            </div>
+          )} */}
+          
+          {/* Liked Songs Card */}
+          <Link to="/favorites" className="block">
+            <div className={cn(
+              "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+              "hover:bg-zinc-800/70",
+              location.pathname === "/favorites" && "bg-zinc-800/60"
+            )}>
+              <div className="size-10 rounded-sm bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center flex-shrink-0">
+                <Heart className="size-5 text-white" fill="white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-normal truncate text-sm text-white">Liked Songs</p>
+                <p className="text-xs text-zinc-400/90 truncate">
+                  Playlist • {likedSongs?.length || 0} songs
+                </p>
+              </div>
+            </div>
+          </Link>
 
-                    {/* User Playlists */}
-                    {playlists.map((playlist) => (
-                      <Link
-                        key={playlist._id}
-                        to={`/playlists/${playlist._id}`}
-                        className="block"
-                      >
-                        <div className={cn(
-                          "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
-                          "hover:bg-zinc-800/70",
-                          location.pathname === `/playlists/${playlist._id}` && "bg-zinc-800/60"
-                        )}>
-                          <MosaicThumbnail 
-                            songs={playlist.songs} 
-                            imageUrl={playlist.imageUrl}
-                            name={playlist.name}
-                            type="playlist"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-normal truncate text-sm text-white">
-                              {playlist.name}
-                            </p>
-                            <p className="text-xs text-zinc-400/90 truncate">
-                              Playlist • {playlist.songs?.length || 0} songs
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </>
-                )}
-              </SignedIn>
+          {/* User Playlists */}
+          {playlists.map((playlist) => (
+            <Link key={playlist._id} to={`/playlists/${playlist._id}`} className="block">
+              <div className={cn(
+                "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+                "hover:bg-zinc-800/70",
+                location.pathname === `/playlists/${playlist._id}` && "bg-zinc-800/60"
+              )}>
+                <MosaicThumbnail 
+                  songs={playlist.songs} 
+                  imageUrl={playlist.imageUrl}
+                  name={playlist.name}
+                  type="playlist"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-normal truncate text-sm text-white">{playlist.name}</p>
+                  <p className="text-xs text-zinc-400/90 truncate">
+                    Playlist • {playlist.songs?.length || 0} songs
+                  </p>
+                </div>
+              </div>
+            </Link>
+          ))}
 
-              {/* Separator */}
-              {libraryFilter === "all" && (showPlaylists && (playlists.length > 0 || isSignedIn)) && albums.length > 0 && (
-                <div className="h-px bg-zinc-800/50 mx-2 my-2" />
-              )}
-
-              {/* Albums */}
-              {showAlbums && (
-                <>
-                  {libraryFilter === "all" && albums.length > 0 && (
-                    <div className="px-2 pt-1 pb-2">
-                      <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
-                        Albums
-                      </p>
+          {/* Saved External Playlists */}
+          {savedPlaylists.map((item) => (
+            <button
+              key={item._id}
+              onClick={() => {
+                const cleanId = item.externalId.replace("jiosaavn_playlist_", "");
+                navigate(`/playlists/external/${item.source}/${cleanId}`);
+              }}
+              className="block w-full text-left"
+            >
+              <div className={cn(
+                "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+                "hover:bg-zinc-800/70"
+              )}>
+                <div className="size-10 rounded-sm overflow-hidden flex-shrink-0 bg-zinc-800">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-600/30 to-fuchsia-600/30">
+                      <ListMusic className="size-5 text-violet-400/70" />
                     </div>
                   )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-normal truncate text-sm text-white">{item.title}</p>
+                  <div className="flex items-center gap-1 text-xs text-zinc-400/90">
+                    <span className="truncate">
+                      Playlist{item.songCount ? ` • ${item.songCount} songs` : ""}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </SignedIn>
 
-                  {isLoading ? (
-                    <PlaylistSkeleton />
+        {/* Vibra Playlists (admin-created, stored as albums) — visible to everyone */}
+        {isLoading ? (
+          <PlaylistSkeleton />
+        ) : (
+          albums.map((album) => (
+            <Link key={album._id} to={`/albums/${album._id}`} className="block">
+              <div className={cn(
+                "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+                "hover:bg-zinc-800/70",
+                location.pathname === `/albums/${album._id}` && "bg-zinc-800/60"
+              )}>
+                <MosaicThumbnail 
+                  previewImages={album.previewImages}
+                  imageUrl={album.imageUrl}
+                  name={album.title}
+                  type="playlist"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-normal truncate text-sm text-white">{album.title}</p>
+                  <p className="text-xs text-zinc-400/90 truncate">Playlist • Vibra</p>
+                </div>
+              </div>
+            </Link>
+          ))
+        )}
+      </>
+    )}
+
+    {/* ========== SEPARATOR ========== */}
+    {/* {libraryFilter === "all" && (playlists.length > 0 || isSignedIn) && savedAlbums.length > 0 && (
+      <div className="h-px bg-zinc-800/50 mx-2 my-2" />
+    )} */}
+
+    {/* ========== ALBUMS SECTION ========== */}
+    {showAlbums && (
+      <>
+        {/* {libraryFilter === "all" && savedAlbums.length > 0 && (
+          <div className="px-2 pt-1 pb-2">
+            <p className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider">
+              Albums
+            </p>
+          </div>
+        )} */}
+
+        {/* Saved External Albums */}
+        <SignedIn>
+          {savedAlbums.map((item) => (
+            <button
+              key={item._id}
+              onClick={() => {
+                const cleanId = item.externalId.replace("jiosaavn_album_", "");
+                navigate(`/albums/external/${item.source}/${cleanId}`);
+              }}
+              className="block w-full text-left"
+            >
+              <div className={cn(
+                "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
+                "hover:bg-zinc-800/70"
+              )}>
+                <div className="size-10 rounded-sm overflow-hidden flex-shrink-0 bg-zinc-800">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.title} className="w-full h-full object-cover" />
                   ) : (
-                    albums.map((album) => (
-                      <Link
-                        key={album._id}
-                        to={`/albums/${album._id}`}
-                        className="block"
-                      >
-                        <div className={cn(
-                          "flex items-center gap-3 px-2 py-1.5 rounded-lg transition-colors",
-                          "hover:bg-zinc-800/70",
-                          location.pathname === `/albums/${album._id}` && "bg-zinc-800/60"
-                        )}>
-                          <MosaicThumbnail 
-                            previewImages={album.previewImages}
-                            imageUrl={album.imageUrl}
-                            name={album.title}
-                            type="album"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-normal truncate text-sm text-white">
-                              {album.title}
-                            </p>
-                            <p className="text-xs text-zinc-400/90 truncate">
-                              Album • {album.artist}
-                            </p>
-                          </div>
-                        </div>
-                      </Link>
-                    ))
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-500/30 to-purple-600/30">
+                      <Disc3 className="size-5 text-violet-400/70" />
+                    </div>
                   )}
-                </>
-              )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-normal truncate text-sm text-white">{item.title}</p>
+                  <div className="flex items-center gap-1 text-xs text-zinc-400/90">
+                    <span className="truncate">
+                      Album{item.artist ? ` • ${item.artist}` : ""}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </SignedIn>
+      </>
+    )}
 
-              {/* Empty states */}
-              {libraryFilter === "playlists" && playlists.length === 0 && !isLoading && (
-                <LibraryEmptyState
-                  icon={ListMusic}
-                  title="No playlists yet"
-                  description="Create your first playlist"
-                />
-              )}
+    {/* ========== EMPTY STATES ========== */}
+    {libraryFilter === "playlists" && playlists.length === 0 && !isLoading && (
+      <LibraryEmptyState
+        icon={ListMusic}
+        title="No playlists yet"
+        description="Create your first playlist"
+      />
+    )}
 
-              {libraryFilter === "albums" && albums.length === 0 && !isLoading && (
-                <LibraryEmptyState
-                  icon={Disc3}
-                  title="No albums available"
-                  description="Albums will appear here"
-                />
-              )}
+    {libraryFilter === "albums" && savedAlbums.length === 0 && !isLoading && (
+      <LibraryEmptyState
+        icon={Disc3}
+        title="No albums available"
+        description="Albums will appear here"
+      />
+    )}
 
-            </div>
-          </ScrollArea>
+  </div>
+</ScrollArea>
         </div>
       </div>
     </TooltipProvider>

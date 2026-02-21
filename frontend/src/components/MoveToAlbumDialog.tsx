@@ -87,22 +87,20 @@ const MoveToAlbumDialog = ({ isOpen, onClose, song }: MoveToAlbumDialogProps) =>
   const handleToggleAlbum = async (albumId: string) => {
     const currentlyInAlbum = isInAlbum(albumId);
     setIsSaving(albumId);
-
+  
     try {
       if (currentlyInAlbum) {
-        // Remove from album
         await axiosInstance.patch(`/admin/albums/${albumId}/songs`, {
           op: "remove",
           songId: song._id,
         });
-
-        // Update local state
+  
         setSelectedAlbums((prev) => {
           const newSet = new Set(prev);
           newSet.delete(albumId);
           return newSet;
         });
-
+  
         toast.custom(
           <motion.div
             initial={{ y: 30, opacity: 0 }}
@@ -114,19 +112,31 @@ const MoveToAlbumDialog = ({ isOpen, onClose, song }: MoveToAlbumDialogProps) =>
           { duration: 1500 }
         );
       } else {
-        // Add to album
+        // Send songData for external songs
+        const isExternal = !/^[0-9a-fA-F]{24}$/.test(song._id);
         await axiosInstance.patch(`/admin/albums/${albumId}/songs`, {
           op: "add",
           songId: song._id,
+          ...(isExternal && {
+            songData: {
+              title: song.title,
+              artist: song.artist,
+              imageUrl: (song as any).imageUrl || "",
+              audioUrl: (song as any).audioUrl || "",
+              streamUrl: (song as any).streamUrl || (song as any).audioUrl || "",
+              duration: (song as any).duration || 0,
+              videoId: (song as any).videoId || null,
+              language: (song as any).language || null,
+            },
+          }),
         });
-
-        // Update local state
+  
         setSelectedAlbums((prev) => {
           const newSet = new Set(prev);
           newSet.add(albumId);
           return newSet;
         });
-
+  
         toast.custom(
           <motion.div
             initial={{ y: 30, opacity: 0 }}

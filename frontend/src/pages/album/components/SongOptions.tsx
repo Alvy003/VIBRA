@@ -27,6 +27,7 @@ import EditSongDialog from "@/components/EditSongDialog";
 import AddToPlaylistDialog from "@/components/AddToPlaylistDialog";
 import { createPortal } from "react-dom";
 import { useIsTouchDevice } from "@/hooks/useIsTouchDevice";
+import BottomSheet from "@/components/ui/BottomSheet";
 
 type Props = {
   song: any;
@@ -105,94 +106,6 @@ const DeleteConfirmDialog = ({
     )}
   </AnimatePresence>
 );
-
-// Mobile Bottom Sheet
-const MobileBottomSheet = ({
-  isOpen,
-  onClose,
-  song,
-  children,
-}: {
-  isOpen: boolean;
-  onClose: () => void;
-  song: any;
-  children: React.ReactNode;
-}) => {
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [isOpen]);
-
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    onClose();
-  };
-
-  const handleBackdropTouch = (e: React.TouchEvent) => {
-    // Don't call preventDefault - just stop propagation
-    e.stopPropagation();
-  };
-
-  return createPortal(
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
-            className="fixed inset-0 bg-black/60 z-[9998]"
-            onClick={handleBackdropClick}
-            onTouchStart={handleBackdropTouch}
-            onTouchEnd={(e) => {
-              e.stopPropagation();
-              onClose();
-            }}
-          />
-          <motion.div
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ 
-              type: "spring", 
-              damping: 30, 
-              stiffness: 400,
-              mass: 0.8
-            }}
-            className="fixed bottom-0 left-0 right-0 z-[9999] bg-zinc-900 rounded-t-3xl max-h-[85vh] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
-          >
-            <div className="flex justify-center pt-3 pb-2">
-              <div className="w-10 h-1 bg-zinc-700 rounded-full" />
-            </div>
-            <div className="flex items-center gap-3 px-4 pb-4 border-b border-zinc-800">
-              <img
-                src={song.imageUrl}
-                alt={song.title}
-                className="w-12 h-12 rounded-lg object-cover ring-1 ring-white/10"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-white truncate">{song.title}</p>
-                <p className="text-sm text-zinc-400 truncate">{song.artist}</p>
-              </div>
-            </div>
-            <div className="p-4 pb-8 overflow-y-auto max-h-[60vh]">
-              {children}
-            </div>
-            <div className="h-[env(safe-area-inset-bottom)]" />
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>,
-    document.body
-  );
-};
 
 // Desktop Context Menu
 const DesktopContextMenu = ({
@@ -422,7 +335,11 @@ const SongOptions: React.FC<Props> = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const isLiked = likedSongs.some((s: any) => s._id === song._id);
+  const isLiked = likedSongs.some((s: any) => {
+    const likedId = s._id || s.externalId;
+    const songId = song._id || song.externalId;
+    return likedId === songId;
+  });
 
   const { state: downloadState, start, remove } = useDownloads({
     _id: song._id,
@@ -526,7 +443,7 @@ const SongOptions: React.FC<Props> = ({
     close();
   }, [song, close]);
 
-  const toggleLike = async () => {
+const toggleLike = async () => {
     if (!isSignedIn) {
       toast.custom(
         <div className="bg-red-800/95 text-white px-4 py-2 rounded-full shadow-lg border border-red-400/30">
@@ -536,9 +453,12 @@ const SongOptions: React.FC<Props> = ({
       );
       return;
     }
+
+    const songId = song._id || song.externalId || "";
+
     try {
       if (isLiked) {
-        await unlikeSong(song._id);
+        await unlikeSong(songId);
         toast.custom(
           <div className="bg-zinc-900/95 text-white px-4 py-2 rounded-full shadow-lg border border-white/10">
             <span className="text-sm">Removed from Liked Songs</span>
@@ -546,7 +466,7 @@ const SongOptions: React.FC<Props> = ({
           { duration: 1300 }
         );
       } else {
-        await likeSong(song._id);
+        await likeSong(songId, song);
         toast.custom(
           <div className="bg-violet-600/90 text-white px-4 py-2 rounded-full shadow-lg border border-violet-500/20">
             <span className="text-sm">Added to Liked Songs</span>
@@ -663,9 +583,28 @@ const SongOptions: React.FC<Props> = ({
 
       {/* MOBILE/BIG TOUCH SCREENS: Bottom Sheet */}
       {useBottomSheet && (
-        <MobileBottomSheet isOpen={open} onClose={close} song={song}>
-          <OptionsContent {...sharedProps} variant="mobile" />
-        </MobileBottomSheet>
+        <BottomSheet
+          isOpen={open}
+          onClose={close}
+          snapPoints={[0.44]}
+          header={
+            <div className="flex items-center gap-3 px-4 pb-4 border-b border-zinc-800">
+              <img
+                src={song.imageUrl}
+                alt={song.title}
+                className="w-12 h-12 rounded-lg object-cover ring-1 ring-white/10"
+              />
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold text-white truncate">{song.title}</p>
+                <p className="text-sm text-zinc-400 truncate">{song.artist}</p>
+              </div>
+            </div>
+          }
+        >
+          <div className="p-4">
+            <OptionsContent {...sharedProps} variant="mobile" />
+          </div>
+        </BottomSheet>
       )}
 
       {/* DESKTOP NON-TOUCH: Context Menu */}

@@ -22,6 +22,8 @@ import pushSubscriptionRoutes from "./routes/pushSubscription.route.js";
 import chatRoutes from "./routes/chat.route.js";
 import miscRoutes from "./routes/misc.route.js";
 import historyRoutes from "./routes/history.route.js";
+import streamRoutes from "./routes/stream.route.js";
+import savedItemRoutes from "./routes/savedItem.route.js";
 
 dotenv.config();
 
@@ -141,6 +143,8 @@ app.use("/api/push", pushSubscriptionRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/misc", miscRoutes);
 app.use("/api/history", historyRoutes);
+app.use("/api/stream", streamRoutes);
+app.use("/api/library/saved", savedItemRoutes);
 
 // Production static (place AFTER /uploads so SPA doesn’t eat /uploads/voice)
 if (process.env.NODE_ENV === "production") {

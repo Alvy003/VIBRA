@@ -11,6 +11,7 @@ import { useMusicStore } from "@/stores/useMusicStore";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { formatDuration } from "@/pages/album/AlbumPage";
 import { cn } from "@/lib/utils";
+import { axiosInstance } from "@/lib/axios";
 
 // Violet color constants for Favorites page
 const FAVORITES_COLORS = {
@@ -76,9 +77,9 @@ const useContentWidth = () => {
     if (observerRef.current && containerRef.current) {
       observerRef.current.unobserve(containerRef.current);
     }
-    
+
     containerRef.current = node;
-    
+
     if (observerRef.current && node) {
       observerRef.current.observe(node);
     }
@@ -93,7 +94,7 @@ const FavoritesPage = () => {
   const { likedSongs, fetchLikedSongs } = useMusicStore();
   const { currentSong, isPlaying, playAlbum, togglePlay, isShuffle, toggleShuffle } = usePlayerStore();
   const { contentWidth, setContainerRef } = useContentWidth();
-  
+
   // Scroll state for sticky header
   const [showStickyHeader, setShowStickyHeader] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -124,11 +125,19 @@ const FavoritesPage = () => {
   }, [toggleShuffle]);
 
   const hasFavourites = likedSongs && likedSongs.length > 0;
-  const isPlayingFavorites = likedSongs?.some((song) => song._id === currentSong?._id) && isPlaying;
+  const isPlayingFavorites = likedSongs?.some((song) => {
+    const id = song._id || (song as any).externalId;
+    const currentId = currentSong?._id || (currentSong as any)?.externalId;
+    return id === currentId;
+  }) && isPlaying;
 
   const handlePlayAll = useCallback(() => {
     if (!hasFavourites) return;
-    const isCurrentlyPlayingFavorites = likedSongs.some((song) => song._id === currentSong?._id);
+    const isCurrentlyPlayingFavorites = likedSongs.some((song) => {
+      const id = song._id || (song as any).externalId;
+      const currentId = currentSong?._id || (currentSong as any)?.externalId;
+      return id === currentId;
+    });
     if (isCurrentlyPlayingFavorites) {
       togglePlay();
     } else {
@@ -146,8 +155,32 @@ const FavoritesPage = () => {
     }
   }, [hasFavourites, likedSongs, currentSong, togglePlay, isShuffle, playAlbum]);
 
-  const handlePlaySong = useCallback((index: number) => {
-    playAlbum(likedSongs, index);
+const handlePlaySong = useCallback(async (index: number) => {
+    const song = likedSongs[index];
+
+    // External songs may need stream URL resolution
+    if ((song as any)._likedType === "external" || song.source === "jiosaavn" || song._id?.startsWith("jiosaavn_")) {
+      const songCopy = { ...song };
+      if (!songCopy.audioUrl) {
+        try {
+          const cleanId = (songCopy.externalId || songCopy._id || "")
+            .replace("jiosaavn_", "");
+          const res = await axiosInstance.get(`/stream/stream-url/jiosaavn/${cleanId}`);
+          if (res.data?.url) {
+            songCopy.audioUrl = res.data.url;
+          }
+        } catch {
+          console.error("Failed to resolve stream URL for liked song");
+          return;
+        }
+      }
+      // Play the resolved song and set the rest as queue
+      const resolvedSongs = [...likedSongs];
+      resolvedSongs[index] = songCopy;
+      playAlbum(resolvedSongs, index);
+    } else {
+      playAlbum(likedSongs, index);
+    }
   }, [likedSongs, playAlbum]);
 
   const isCompact = contentWidth === 'compact';
@@ -155,7 +188,7 @@ const FavoritesPage = () => {
   const showFullDetails = contentWidth === 'full';
 
   return (
-    <main 
+    <main
       ref={setContainerRef}
       className="h-full rounded-lg overflow-hidden relative"
     >
@@ -168,7 +201,7 @@ const FavoritesPage = () => {
             : "opacity-0 -translate-y-full pointer-events-none"
         )}
       >
-        <div 
+        <div
           className="border-b border-white/5"
           style={{ backgroundColor: FAVORITES_COLORS.secondary }}
         >
@@ -182,7 +215,7 @@ const FavoritesPage = () => {
             >
               <ChevronLeft className="w-5 h-5 text-white" />
             </button>
-            
+
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <div className={cn(
                 "rounded-md bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shrink-0 transition-all duration-300",
@@ -290,11 +323,11 @@ const FavoritesPage = () => {
                 <div className={cn(
                   "rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-2xl transition-all duration-300 ease-out",
                   isCompact ? "w-[180px] h-[180px]" :
-                  isMedium ? "w-[180px] h-[180px]" :
-                  "w-[220px] h-[220px] md:w-[200px] md:h-[200px]"
+                    isMedium ? "w-[180px] h-[180px]" :
+                      "w-[220px] h-[220px] md:w-[200px] md:h-[200px]"
                 )}>
                   <Heart className={cn(
-                    "text-white transition-all duration-300", 
+                    "text-white transition-all duration-300",
                     "w-20 h-20"
                   )} fill="white" />
                 </div>
@@ -313,8 +346,8 @@ const FavoritesPage = () => {
                 <h1 className={cn(
                   "font-bold my-2 text-white leading-tight transition-all duration-300 ease-out",
                   isCompact ? "text-xl" :
-                  isMedium ? "text-2xl" :
-                  "text-3xl sm:text-4xl md:text-5xl lg:text-6xl md:my-3"
+                    isMedium ? "text-2xl" :
+                      "text-3xl sm:text-4xl md:text-5xl lg:text-6xl md:my-3"
                 )}>
                   Liked Songs
                 </h1>
@@ -339,8 +372,8 @@ const FavoritesPage = () => {
             <div className={cn(
               "pb-4 flex items-center gap-3 transition-all duration-300 ease-out",
               isCompact ? "px-4 justify-center" :
-              isMedium ? "px-5 justify-center" :
-              "px-6 justify-center md:justify-start"
+                isMedium ? "px-5 justify-center" :
+                  "px-6 justify-center md:justify-start"
             )}>
               <Button
                 onClick={handleShuffleToggle}
@@ -413,7 +446,11 @@ const FavoritesPage = () => {
                     isCompact ? "px-1" : isMedium ? "px-2" : "px-2 md:px-4"
                   )}>
                     {likedSongs.map((song, index) => {
-                      const isCurrentSong = currentSong?._id === song._id;
+                      const isCurrentSong = (() => {
+                        const id = song._id || (song as any).externalId;
+                        const currentId = currentSong?._id || (currentSong as any)?.externalId;
+                        return id === currentId;
+                      })();
 
                       // Compact layout - simplified (title/artist + options only)
                       if (isCompact) {

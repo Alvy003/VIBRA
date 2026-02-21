@@ -389,6 +389,8 @@ const AlbumPage = () => {
                       <span>{currentAlbum?.releaseYear}</span>
                       <span className="text-white/40">•</span>
                       <span>{currentAlbum?.songs.length} songs</span>
+                      <span className="text-white/40">•</span>
+                      <span>By Vibra</span>
                     </div>
                   </div>
                 </div>

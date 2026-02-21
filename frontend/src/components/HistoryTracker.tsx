@@ -1,40 +1,56 @@
-import { useEffect, useRef } from 'react';
+// src/components/HistoryTracker.tsx
+import { useEffect, useRef } from "react";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { axiosInstance } from "@/lib/axios";
-import { useUser } from "@clerk/clerk-react";
 
 export const HistoryTracker = () => {
-  const { currentSong, isPlaying } = usePlayerStore();
-  const { isSignedIn, isLoaded } = useUser(); // Use isLoaded
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const { currentSong, hasTrackedCurrentSong, setHasTrackedCurrentSong } =
+    usePlayerStore();
+  const lastTrackedId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    if (!currentSong || hasTrackedCurrentSong) return;
+    if (lastTrackedId.current === currentSong._id) return;
 
-    // Only track if user is loaded AND signed in
-    if (currentSong && isPlaying && isLoaded && isSignedIn) {
-      const timeToCount = Math.min(10000, (currentSong.duration || 30) * 1000 / 2);
-      
-      timerRef.current = setTimeout(async () => {
-        try {
+    const trackPlay = async () => {
+      try {
+        lastTrackedId.current = currentSong._id;
+        setHasTrackedCurrentSong(true);
+
+        const isExternal =
+          currentSong.source === "jiosaavn" ||
+          currentSong.source === "youtube" ||
+          currentSong._id?.startsWith("jiosaavn_") ||
+          currentSong._id?.startsWith("yt_");
+
+        if (isExternal) {
           await axiosInstance.post("/history/track", {
             songId: currentSong._id,
-            playDuration: timeToCount / 1000,
-            completionPercentage: 0 
+            isExternal: true,
+            externalData: {
+              title: currentSong.title,
+              artist: currentSong.artist,
+              imageUrl: currentSong.imageUrl,
+              duration: currentSong.duration,
+              source: currentSong.source || "jiosaavn",
+              externalId: currentSong.externalId || currentSong._id,
+              album: currentSong.album || "",
+              streamUrl: currentSong.streamUrl || currentSong.audioUrl || "",
+            },
           });
-        } catch (error) {
-          console.error("Failed to track play history", error);
+        } else {
+          await axiosInstance.post("/history/track", {
+            songId: currentSong._id,
+            isExternal: false,
+          });
         }
-      }, timeToCount);
-    }
-
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      } catch (error) {
+        console.error("Failed to track play history:", error);
+      }
     };
-  }, [currentSong?._id, isPlaying, isLoaded, isSignedIn]);
+
+    trackPlay();
+  }, [currentSong, hasTrackedCurrentSong, setHasTrackedCurrentSong]);
 
   return null;
 };

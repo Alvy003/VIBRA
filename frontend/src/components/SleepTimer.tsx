@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { usePlayerStore } from "@/stores/usePlayerStore";
 import { useIsTouchDevice } from "@/hooks/useIsTouchDevice";
+import BottomSheet from "@/components/ui/BottomSheet";
 
 const TIMER_OPTIONS = [
   { label: "5 min", fullLabel: "5 minutes", value: 5 },
@@ -63,20 +64,34 @@ export const clearStopAfterCurrentSong = () => {
   }
 };
 
-const SleepTimer = () => {
+interface SleepTimerProps {
+  externalOpen?: boolean;
+  onExternalClose?: () => void;
+  hideTrigger?: boolean;
+}
+
+const SleepTimer = ({ externalOpen, onExternalClose, hideTrigger }: SleepTimerProps = {}) => {
   const { setIsPlaying } = usePlayerStore();
   const isTouch = useIsTouchDevice();
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [popoverPosition, setPopoverPosition] = useState({ top: 0, left: 0 });
   const [localState, setLocalState] = useState({
     activeMode: globalTimerState.activeMode,
     remainingSeconds: globalTimerState.remainingSeconds,
     activeSeconds: globalTimerState.activeSeconds,
   });
+
+  const isOpen = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setIsOpen = useCallback((val: boolean) => {
+    if (externalOpen !== undefined) {
+      if (!val && onExternalClose) onExternalClose();
+    } else {
+      setInternalOpen(val);
+    }
+  }, [externalOpen, onExternalClose]);
   
   const intervalRef = useRef<number | null>(null);
 
-  // Subscribe to global state changes
   useEffect(() => {
     const update = () => {
       setLocalState({
@@ -91,7 +106,6 @@ const SleepTimer = () => {
     };
   }, []);
 
-  // Only run display update interval when modal is open and timer is active
   useEffect(() => {
     if (isOpen && globalTimerState.activeMode === "timer" && globalTimerState.remainingSeconds !== null) {
       intervalRef.current = window.setInterval(() => {
@@ -170,6 +184,14 @@ const SleepTimer = () => {
     clearGlobalTimer();
   }, []);
 
+  const closeModal = useCallback(() => {
+    if (externalOpen !== undefined) {
+      onExternalClose?.();
+    } else {
+      setInternalOpen(false);
+    }
+  }, [externalOpen, onExternalClose]);
+
   const startCountdown = useCallback(
     (seconds: number) => {
       if (globalTimerState.activeMode === "timer" && globalTimerState.activeSeconds === seconds) {
@@ -202,9 +224,9 @@ const SleepTimer = () => {
       globalTimerState.activeMode = "timer";
 
       notifySubscribers();
-      setIsOpen(false);
+      closeModal();
     },
-    [clearEverything, setIsPlaying]
+    [clearEverything, setIsPlaying, closeModal]
   );
 
   const toggleEndOfSong = useCallback(() => {
@@ -216,8 +238,8 @@ const SleepTimer = () => {
     clearEverything();
     globalTimerState.activeMode = "endOfSong";
     notifySubscribers();
-    setIsOpen(false);
-  }, [clearEverything]);
+    closeModal();
+  }, [clearEverything, closeModal]);
 
   const cancel = useCallback(() => clearEverything(), [clearEverything]);
 
@@ -244,27 +266,27 @@ const SleepTimer = () => {
 
   return (
     <>
-      {/* Trigger Button - Simple violet color when active */}
-      <Button
-        data-sleep-timer-trigger
-        size="icon"
-        variant="ghost"
-        className={cn(
-          "transition-colors",
-          activeMode
-            ? "text-violet-400 hover:text-violet-300"
-            : "text-white/80 md:text-zinc-400 hover:text-white"
-        )}
-        onClick={() => setIsOpen(true)}
-        aria-label="Sleep timer"
-      >
-        <Timer className="h-5 w-5" />
-      </Button>
+      {!hideTrigger && (
+        <Button
+          data-sleep-timer-trigger
+          size="icon"
+          variant="ghost"
+          className={cn(
+            "transition-colors",
+            activeMode
+              ? "text-violet-400 hover:text-violet-300"
+              : "text-white/80 md:text-zinc-400 hover:text-white"
+          )}
+          onClick={() => setIsOpen(true)}
+          aria-label="Sleep timer"
+        >
+          <Timer className="h-5 w-5" />
+        </Button>
+      )}
 
       <AnimatePresence>
-        {isOpen && (
+        {isOpen && !isTouch && (
           <>
-            {/* Backdrop */}
             <motion.div
               className="fixed inset-0 bg-black/60 z-[90]"
               initial={{ opacity: 0 }}
@@ -272,235 +294,221 @@ const SleepTimer = () => {
               exit={{ opacity: 0 }}
               onClick={() => setIsOpen(false)}
             />
-
-            {isTouch ? (
-              /* Mobile Bottom Sheet */
-              <motion.div
-                key="sleep-timer-mobile"
-                initial={{ y: "100%" }}
-                animate={{ y: 0 }}
-                exit={{ y: "100%" }}
-                transition={{ type: "spring", damping: 30, stiffness: 300 }}
-                className="fixed inset-x-0 bottom-0 z-[99] bg-zinc-900 rounded-t-2xl flex flex-col max-h-[80vh]"
-                style={{ paddingBottom: "env(safe-area-inset-bottom, 16px)" }}
-              >
-                {/* Handle */}
-                <div className="flex justify-center pt-3 pb-2">
-                  <div className="w-10 h-1 bg-zinc-700 rounded-full" />
-                </div>
-
-                {/* Header */}
-                <div className="flex items-center justify-between px-5 pb-4 border-b border-zinc-800">
-                  <div className="flex items-center gap-3">
-                    <div className="hidden md:flex w-10 h-10 rounded-xl bg-violet-500/15 items-center justify-center">
-                      <Moon className="w-5 h-5 text-violet-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold ml-1 md:ml-0 text-white">Sleep Timer</h2>
-                      <p className="text-xs ml-1 md:ml-0 text-white/50">
-                        {activeMode === "endOfSong"
-                          ? "Stopping after this song"
-                          : remainingSeconds
-                          ? `${formatTime(remainingSeconds)} remaining`
-                          : "Stop playback automatically"}
-                      </p>
-                    </div>
+            <motion.div
+              key="sleep-timer-desktop"
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="fixed z-[99] w-[300px] bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden"
+              style={{
+                top: popoverPosition.top,
+                left: popoverPosition.left,
+              }}
+            >
+              <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-violet-500/15 flex items-center justify-center">
+                    <Moon className="w-4 h-4 text-violet-400" />
                   </div>
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                  {/* End of Song */}
-                  <button
-                    onClick={toggleEndOfSong}
-                    className={cn(
-                      "w-full p-4 rounded-xl flex items-center gap-4 transition-colors",
-                      activeMode === "endOfSong"
-                        ? "bg-violet-500/15 border border-violet-500/50"
-                        : "bg-zinc-800/50 border border-transparent"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "w-10 h-10 rounded-lg flex items-center justify-center",
-                        activeMode === "endOfSong" ? "bg-violet-500 text-white" : "bg-zinc-700 text-zinc-400"
-                      )}
-                    >
-                      <Music className="w-5 h-5" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <span className="font-medium text-white">End of song</span>
-                      <span className="text-sm text-white/50 block">Stop after current track</span>
-                    </div>
-                    {activeMode === "endOfSong" && (
-                      <div className="w-2 h-2 rounded-full bg-violet-500" />
-                    )}
-                  </button>
-
-                  {/* Timer Options */}
                   <div>
-                    <p className="text-xs font-medium text-white/60 uppercase tracking-wider mb-3 px-1">
-                      Timer Duration
+                    <h2 className="text-sm font-semibold text-white">Sleep Timer</h2>
+                    <p className="text-xs text-zinc-500">
+                      {activeMode === "endOfSong"
+                        ? "Stopping after this song"
+                        : remainingSeconds
+                        ? `${formatTime(remainingSeconds)} remaining`
+                        : "Stop playback after"}
                     </p>
-                    <div className="grid grid-cols-2 gap-2">
-                      {TIMER_OPTIONS.map(({ fullLabel, value }) => {
-                        const isActive = isActiveTimer(value * 60);
-                        return (
-                          <button
-                            key={value}
-                            onClick={() => startCountdown(value * 60)}
-                            className={cn(
-                              "relative h-14 rounded-xl font-normal transition-colors overflow-hidden",
-                              isActive
-                                ? "bg-violet-500 text-white"
-                                : "bg-zinc-800/50 text-zinc-300"
-                            )}
-                          >
-                            {isActive && remainingSeconds && activeSeconds && (
-                              <div
-                                className="absolute inset-y-0 right-0 bg-violet-600"
-                                style={{ width: `${100 - progressPercentage}%` }}
-                              />
-                            )}
-                            <span className="relative z-10">
-                              {isActive && remainingSeconds ? formatTime(remainingSeconds) : fullLabel}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
                   </div>
+                </div>
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="w-7 h-7 rounded-full hover:bg-zinc-800 flex items-center justify-center transition-colors"
+                >
+                  <X className="w-4 h-4 text-zinc-500" />
+                </button>
+              </div>
 
-                  {/* Cancel */}
-                  {activeMode && (
-                    <button
-                      className="w-full h-12 rounded-xl border border-zinc-700 text-zinc-400 font-medium active:bg-zinc-800"
-                      onClick={cancel}
-                    >
-                      Cancel Timer
-                    </button>
+              <div className="p-3 space-y-3">
+                <button
+                  onClick={toggleEndOfSong}
+                  className={cn(
+                    "w-full p-3 rounded-lg flex items-center gap-3 transition-colors",
+                    activeMode === "endOfSong"
+                      ? "bg-violet-500/15 border border-violet-500/40"
+                      : "bg-zinc-800/50 border border-transparent hover:bg-zinc-800"
                   )}
-                </div>
-              </motion.div>
-            ) : (
-              /* Desktop Popover */
-              <motion.div
-                key="sleep-timer-desktop"
-                initial={{ opacity: 0, scale: 0.95, y: 8 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 8 }}
-                transition={{ duration: 0.15 }}
-                className="fixed z-[99] w-[300px] bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden"
-                style={{
-                  top: popoverPosition.top,
-                  left: popoverPosition.left,
-                }}
-              >
-                {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-violet-500/15 flex items-center justify-center">
-                      <Moon className="w-4 h-4 text-violet-400" />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-semibold text-white">Sleep Timer</h2>
-                      <p className="text-xs text-zinc-500">
-                        {activeMode === "endOfSong"
-                          ? "Stopping after this song"
-                          : remainingSeconds
-                          ? `${formatTime(remainingSeconds)} remaining`
-                          : "Stop playback after"}
-                      </p>
-                    </div>
+                >
+                  <div className={cn(
+                    "w-9 h-9 rounded-lg flex items-center justify-center",
+                    activeMode === "endOfSong" ? "bg-violet-500 text-white" : "bg-zinc-700 text-zinc-400"
+                  )}>
+                    <Music className="w-4 h-4" />
                   </div>
-                  <button
-                    onClick={() => setIsOpen(false)}
-                    className="w-7 h-7 rounded-full hover:bg-zinc-800 flex items-center justify-center transition-colors"
-                  >
-                    <X className="w-4 h-4 text-zinc-500" />
-                  </button>
-                </div>
-
-                {/* Content */}
-                <div className="p-3 space-y-3">
-                  {/* End of Song */}
-                  <button
-                    onClick={toggleEndOfSong}
-                    className={cn(
-                      "w-full p-3 rounded-lg flex items-center gap-3 transition-colors",
-                      activeMode === "endOfSong"
-                        ? "bg-violet-500/15 border border-violet-500/40"
-                        : "bg-zinc-800/50 border border-transparent hover:bg-zinc-800"
-                    )}
-                  >
-                    <div
-                      className={cn(
-                        "w-9 h-9 rounded-lg flex items-center justify-center",
-                        activeMode === "endOfSong" ? "bg-violet-500 text-white" : "bg-zinc-700 text-zinc-400"
-                      )}
-                    >
-                      <Music className="w-4 h-4" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <span className="text-sm font-medium text-white">End of song</span>
-                      <span className="text-xs text-zinc-500 block">Stop after current track</span>
-                    </div>
-                    {activeMode === "endOfSong" && (
-                      <div className="w-2 h-2 rounded-full bg-violet-500" />
-                    )}
-                  </button>
-
-                  {/* Timer Grid */}
-                  <div>
-                    <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-2 px-1">
-                      Timer
-                    </p>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      {TIMER_OPTIONS.map(({ label, value }) => {
-                        const isActive = isActiveTimer(value * 60);
-                        return (
-                          <button
-                            key={value}
-                            onClick={() => startCountdown(value * 60)}
-                            className={cn(
-                              "relative h-10 rounded-lg text-sm font-medium transition-colors overflow-hidden",
-                              isActive
-                                ? "bg-violet-500 text-white"
-                                : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
-                            )}
-                          >
-                            {isActive && remainingSeconds && activeSeconds && (
-                              <div
-                                className="absolute inset-y-0 right-0 bg-violet-600"
-                                style={{ width: `${100 - progressPercentage}%` }}
-                              />
-                            )}
-                            <span className="relative z-10">
-                              {isActive && remainingSeconds ? formatTime(remainingSeconds) : label}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
+                  <div className="text-left flex-1">
+                    <span className="text-sm font-medium text-white">End of song</span>
+                    <span className="text-xs text-zinc-500 block">Stop after current track</span>
                   </div>
-
-                  {/* Cancel */}
-                  {activeMode && (
-                    <button
-                      className="w-full h-9 rounded-lg border border-zinc-700 text-sm text-zinc-400 font-medium hover:bg-zinc-800 hover:text-zinc-300"
-                      onClick={cancel}
-                    >
-                      Cancel Timer
-                    </button>
+                  {activeMode === "endOfSong" && (
+                    <div className="w-2 h-2 rounded-full bg-violet-500" />
                   )}
+                </button>
+
+                <div>
+                  <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-2 px-1">
+                    Timer
+                  </p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {TIMER_OPTIONS.map(({ label, value }) => {
+                      const isActive = isActiveTimer(value * 60);
+                      return (
+                        <button
+                          key={value}
+                          onClick={() => startCountdown(value * 60)}
+                          className={cn(
+                            "relative h-10 rounded-lg text-sm font-medium transition-colors overflow-hidden",
+                            isActive
+                              ? "bg-violet-500 text-white"
+                              : "bg-zinc-800/50 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
+                          )}
+                        >
+                          {isActive && remainingSeconds && activeSeconds && (
+                            <div
+                              className="absolute inset-y-0 right-0 bg-violet-600"
+                              style={{ width: `${100 - progressPercentage}%` }}
+                            />
+                          )}
+                          <span className="relative z-10">
+                            {isActive && remainingSeconds ? formatTime(remainingSeconds) : label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </motion.div>
-            )}
+
+                {activeMode && (
+                  <button
+                    className="w-full h-9 rounded-lg border border-zinc-700 text-sm text-zinc-400 font-medium hover:bg-zinc-800 hover:text-zinc-300"
+                    onClick={cancel}
+                  >
+                    Cancel Timer
+                  </button>
+                )}
+              </div>
+            </motion.div>
           </>
         )}
       </AnimatePresence>
+
+      {isTouch && (
+        <BottomSheet
+          isOpen={isOpen}
+          onClose={() => setIsOpen(false)}
+          snapPoints={[0.55]}
+          zIndex={220}
+          header={
+            <div className="flex items-center justify-between px-5 pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="hidden md:flex w-10 h-10 rounded-xl bg-violet-500/15 items-center justify-center">
+                  <Moon className="w-5 h-5 text-violet-400" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold ml-1 md:ml-0 text-white">Sleep Timer</h2>
+                  <p className="text-xs ml-1 md:ml-0 text-white/50">
+                    {activeMode === "endOfSong"
+                      ? "Stopping after this song"
+                      : remainingSeconds
+                      ? `${formatTime(remainingSeconds)} remaining`
+                      : "Stop playback automatically"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <div className="p-5 space-y-4">
+            <button
+              onClick={toggleEndOfSong}
+              className={cn(
+                "w-full p-4 rounded-xl flex items-center gap-4 transition-colors",
+                activeMode === "endOfSong"
+                  ? "bg-violet-500/15 border border-violet-500/50"
+                  : "bg-zinc-800/50 border border-transparent"
+              )}
+            >
+              <div className={cn(
+                "w-10 h-10 rounded-lg flex items-center justify-center",
+                activeMode === "endOfSong" ? "bg-violet-500 text-white" : "bg-zinc-700 text-zinc-400"
+              )}>
+                <Music className="w-5 h-5" />
+              </div>
+              <div className="text-left flex-1">
+                <span className="font-medium text-white">End of song</span>
+                <span className="text-sm text-white/50 block">Stop after current track</span>
+              </div>
+              {activeMode === "endOfSong" && (
+                <div className="w-2 h-2 rounded-full bg-violet-500" />
+              )}
+            </button>
+
+            <div>
+              <p className="text-xs font-medium text-white/60 uppercase tracking-wider mb-3 px-1">
+                Timer Duration
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {TIMER_OPTIONS.map(({ fullLabel, value }) => {
+                  const isActive = isActiveTimer(value * 60);
+                  return (
+                    <button
+                      key={value}
+                      onClick={() => startCountdown(value * 60)}
+                      className={cn(
+                        "relative h-14 rounded-xl font-normal transition-colors overflow-hidden",
+                        isActive ? "bg-violet-500 text-white" : "bg-zinc-800/50 text-zinc-300"
+                      )}
+                    >
+                      {isActive && remainingSeconds && activeSeconds && (
+                        <div
+                          className="absolute inset-y-0 right-0 bg-violet-600"
+                          style={{ width: `${100 - progressPercentage}%` }}
+                        />
+                      )}
+                      <span className="relative z-10">
+                        {isActive && remainingSeconds ? formatTime(remainingSeconds) : fullLabel}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {activeMode && (
+              <button
+                className="w-full h-12 rounded-xl border border-zinc-700 text-zinc-400 font-medium active:bg-zinc-800"
+                onClick={cancel}
+              >
+                Cancel Timer
+              </button>
+            )}
+          </div>
+        </BottomSheet>
+      )}
     </>
   );
+};
+
+export const useSleepTimerActive = () => {
+  const [active, setActive] = useState(globalTimerState.activeMode !== null);
+
+  useEffect(() => {
+    const update = () => setActive(globalTimerState.activeMode !== null);
+    subscribers.add(update);
+    return () => { subscribers.delete(update); };
+  }, []);
+
+  return active;
 };
 
 export default SleepTimer;

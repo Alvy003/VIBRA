@@ -1,7 +1,7 @@
 // src/pages/admin/components/SongsTabContent.tsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Music, Clock, TrendingUp, Calendar } from "lucide-react";
-import AddSongDialog from "./AddSongDialog";
+import AddSongDialog from "./AddSong/AddSongDialog";
 import SongsTable from "./SongsTable";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { useMemo, useState } from "react";

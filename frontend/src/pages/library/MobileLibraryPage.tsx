@@ -5,7 +5,7 @@ import { usePlaylistStore } from "@/stores/usePlaylistStore";
 import { SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import { Heart, ListMusic, Disc3, Library, ChevronRight, Clock } from "lucide-react";
+import { Heart, ListMusic, Disc3, Library, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { CreatePlaylistDialog } from "@/components/CreatePlaylistDialog";
 import { AnimatePresence, motion } from "framer-motion";
@@ -14,6 +14,9 @@ import Topbar from "@/components/Topbar";
 import { MobileOverlaySpacer } from "@/components/MobileOverlaySpacer";
 import MobileSubHeader from "@/components/MobileSubHeader";
 import MobileLibraryPageSkeleton from "./components/MobileLibraryPageSkeleton";
+import { useSavedItemsStore } from "@/stores/useSavedItemsStore";
+import { useNavigate } from "react-router-dom";
+
 
 type LibraryFilter = "all" | "playlists" | "albums";
 
@@ -124,39 +127,6 @@ const MosaicThumbnail = ({
   );
 };
 
-// Section Header Component
-const SectionHeader = ({
-  title,
-  count,
-  showSeeAll = false,
-  seeAllLink,
-}: {
-  title: string;
-  count?: number;
-  showSeeAll?: boolean;
-  seeAllLink?: string;
-}) => (
-  <div className="flex items-center justify-between mb-2">
-    <div className="flex items-center gap-2">
-      <h2 className="text-xs font-semibold text-zinc-400 uppercase tracking-wide">
-        {title}
-      </h2>
-      {count !== undefined && count > 0 && (
-        <span className="text-xs text-zinc-600">{count}</span>
-      )}
-    </div>
-    {showSeeAll && seeAllLink && (
-      <Link
-        to={seeAllLink}
-        className="flex items-center gap-0.5 text-zinc-400/60 active:text-zinc-300 transition-colors"
-      >
-        <span className="text-xs">See all</span>
-        <ChevronRight className="w-3.5 h-3.5" />
-      </Link>
-    )}
-  </div>
-);
-
 // Empty State Component
 const EmptyState = ({
   icon: Icon,
@@ -203,6 +173,20 @@ const MobileLibraryPage = () => {
   } = usePlaylistStore();
   const { isSignedIn, isLoaded } = useUser();
   const [libraryFilter, setLibraryFilter] = useState<LibraryFilter>("all");
+  const { savedItems, fetchSavedItems } = useSavedItemsStore();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      fetchUserPlaylists();
+      fetchLikedSongs();
+      fetchSavedItems(); // ADD THIS
+    }
+  }, [fetchUserPlaylists, fetchLikedSongs, isLoaded, isSignedIn, fetchSavedItems]);
+
+  // Split saved items by type
+const savedAlbums = savedItems.filter((i) => i.type === "album");
+const savedPlaylists = savedItems.filter((i) => i.type === "playlist");
 
   // Track if we've done the initial load
   const hasInitiallyLoadedRef = useRef(false);
@@ -234,7 +218,7 @@ const MobileLibraryPage = () => {
     (libraryFilter === "all" && (playlists.length > 0 || isSignedIn));
 
   const showAlbumsSection =
-    libraryFilter === "albums" || (libraryFilter === "all" && albums.length > 0);
+    libraryFilter === "albums" || (libraryFilter === "all" && savedAlbums.length > 0);
 
   // Show skeleton only on first load when there's no cached data
   const shouldShowSkeleton =
@@ -252,7 +236,7 @@ const MobileLibraryPage = () => {
     <main className="h-full bg-gradient-to-b from-zinc-800 via-zinc-900 to-zinc-900 rounded-lg overflow-hidden">
       <Topbar />
 
-      <ScrollArea className="h-[calc(100vh-45px)] lg:h-[calc(100vh-180px)]">
+      <ScrollArea className="h-[calc(100vh-50px)] lg:h-[calc(100vh-180px)]">
         {/* Library Header with Recent & Create Playlist Buttons */}
         <MobileSubHeader
           title="Your Library"
@@ -279,7 +263,7 @@ const MobileLibraryPage = () => {
           }
         />
 
-        <div className="px-4 pb-4 space-y-5">
+        <div className="px-4 pb-4">
           {/* Filter Chips */}
           <div
             className="sticky top-11 z-10 backdrop-blur
@@ -292,18 +276,18 @@ const MobileLibraryPage = () => {
               onClick={() => setLibraryFilter("all")}
             />
             <SignedIn>
-              <FilterChip
-                label="Playlists"
-                isActive={libraryFilter === "playlists"}
-                onClick={() => setLibraryFilter("playlists")}
-                count={playlists.length + (likedSongs?.length > 0 ? 1 : 0)}
-              />
+            <FilterChip
+              label="Playlists"
+              isActive={libraryFilter === "playlists"}
+              onClick={() => setLibraryFilter("playlists")}
+              count={playlists.length + savedPlaylists.length + albums.filter(a => a.isActive !== false).length + (likedSongs?.length > 0 ? 1 : 0)}
+            />
             </SignedIn>
             <FilterChip
               label="Albums"
               isActive={libraryFilter === "albums"}
               onClick={() => setLibraryFilter("albums")}
-              count={albums.length}
+              count={savedAlbums.length}
             />
           </div>
 
@@ -315,11 +299,11 @@ const MobileLibraryPage = () => {
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  className="space-y-1"
+                  className="space-y-0"
                 >
-                  {(libraryFilter === "all" || libraryFilter === "playlists") && (
+                  {/* {(libraryFilter === "all" || libraryFilter === "playlists") && (
                     <SectionHeader title="Playlists" />
-                  )}
+                  )} */}
 
                   {isPlaylistLoading && playlists.length === 0 ? (
                     <div className="space-y-2">
@@ -337,7 +321,7 @@ const MobileLibraryPage = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="space-y-0.5">
+                    <div className="space-y-0">
                       {/* Liked Songs - Always first in playlists */}
                       <div>
                         <Link
@@ -352,7 +336,7 @@ const MobileLibraryPage = () => {
                               Liked Songs
                             </p>
                             <p className="text-xs text-zinc-400 line-clamp-1">
-                              Playlist • {likedSongs?.length || 0} songs
+                              {likedSongs?.length || 0} songs
                             </p>
                           </div>
                         </Link>
@@ -360,7 +344,7 @@ const MobileLibraryPage = () => {
 
                       {/* User Playlists */}
                       {playlists.length === 0 && libraryFilter === "playlists" ? (
-                        <div className="pt-4">
+                        <div>
                           <EmptyState
                             icon={ListMusic}
                             title="No playlists yet"
@@ -394,6 +378,70 @@ const MobileLibraryPage = () => {
                       )}
                     </div>
                   )}
+
+                  {/* Saved External Playlists */}
+                    {savedPlaylists.length > 0 && (
+                      <>
+                        {/* {playlists.length > 0 && (
+                          <div className="h-px bg-zinc-800/50 mx-2 my-2" />
+                        )} */}
+                        {savedPlaylists.map((item) => (
+                          <div key={item._id}>
+                            <button
+                              onClick={() => {
+                                const cleanId = item.externalId.replace("jiosaavn_playlist_", "");
+                                navigate(`/playlists/external/${item.source}/${cleanId}`);
+                              }}
+                              className="w-full flex items-center gap-3 p-2 -mx-2 rounded-xl active:bg-white/5 transition-colors text-left"
+                            >
+                              <div className="size-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
+                                {item.imageUrl ? (
+                                  <img src={item.imageUrl} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-600/30 to-fuchsia-600/30">
+                                    <ListMusic className="size-6 text-violet-400/70" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-white line-clamp-1">{item.title}</p>
+                                <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                                  <span className="line-clamp-1">
+                                    Playlist{item.songCount ? ` • ${item.songCount} songs` : ""}
+                                  </span>
+                                </div>
+                              </div>
+                            </button>
+                          </div>
+                        ))}
+                      </>
+                    )}
+
+                  {/* Playlist Section (Vibra admin uploads dont mind current name is album but is actually playlist) */}
+                  {albums.map((album) => (
+                      <div key={album._id}>
+                        <Link
+                          to={`/albums/${album._id}`}
+                          className="flex items-center gap-3 p-2 -mx-2 rounded-xl active:bg-white/5 transition-colors"
+                        >
+                          <MosaicThumbnail
+                            previewImages={album.previewImages}
+                            imageUrl={album.imageUrl}
+                            name={album.title}
+                            type="playlist"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-white line-clamp-1">
+                              {album.title}
+                            </p>
+                            <p className="text-xs text-zinc-400 line-clamp-1">
+                              Playlist • Vibra
+                            </p>
+                          </div>
+                        </Link>
+                      </div>
+                    ))}
+
                 </motion.section>
               )}
             </AnimatePresence>
@@ -406,60 +454,49 @@ const MobileLibraryPage = () => {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="space-y-1"
+                className="space-y-0"
               >
-                {(libraryFilter === "all" || albums.length > 0) && (
+                {/* {(libraryFilter === "all" || libraryFilter === "albums") && (
                   <SectionHeader title="Albums" />
-                )}
+                )} */}
 
-                {isAlbumLoading && albums.length === 0 ? (
-                  <div className="space-y-2">
-                    {[1, 2, 3].map((i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-3 p-2 animate-pulse"
-                      >
-                        <div className="size-12 bg-zinc-800 rounded-lg" />
-                        <div className="flex-1 space-y-2">
-                          <div className="h-4 bg-zinc-800 rounded w-3/4" />
-                          <div className="h-3 bg-zinc-800 rounded w-1/2" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : albums.length === 0 ? (
-                  libraryFilter === "albums" ? (
-                    <EmptyState
-                      icon={Disc3}
-                      title="No albums yet"
-                      description="Discover new music and albums will appear here"
-                      actionLabel="Explore"
-                      actionLink="/search"
-                    />
-                  ) : null
+                {savedAlbums.length === 0 && libraryFilter === "albums" ? (
+                  <EmptyState
+                    icon={Disc3}
+                    title="No albums yet"
+                    description="Discover new music and albums will appear here"
+                    actionLabel="Explore"
+                    actionLink="/search"
+                  />
                 ) : (
-                  <div className="space-y-0.5">
-                    {albums.map((album) => (
-                      <div key={album._id}>
-                        <Link
-                          to={`/albums/${album._id}`}
-                          className="flex items-center gap-3 p-2 -mx-2 rounded-xl active:bg-white/5 transition-colors"
+                  <div className="space-y-0">
+                    {savedAlbums.map((item) => (
+                      <div key={item._id}>
+                        <button
+                          onClick={() => {
+                            const cleanId = item.externalId.replace("jiosaavn_album_", "");
+                            navigate(`/albums/external/${item.source}/${cleanId}`);
+                          }}
+                          className="w-full flex items-center gap-3 p-2 -mx-2 rounded-xl active:bg-white/5 transition-colors text-left"
                         >
-                          <MosaicThumbnail
-                            previewImages={album.previewImages}
-                            imageUrl={album.imageUrl}
-                            name={album.title}
-                            type="album"
-                          />
-                          <div className="flex-1 min-w-0">
-                            <p className="font-medium text-sm text-white line-clamp-1">
-                              {album.title}
-                            </p>
-                            <p className="text-xs text-zinc-400 line-clamp-1">
-                              Album • {album.artist}
-                            </p>
+                          <div className="size-12 rounded-md overflow-hidden bg-zinc-800 shrink-0">
+                            {item.imageUrl ? (
+                              <img src={item.imageUrl} alt={item.title} loading="lazy" className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-500/30 to-purple-600/30">
+                                <Disc3 className="size-6 text-violet-400/70" />
+                              </div>
+                            )}
                           </div>
-                        </Link>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium text-sm text-white line-clamp-1">{item.title}</p>
+                            <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+                              <span className="line-clamp-1">
+                                Album{item.artist ? ` • ${item.artist}` : ""}
+                              </span>
+                            </div>
+                          </div>
+                        </button>
                       </div>
                     ))}
                   </div>

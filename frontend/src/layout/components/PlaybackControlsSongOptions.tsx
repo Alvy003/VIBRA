@@ -23,6 +23,7 @@ import { useDownloads } from "@/hooks/useDownloads";
 import MoveToAlbumDialog from "@/components/MoveToAlbumDialog";
 import EditSongDialog from "@/components/EditSongDialog";
 import AddToPlaylistDialog from "@/components/AddToPlaylistDialog";
+import { Timer } from "lucide-react";
 
 type Props = {
   song: any;
@@ -30,6 +31,7 @@ type Props = {
   variant: "desktop" | "mobile-sheet";
   onToggleFullscreen?: () => void;
   isFullscreen?: boolean;
+  onOpenSleepTimer?: () => void;
 };
 
 // Delete Confirmation Dialog
@@ -103,7 +105,7 @@ const DeleteConfirmDialog = ({
   );
 };
 
-const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, onToggleFullscreen, isFullscreen = false }) => {
+const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, onToggleFullscreen, isFullscreen = false, onOpenSleepTimer }) => {
   const { isSignedIn } = useAuth();
   const { likedSongs, likeSong, unlikeSong, deleteSong } = useMusicStore();
   const { isAdmin } = useAuthStore();
@@ -114,7 +116,11 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const isLiked = likedSongs.some((s: any) => s._id === song._id);
+  const isLiked = likedSongs.some((s: any) => {
+    const likedId = s._id || s.externalId;
+    const songId = song._id || song.externalId;
+    return likedId === songId;
+  });
 
   const { state: downloadState, start, remove } = useDownloads({
     _id: song._id,
@@ -156,7 +162,7 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
   }, [song, onClose]);
 
   // Toggle Like
-  const toggleLike = async () => {
+const toggleLike = async () => {
     if (!isSignedIn) {
       toast.custom(
         <div className="bg-red-800/95 text-white px-4 py-2 rounded-full shadow-lg border border-red-400/30">
@@ -167,9 +173,11 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
       return;
     }
 
+    const songId = song._id || song.externalId || "";
+
     try {
       if (isLiked) {
-        await unlikeSong(song._id);
+        await unlikeSong(songId);
         toast.custom(
           <div className="bg-zinc-900/95 text-white px-4 py-2 rounded-full shadow-lg border border-white/10">
             <span className="text-sm">Removed from Liked Songs</span>
@@ -177,7 +185,7 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
           { duration: 1300 }
         );
       } else {
-        await likeSong(song._id);
+        await likeSong(songId, song);
         toast.custom(
           <div className="bg-violet-600/90 text-white px-4 py-2 rounded-full shadow-lg border border-violet-500/20">
             <span className="text-sm">Added to Liked Songs</span>
@@ -190,6 +198,11 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
     }
     onClose();
   };
+
+  const handleSleepTimer = () => {
+    onClose();
+    onOpenSleepTimer?.();
+  };  
 
   const handleDownload = async () => {
     if (!isSignedIn) {
@@ -230,6 +243,7 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
     }
     onClose();
   };
+  
 
   const handleDelete = async () => {
     setIsDeleting(true);
@@ -272,12 +286,10 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
           <span>{isLiked ? "Unlike" : "Like"}</span>
         </button>
 
-        {isSignedIn && (
           <button className={buttonClass} onClick={() => openDialog(setAddToPlaylistOpen)}>
             <ListPlus className={`${iconClass} text-zinc-400`} />
             <span>Add to Playlist</span>
           </button>
-        )}
 
         <button className={buttonClass} onClick={handleDownload}>
           {downloadState === "downloading" ? (
@@ -300,6 +312,14 @@ const PlaybackControlsSongOptions: React.FC<Props> = ({ song, onClose, variant, 
               : "Download"}
           </span>
         </button>
+
+          {variant === "mobile-sheet" && (
+            <button className={buttonClass} onClick={handleSleepTimer}>
+              <Timer className={`${iconClass} text-zinc-400`} />
+              <span>Sleep Timer</span>
+            </button>
+          )}
+
 
           {/* Fullscreen Option - Only show for mobile-sheet variant */}
           {variant === "mobile-sheet" && onToggleFullscreen && (

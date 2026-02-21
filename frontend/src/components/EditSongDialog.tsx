@@ -3,8 +3,17 @@ import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { useMusicStore } from "@/stores/useMusicStore";
-import { X, Loader2, Upload, Image as ImageIcon, Music } from "lucide-react";
+import {
+  X, Loader2, Upload, Image as ImageIcon, Music,
+  Sparkles, Languages, Search,
+} from "lucide-react";
 import toast from "react-hot-toast";
+import {
+  GENRE_OPTIONS,
+  MOOD_OPTIONS,
+  LANGUAGE_OPTIONS,
+} from "@/pages/admin/components/AddSong/constants";
+import { fetchTrackTags } from "@/pages/admin/components/AddSong/utils";
 
 interface EditSongDialogProps {
   isOpen: boolean;
@@ -16,22 +25,29 @@ interface EditSongDialogProps {
     duration: number;
     imageUrl: string;
     audioUrl: string;
+    genre?: string | null;
+    mood?: string | null;
+    language?: string | null;
   };
 }
 
 const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
   const { updateSong, updateSongImage, updateSongAudio } = useMusicStore();
-  
+
   const [formData, setFormData] = useState({
     title: song.title,
     artist: song.artist,
     duration: song.duration,
+    genre: song.genre || "",
+    mood: song.mood || "",
+    language: song.language || "",
   });
-  
+
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>(song.imageUrl);
-  
+  const [isAutoDetecting, setIsAutoDetecting] = useState(false);
+
   const [isLoading, setIsLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<{
     image: boolean;
@@ -52,6 +68,9 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
         title: song.title,
         artist: song.artist,
         duration: song.duration,
+        genre: song.genre || "",
+        mood: song.mood || "",
+        language: song.language || "",
       });
       setImagePreview(song.imageUrl);
       setImageFile(null);
@@ -59,19 +78,30 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
     }
   }, [isOpen, song]);
 
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (imagePreview && imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
-      if (!file.type.startsWith('image/')) {
-        toast.error('Please select an image file');
+      if (!file.type.startsWith("image/")) {
+        toast.error("Please select an image file");
         return;
       }
-      
-      // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image must be less than 5MB');
+        toast.error("Image must be less than 5MB");
         return;
+      }
+
+      // Cleanup previous blob URL
+      if (imagePreview && imagePreview.startsWith("blob:")) {
+        URL.revokeObjectURL(imagePreview);
       }
 
       setImageFile(file);
@@ -82,71 +112,167 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
   const handleAudioChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      // Validate file type
-      if (!file.type.startsWith('audio/')) {
-        toast.error('Please select an audio file');
+      if (!file.type.startsWith("audio/")) {
+        toast.error("Please select an audio file");
         return;
       }
-      
-      // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
-        toast.error('Audio must be less than 10MB');
+        toast.error("Audio must be less than 10MB");
         return;
       }
 
       setAudioFile(file);
-      
-      // Try to get duration from audio file
-      const audio = new Audio(URL.createObjectURL(file));
-      audio.addEventListener('loadedmetadata', () => {
+
+      const url = URL.createObjectURL(file);
+      const audio = new Audio();
+
+      const cleanup = () => {
+        URL.revokeObjectURL(url);
+        audio.removeEventListener("loadedmetadata", onLoaded);
+        audio.removeEventListener("error", onError);
+        audio.src = "";
+      };
+
+      const onLoaded = () => {
         if (audio.duration && isFinite(audio.duration)) {
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             duration: Math.round(audio.duration),
           }));
         }
-      });
+        cleanup();
+      };
+
+      const onError = () => cleanup();
+
+      audio.addEventListener("loadedmetadata", onLoaded);
+      audio.addEventListener("error", onError);
+      audio.src = url;
+    }
+  };
+
+  // Auto-detect genre, mood, language from Last.fm
+  const handleAutoDetect = async () => {
+    if (!formData.title.trim() && !formData.artist.trim()) {
+      toast.error("Need title or artist to auto-detect");
+      return;
+    }
+
+    setIsAutoDetecting(true);
+    try {
+      const tags = await fetchTrackTags(formData.title, formData.artist);
+
+      const updates: Partial<typeof formData> = {};
+      let detectedCount = 0;
+
+      if (tags.genre && !formData.genre) {
+        updates.genre = tags.genre;
+        detectedCount++;
+      }
+      if (tags.mood && !formData.mood) {
+        updates.mood = tags.mood;
+        detectedCount++;
+      }
+      if (tags.language && !formData.language) {
+        updates.language = tags.language;
+        detectedCount++;
+      }
+
+      if (detectedCount > 0) {
+        setFormData((prev) => ({ ...prev, ...updates }));
+        toast.success(`Auto-detected ${detectedCount} field(s)`);
+      } else if (tags.genre || tags.mood || tags.language) {
+        // Fields were detected but already filled
+        toast(
+          "Fields already filled. Clear them first to auto-detect.",
+          { icon: "ℹ️" }
+        );
+      } else {
+        toast.error("Could not detect tags for this track");
+      }
+    } catch (error) {
+      toast.error("Auto-detection failed");
+    } finally {
+      setIsAutoDetecting(false);
+    }
+  };
+
+  // Force overwrite auto-detect (fills even if already set)
+  const handleForceAutoDetect = async () => {
+    if (!formData.title.trim() && !formData.artist.trim()) {
+      toast.error("Need title or artist to auto-detect");
+      return;
+    }
+
+    setIsAutoDetecting(true);
+    try {
+      const tags = await fetchTrackTags(formData.title, formData.artist);
+
+      const updates: Partial<typeof formData> = {};
+      if (tags.genre) updates.genre = tags.genre;
+      if (tags.mood) updates.mood = tags.mood;
+      if (tags.language) updates.language = tags.language;
+
+      if (Object.keys(updates).length > 0) {
+        setFormData((prev) => ({ ...prev, ...updates }));
+        toast.success(`Updated ${Object.keys(updates).length} field(s)`);
+      } else {
+        toast.error("Could not detect any tags");
+      }
+    } catch {
+      toast.error("Auto-detection failed");
+    } finally {
+      setIsAutoDetecting(false);
     }
   };
 
   const handleSubmit = async () => {
     if (!formData.title.trim() || !formData.artist.trim()) {
-      toast.error('Title and artist are required');
+      toast.error("Title and artist are required");
       return;
     }
 
     setIsLoading(true);
 
     try {
-      // Update metadata (title, artist, duration)
-      if (
+      // Check if metadata changed (including new fields)
+      const metadataChanged =
         formData.title !== song.title ||
         formData.artist !== song.artist ||
-        formData.duration !== song.duration
-      ) {
-        setUploadProgress(prev => ({ ...prev, metadata: true }));
-        await updateSong(song._id, formData);
-        setUploadProgress(prev => ({ ...prev, metadata: false }));
+        formData.duration !== song.duration ||
+        formData.genre !== (song.genre || "") ||
+        formData.mood !== (song.mood || "") ||
+        formData.language !== (song.language || "");
+
+      if (metadataChanged) {
+        setUploadProgress((prev) => ({ ...prev, metadata: true }));
+        await updateSong(song._id, {
+          title: formData.title,
+          artist: formData.artist,
+          duration: formData.duration,
+          genre: formData.genre || null,
+          mood: formData.mood || null,
+          language: formData.language || null,
+        });
+        setUploadProgress((prev) => ({ ...prev, metadata: false }));
       }
 
-      // Update image if changed
       if (imageFile) {
-        setUploadProgress(prev => ({ ...prev, image: true }));
+        setUploadProgress((prev) => ({ ...prev, image: true }));
         await updateSongImage(song._id, imageFile);
-        setUploadProgress(prev => ({ ...prev, image: false }));
+        setUploadProgress((prev) => ({ ...prev, image: false }));
       }
 
-      // Update audio if changed
       if (audioFile) {
-        setUploadProgress(prev => ({ ...prev, audio: true }));
+        setUploadProgress((prev) => ({ ...prev, audio: true }));
         await updateSongAudio(song._id, audioFile, formData.duration);
-        setUploadProgress(prev => ({ ...prev, audio: false }));
+        setUploadProgress((prev) => ({ ...prev, audio: false }));
       }
 
-      toast.success('Song updated successfully');
+      toast.success("Song updated successfully");
       onClose();
     } catch (error) {
-      // Errors are handled in store
+      // Errors handled in store
     } finally {
       setIsLoading(false);
       setUploadProgress({ image: false, audio: false, metadata: false });
@@ -164,10 +290,20 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
       formData.title !== song.title ||
       formData.artist !== song.artist ||
       formData.duration !== song.duration ||
+      formData.genre !== (song.genre || "") ||
+      formData.mood !== (song.mood || "") ||
+      formData.language !== (song.language || "") ||
       imageFile !== null ||
       audioFile !== null
     );
   };
+
+  // Show which fields are missing for visual hint
+  const missingTagsCount = [
+    !formData.genre,
+    !formData.mood,
+    !formData.language,
+  ].filter(Boolean).length;
 
   if (!isOpen) return null;
 
@@ -193,6 +329,11 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <h3 className="text-lg font-semibold text-white">Edit Song</h3>
+                {missingTagsCount > 0 && (
+                  <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-[10px] font-medium rounded-full">
+                    {missingTagsCount} tag{missingTagsCount > 1 ? "s" : ""} missing
+                  </span>
+                )}
               </div>
               <button
                 onClick={onClose}
@@ -231,7 +372,7 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
                     className="w-full px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
                   >
                     <Upload className="w-4 h-4" />
-                    {imageFile ? 'Change Image' : 'Replace Image'}
+                    {imageFile ? "Change Image" : "Replace Image"}
                   </button>
                   {imageFile && (
                     <p className="text-xs text-green-400 mt-1">
@@ -262,7 +403,7 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
                   className="w-full px-4 py-2.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
                 >
                   <Upload className="w-4 h-4" />
-                  {audioFile ? 'Change Audio' : 'Replace Audio'}
+                  {audioFile ? "Change Audio" : "Replace Audio"}
                 </button>
                 {audioFile && (
                   <p className="text-xs text-green-400 mt-1">
@@ -276,11 +417,11 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
 
             {/* Title */}
             <div className="space-y-2">
-              <label htmlFor="title" className="text-sm text-zinc-300 block">
+              <label htmlFor="edit-title" className="text-sm text-zinc-300 block">
                 Title
               </label>
               <input
-                id="title"
+                id="edit-title"
                 value={formData.title}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, title: e.target.value }))
@@ -292,11 +433,11 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
 
             {/* Artist */}
             <div className="space-y-2">
-              <label htmlFor="artist" className="text-sm text-zinc-300 block">
+              <label htmlFor="edit-artist" className="text-sm text-zinc-300 block">
                 Artist
               </label>
               <input
-                id="artist"
+                id="edit-artist"
                 value={formData.artist}
                 onChange={(e) =>
                   setFormData((prev) => ({ ...prev, artist: e.target.value }))
@@ -308,12 +449,12 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
 
             {/* Duration */}
             <div className="space-y-2">
-              <label htmlFor="duration" className="text-sm text-zinc-300 block">
+              <label htmlFor="edit-duration" className="text-sm text-zinc-300 block">
                 Duration (seconds)
               </label>
               <div className="flex items-center gap-3">
                 <input
-                  id="duration"
+                  id="edit-duration"
                   type="number"
                   value={formData.duration}
                   onChange={(e) =>
@@ -329,6 +470,169 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
                   ({formatDuration(formData.duration)})
                 </span>
               </div>
+            </div>
+
+            <div className="border-t border-zinc-800 pt-4" />
+
+            {/* Genre, Mood & Language Section */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-medium text-zinc-300 flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-violet-400" />
+                  Tags
+                </h4>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleAutoDetect}
+                    disabled={isAutoDetecting || (!formData.title && !formData.artist)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/20 text-violet-400 hover:bg-violet-500/30 text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAutoDetecting ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Search className="w-3 h-3" />
+                    )}
+                    Auto-Detect
+                  </button>
+                  {(formData.genre || formData.mood || formData.language) && (
+                    <button
+                      type="button"
+                      onClick={handleForceAutoDetect}
+                      disabled={isAutoDetecting}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 text-xs font-medium transition-colors disabled:opacity-50"
+                      title="Overwrite existing values with auto-detected ones"
+                    >
+                      {isAutoDetecting ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      Re-detect
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Genre */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <Music className="w-3 h-3 text-violet-400" />
+                  Genre
+                  {!formData.genre && (
+                    <span className="text-amber-400/70 text-[10px]">(missing)</span>
+                  )}
+                </label>
+                <select
+                  value={formData.genre}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, genre: e.target.value }))
+                  }
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 appearance-none cursor-pointer"
+                >
+                  <option value="">No Genre</option>
+                  {GENRE_OPTIONS.map((genre) => (
+                    <option key={genre} value={genre}>
+                      {genre}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Mood */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-amber-400" />
+                  Mood
+                  {!formData.mood && (
+                    <span className="text-amber-400/70 text-[10px]">(missing)</span>
+                  )}
+                </label>
+                <select
+                  value={formData.mood}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, mood: e.target.value }))
+                  }
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 appearance-none cursor-pointer"
+                >
+                  <option value="">No Mood</option>
+                  {MOOD_OPTIONS.map((mood) => (
+                    <option key={mood} value={mood}>
+                      {mood}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Language */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-zinc-400 flex items-center gap-1.5">
+                  <Languages className="w-3 h-3 text-cyan-400" />
+                  Language
+                  {!formData.language && (
+                    <span className="text-amber-400/70 text-[10px]">(missing)</span>
+                  )}
+                </label>
+                <select
+                  value={formData.language}
+                  onChange={(e) =>
+                    setFormData((prev) => ({ ...prev, language: e.target.value }))
+                  }
+                  className="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50 focus:border-violet-500 appearance-none cursor-pointer"
+                >
+                  <option value="">No Language</option>
+                  {LANGUAGE_OPTIONS.map((lang) => (
+                    <option key={lang} value={lang}>
+                      {lang}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Quick info about current state */}
+              {(formData.genre || formData.mood || formData.language) && (
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {formData.genre && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-violet-500/20 text-violet-400 text-[10px] font-medium rounded-full">
+                      <Music className="w-2.5 h-2.5" />
+                      {formData.genre}
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, genre: "" }))}
+                        className="ml-0.5 hover:text-white"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  )}
+                  {formData.mood && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-400 text-[10px] font-medium rounded-full">
+                      <Sparkles className="w-2.5 h-2.5" />
+                      {formData.mood}
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, mood: "" }))}
+                        className="ml-0.5 hover:text-white"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  )}
+                  {formData.language && (
+                    <span className="inline-flex items-center gap-1 px-2 py-1 bg-cyan-500/20 text-cyan-400 text-[10px] font-medium rounded-full">
+                      <Languages className="w-2.5 h-2.5" />
+                      {formData.language}
+                      <button
+                        type="button"
+                        onClick={() => setFormData((prev) => ({ ...prev, language: "" }))}
+                        className="ml-0.5 hover:text-white"
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
@@ -369,7 +673,12 @@ const EditSongDialog = ({ isOpen, onClose, song }: EditSongDialogProps) => {
             </button>
             <button
               onClick={handleSubmit}
-              disabled={isLoading || !hasChanges() || !formData.title.trim() || !formData.artist.trim()}
+              disabled={
+                isLoading ||
+                !hasChanges() ||
+                !formData.title.trim() ||
+                !formData.artist.trim()
+              }
               className="flex-1 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium transition-colors flex items-center justify-center gap-2"
             >
               {isLoading ? (

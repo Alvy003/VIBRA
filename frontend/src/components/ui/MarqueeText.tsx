@@ -19,17 +19,31 @@ const MarqueeText = ({
   pauseDuration = 2000,
   gap = 60,
   disabled = false,
-  fadeWidth = 3, // Reduced to 20px so text is closer to the edge
+  fadeWidth = 3,
 }: MarqueeTextProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLSpanElement>(null);
+  const animatedElementRef = useRef<HTMLDivElement>(null);
+  
   const [shouldScroll, setShouldScroll] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
   const [textWidth, setTextWidth] = useState(0);
-  const [translateX, setTranslateX] = useState(0);
   const [isPaused, setIsPaused] = useState(true);
   
+  const translateXRef = useRef(0);
   const animationRef = useRef<number | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Visibility detection
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => setIsVisible(entry.isIntersecting),
+      { threshold: 0, rootMargin: '100px' }
+    );
+    
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   const checkOverflow = useCallback(() => {
     if (!containerRef.current || !textRef.current) return;
@@ -46,8 +60,11 @@ const MarqueeText = ({
     checkOverflow();
     const resizeObserver = new ResizeObserver(() => {
       checkOverflow();
-      setTranslateX(0);
+      translateXRef.current = 0;
       setIsPaused(true);
+      if (animatedElementRef.current) {
+        animatedElementRef.current.style.transform = 'translate3d(0, 0, 0)';
+      }
     });
     
     if (containerRef.current) resizeObserver.observe(containerRef.current);
@@ -55,14 +72,17 @@ const MarqueeText = ({
   }, [text, checkOverflow]);
 
   useEffect(() => {
-    setTranslateX(0);
+    translateXRef.current = 0;
     setIsPaused(true);
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (animatedElementRef.current) {
+      animatedElementRef.current.style.transform = 'translate3d(0, 0, 0)';
+    }
   }, [text]);
 
   useEffect(() => {
-    if (!shouldScroll || disabled || textWidth === 0) return;
+    if (!shouldScroll || disabled || textWidth === 0 || !isVisible) return;
 
     const cleanup = () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
@@ -96,13 +116,22 @@ const MarqueeText = ({
           easedProgress = (1 - easeZone) + easeZone * (1 - (1 - t) * (1 - t));
         }
 
-        setTranslateX(-easedProgress * cycleDistance);
+        translateXRef.current = -easedProgress * cycleDistance;
+        
+        // Direct DOM update (no React re-render)
+        if (animatedElementRef.current) {
+          animatedElementRef.current.style.transform = 
+            `translate3d(${translateXRef.current}px, 0, 0)`;
+        }
 
         if (progress < 1) {
           animationRef.current = requestAnimationFrame(animate);
         } else {
           timeoutRef.current = setTimeout(() => {
-            setTranslateX(0);
+            translateXRef.current = 0;
+            if (animatedElementRef.current) {
+              animatedElementRef.current.style.transform = 'translate3d(0, 0, 0)';
+            }
             setIsPaused(true);
           }, 100);
         }
@@ -112,7 +141,7 @@ const MarqueeText = ({
     }
 
     return cleanup;
-  }, [isPaused, shouldScroll, disabled, textWidth, gap, speed, pauseDuration]);
+  }, [isPaused, shouldScroll, disabled, textWidth, gap, speed, pauseDuration, isVisible]);
 
   const maskStyle = shouldScroll ? `linear-gradient(
     to right,
@@ -146,12 +175,12 @@ const MarqueeText = ({
       }}
     >
       <div 
+        ref={animatedElementRef}
         className="flex whitespace-nowrap will-change-transform"
         style={{ 
-          transform: `translate3d(${translateX}px, 0, 0)`,
-          // Padding matches fade width exactly
           paddingLeft: fadeWidth, 
-          paddingRight: fadeWidth, 
+          paddingRight: fadeWidth,
+          transform: 'translate3d(0, 0, 0)', // Initial value
         }}
       >
         <span ref={textRef} className="inline-block flex-shrink-0">

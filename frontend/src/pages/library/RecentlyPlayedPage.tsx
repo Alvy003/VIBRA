@@ -10,11 +10,12 @@ import { MobileOverlaySpacer } from "@/components/MobileOverlaySpacer";
 import { Loader, Music } from "lucide-react";
 import SongOptions from "@/pages/album/components/SongOptions";
 import { cn } from "@/lib/utils";
+import toast from "react-hot-toast";
 
 const RecentlyPlayedPage = () => {
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
-  const { playSong, currentSong, isPlaying } = usePlayerStore();
+  const { initializeQueue, currentSong, isPlaying } = usePlayerStore();
 
   useEffect(() => {
     const fetchAll = async () => {
@@ -27,16 +28,75 @@ const RecentlyPlayedPage = () => {
         setLoading(false);
       }
     };
-
     fetchAll();
   }, []);
+
+  const handlePlay = async (index: number) => {
+    const song = { ...songs[index] };
+
+    // For external songs without audioUrl, resolve it
+    if (
+      (song.source === "jiosaavn" || song._id?.startsWith("jiosaavn_")) &&
+      !song.audioUrl
+    ) {
+      if (song.streamUrl) {
+        song.audioUrl = song.streamUrl;
+      } else {
+        toast.loading("Loading...", { id: "stream-loading" });
+        try {
+          const cleanId = (song.externalId || song._id || "").replace(
+            "jiosaavn_",
+            ""
+          );
+          const res = await axiosInstance.get(
+            `/stream/stream-url/jiosaavn/${cleanId}`
+          );
+          if (res.data?.url) {
+            song.audioUrl = res.data.url;
+            song.streamUrl = res.data.url;
+          }
+        } catch {
+          toast.dismiss("stream-loading");
+          toast.error("Failed to load");
+          return;
+        }
+        toast.dismiss("stream-loading");
+      }
+    }
+
+    if (!song.audioUrl) {
+      toast.error("Cannot play this song");
+      return;
+    }
+
+    // Build queue - set audioUrl from streamUrl for external songs that have it
+    const queue = songs.map((s) => {
+      if (
+        (s.source === "jiosaavn" || s._id?.startsWith("jiosaavn_")) &&
+        s.streamUrl &&
+        !s.audioUrl
+      ) {
+        return { ...s, audioUrl: s.streamUrl };
+      }
+      return { ...s };
+    });
+
+    // Update the clicked song in queue
+    queue[index] = song;
+
+    initializeQueue(queue, index, true);
+  };
 
   return (
     <main className="h-full bg-gradient-to-b from-zinc-800 to-zinc-900 rounded-lg overflow-hidden">
       <Topbar />
       <ScrollArea className="h-[calc(100vh-55px)] md:h-[calc(100vh-180px)]">
-        <MobileSubHeader title="Recently Played" showBack className="px-5 pb-1 md:px-10" />
-        
+        <MobileSubHeader
+          title="Recently Played"
+          showBack
+          className="px-5 pb-1 md:px-10"
+        />
+
         <div className="px-2 pb-4">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-40">
@@ -47,18 +107,22 @@ const RecentlyPlayedPage = () => {
               <div className="w-16 h-16 rounded-full bg-zinc-800/50 flex items-center justify-center mb-4">
                 <Music className="w-8 h-8 text-zinc-500" />
               </div>
-              <p className="text-lg font-medium text-zinc-300">No recently played songs</p>
-              <p className="text-sm text-zinc-500 mt-1">Songs you listen to will appear here</p>
+              <p className="text-lg font-medium text-zinc-300">
+                No recently played songs
+              </p>
+              <p className="text-sm text-zinc-500 mt-1">
+                Songs you listen to will appear here
+              </p>
             </div>
           ) : (
             <div className="space-y-0.5">
               {songs.map((song, index) => {
                 const isCurrentSong = currentSong?._id === song._id;
-                
+
                 return (
                   <div
                     key={`${song._id}-${index}`}
-                    onClick={() => playSong(song)}
+                    onClick={() => handlePlay(index)}
                     className={cn(
                       "group cursor-pointer rounded-xl",
                       "grid grid-cols-[1fr_36px] gap-2 px-2 py-2.5",
@@ -69,22 +133,34 @@ const RecentlyPlayedPage = () => {
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="relative shrink-0">
-                        <img
-                          src={song.imageUrl}
-                          alt={song.title}
-                          className="size-12 rounded-lg object-cover transition-transform duration-200 group-hover:scale-105"
-                        />
+                        {song.imageUrl ? (
+                          <img
+                            src={song.imageUrl}
+                            alt={song.title}
+                            className="size-12 rounded-lg object-cover transition-transform duration-200 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="size-12 rounded-lg bg-zinc-800 flex items-center justify-center">
+                            <Music className="w-5 h-5 text-zinc-600" />
+                          </div>
+                        )}
                         {isCurrentSong && isPlaying && (
                           <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                            <span className="text-violet-400 text-sm animate-pulse">♫</span>
+                            <span className="text-violet-400 text-sm animate-pulse">
+                              ♫
+                            </span>
                           </div>
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className={cn(
-                          "font-medium text-sm line-clamp-1 transition-colors duration-200",
-                          isCurrentSong ? "text-violet-400" : "text-white"
-                        )}>
+                        <p
+                          className={cn(
+                            "font-medium text-sm line-clamp-1 transition-colors duration-200",
+                            isCurrentSong
+                              ? "text-violet-400"
+                              : "text-white"
+                          )}
+                        >
                           {song.title}
                         </p>
                         <p className="text-xs text-zinc-400 line-clamp-1">

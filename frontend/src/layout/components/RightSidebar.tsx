@@ -1,8 +1,6 @@
 // src/layout/components/RightSidebar.tsx
 import { useUIStore } from "@/stores/useUIStore";
-// import { useChatStore } from "@/stores/useChatStore";
-import FriendsActivity from "../components/FriendsActivity";
-import Queue from "@/pages/home/components/Queue";
+import FriendsActivity from "../components/FriendsActivity" 
 import { AnimatePresence, motion } from "framer-motion";
 import { PanelRightClose, Users, ListMusic, ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -14,6 +12,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { lazy, Suspense } from "react";
+const Queue = lazy(() => import("@/pages/home/components/Queue"));
 
 const RightSidebar = () => {
   const { 
@@ -121,7 +121,9 @@ const RightSidebar = () => {
                 transition={{ duration: 0.15 }}
                 className="absolute inset-0"
               >
-                <Queue />
+                <Suspense fallback={null}>
+                  <Queue />
+                </Suspense>
               </motion.div>
             ) : (
               <motion.div

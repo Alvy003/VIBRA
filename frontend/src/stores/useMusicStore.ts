@@ -3,16 +3,18 @@ import { axiosInstance } from "@/lib/axios";
 import { Album, Song, Stats } from "@/types";
 import toast from "react-hot-toast";
 import { create } from "zustand";
+import { useAuthStore } from "@/stores/useAuthStore";
+import { usePreferencesStore } from "./usePreferencesStore";
 
 // ===== CACHE CONFIGURATION =====
 const CACHE_CONFIG = {
-  featuredSongs: 15 * 60 * 1000,      // 15 minutes
-  madeForYouSongs: 15 * 60 * 1000,   // 15 minutes
-  trendingSongs: 15 * 60 * 1000,      // 15 minutes
-  albums: 20 * 60 * 1000,            // 20 minutes
+  featuredSongs: 30 * 60 * 1000,      // 30 minutes
+  madeForYouSongs: 30 * 60 * 1000,   // 30 minutes
+  trendingSongs: 30 * 60 * 1000,      // 30 minutes
+  albums: 30 * 60 * 1000,            // 30 minutes
   songs: 30 * 60 * 1000,             // 30 minutes (admin songs list)
   stats: 30 * 60 * 1000,             // 30 minutes
-  likedSongs: 5 * 60 * 1000,         // 5 minutes
+  likedSongs: 30 * 60 * 1000,         // 30 minutes
 };
 
 interface CacheTimestamps {
@@ -63,16 +65,17 @@ interface MusicStore {
   deleteSong: (id: string) => Promise<void>;
   deleteAlbum: (id: string) => Promise<void>;
   fetchLikedSongs: (forceRefresh?: boolean) => Promise<void>;
-  likeSong: (id: string) => Promise<void>;
+  likeSong: (id: string, songData?: any) => Promise<void>;
   unlikeSong: (id: string) => Promise<void>;
   searchSongs: (q: string) => Promise<void>;
   clearLikedSongs: () => void;
   patchAlbumSongs: (albumId: string, payload: PatchAlbumSongsPayload) => Promise<void>;
-  updateSong: (id: string, data: { title?: string; artist?: string; duration?: number }) => Promise<void>;
+  updateSong: (id: string, data: { title?: string; artist?: string; duration?: number;   genre?: string | null; mood?: string | null; language?: string | null; }) => Promise<void>;
   changeSongAlbum: (songId: string, albumId: string | null) => Promise<void>;
   updateSongImage: (id: string, imageFile: File) => Promise<void>;
   updateSongAudio: (id: string, audioFile: File, duration?: number) => Promise<void>;
   updateAlbum: (albumId: string, payload: Partial<Album>) => Promise<void>;
+  toggleAlbumActive: (albumId: string) => Promise<any>;
   refreshHomeData: () => Promise<void>;
 }
 
@@ -288,7 +291,10 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       set((s) => ({ _pendingRefresh: new Set(s._pendingRefresh).add("albums") }));
       
       try {
-        const response = await axiosInstance.get("/albums");
+        const isAdmin = useAuthStore.getState().isAdmin;
+        const response = await axiosInstance.get(
+          isAdmin ? "/albums?includeInactive=true" : "/albums"
+        );
         set((s) => {
           const pending = new Set(s._pendingRefresh);
           pending.delete("albums");
@@ -307,7 +313,10 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     
     set({ isLoading: true, error: null });
     try {
-      const response = await axiosInstance.get("/albums");
+      const isAdmin = useAuthStore.getState().isAdmin;
+      const response = await axiosInstance.get(
+        isAdmin ? "/albums?includeInactive=true" : "/albums"
+      );
       set({ albums: response.data });
       get()._markFetched("albums");
     } catch (error: any) {
@@ -315,6 +324,20 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     } finally {
       set({ isLoading: false });
     }
+  },
+
+  toggleAlbumActive: async (albumId: string) => {
+    const res = await axiosInstance.patch(`/admin/albums/${albumId}/toggle`);
+    // Update local state
+    set((state) => ({
+      albums: state.albums.map(a => 
+        a._id === albumId ? { ...a, isActive: res.data.isActive } : a
+      ),
+      currentAlbum: state.currentAlbum?._id === albumId 
+        ? { ...state.currentAlbum, isActive: res.data.isActive } 
+        : state.currentAlbum,
+    }));
+    return res.data;
   },
 
   // ===== SONGS (Admin) =====
@@ -378,46 +401,6 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       set({ error: error.message });
     } finally {
       set({ isLoading: false });
-    }
-  },
-
-  // ===== LIKED SONGS =====
-  fetchLikedSongs: async (forceRefresh = false) => {
-    const state = get();
-    const hasData = state.likedSongs.length > 0;
-    const isFresh = state._isFresh("likedSongs");
-    
-    if (hasData && isFresh && !forceRefresh) return;
-    
-    if (hasData && !isFresh && !forceRefresh) {
-      if (state._pendingRefresh.has("likedSongs")) return;
-      
-      set((s) => ({ _pendingRefresh: new Set(s._pendingRefresh).add("likedSongs") }));
-      
-      try {
-        const res = await axiosInstance.get("/users/me/liked-songs");
-        set((s) => {
-          const pending = new Set(s._pendingRefresh);
-          pending.delete("likedSongs");
-          return { likedSongs: res.data, _pendingRefresh: pending };
-        });
-        get()._markFetched("likedSongs");
-      } catch (error) {
-        set((s) => {
-          const pending = new Set(s._pendingRefresh);
-          pending.delete("likedSongs");
-          return { _pendingRefresh: pending };
-        });
-      }
-      return;
-    }
-    
-    try {
-      const res = await axiosInstance.get("/users/me/liked-songs");
-      set({ likedSongs: res.data });
-      get()._markFetched("likedSongs");
-    } catch (err: any) {
-      console.error("Error fetching liked songs", err);
     }
   },
 
@@ -636,20 +619,112 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     }
   },
 
-  likeSong: async (id) => {
+  // ===== LIKED SONGS =====
+  fetchLikedSongs: async (forceRefresh = false) => {
+    const state = get();
+    const hasData = state.likedSongs.length > 0;
+    const isFresh = state._isFresh("likedSongs");
+    
+    if (hasData && isFresh && !forceRefresh) return;
+    
+    if (hasData && !isFresh && !forceRefresh) {
+      if (state._pendingRefresh.has("likedSongs")) return;
+      
+      set((s) => ({ _pendingRefresh: new Set(s._pendingRefresh).add("likedSongs") }));
+      
+      try {
+        const res = await axiosInstance.get("/users/me/liked-songs");
+        set((s) => {
+          const pending = new Set(s._pendingRefresh);
+          pending.delete("likedSongs");
+          return { likedSongs: res.data, _pendingRefresh: pending };
+        });
+        get()._markFetched("likedSongs");
+        try {
+  const ids = res.data.map((s: any) => s._id || s.externalId).filter(Boolean);
+  usePreferencesStore.getState().setLikedSongIds(ids);
+} catch {}
+      } catch (error) {
+        set((s) => {
+          const pending = new Set(s._pendingRefresh);
+          pending.delete("likedSongs");
+          return { _pendingRefresh: pending };
+        });
+      }
+      return;
+    }
+    
     try {
-      const res = await axiosInstance.post(`/users/me/like/${id}`);
+      const res = await axiosInstance.get("/users/me/liked-songs");
       set({ likedSongs: res.data });
+      try {
+      const ids = res.data.map((s: any) => s._id || s.externalId).filter(Boolean);
+      usePreferencesStore.getState().setLikedSongIds(ids);
+    } catch {}
+      get()._markFetched("likedSongs");
+    } catch (err: any) {
+      console.error("Error fetching liked songs", err);
+    }
+  },
+
+  likeSong: async (id: string, songData?: any) => {
+    try {
+      const isExternal = id.startsWith("jiosaavn_") || id.startsWith("yt_");
+
+      if (isExternal && songData) {
+        const res = await axiosInstance.post("/users/me/like-external", {
+          externalId: songData.externalId || songData._id || id,
+          source: songData.source || (id.startsWith("jiosaavn_") ? "jiosaavn" : "youtube"),
+          title: songData.title || "",
+          artist: songData.artist || "",
+          album: songData.album || "",
+          imageUrl: songData.imageUrl || "",
+          duration: songData.duration || 0,
+          language: songData.language || "",
+          year: songData.year || "",
+        });
+        set({ likedSongs: res.data });
+              try {
+        const ids = res.data.map((s: any) => s._id || s.externalId).filter(Boolean);
+        usePreferencesStore.getState().setLikedSongIds(ids);
+      } catch {}
+      } else {
+        const res = await axiosInstance.post(`/users/me/like/${id}`);
+        set({ likedSongs: res.data });
+        try {
+        const ids = res.data.map((s: any) => s._id || s.externalId).filter(Boolean);
+        usePreferencesStore.getState().setLikedSongIds(ids);
+      } catch {}
+      }
+
       get()._markFetched("likedSongs");
     } catch (err: any) {
       console.error("Error liking song", err);
     }
   },
 
-  unlikeSong: async (id) => {
+  unlikeSong: async (id: string) => {
     try {
-      const res = await axiosInstance.delete(`/users/me/unlike/${id}`);
-      set({ likedSongs: res.data });
+      const isExternal = id.startsWith("jiosaavn_") || id.startsWith("yt_");
+
+      if (isExternal) {
+        const res = await axiosInstance.delete(
+          `/users/me/unlike-external/${encodeURIComponent(id)}`
+        );
+        set({ likedSongs: res.data });
+        try {
+        const ids = res.data.map((s: any) => s._id || s.externalId).filter(Boolean);
+        usePreferencesStore.getState().setLikedSongIds(ids);
+      } catch {}
+      } else {
+        const res = await axiosInstance.delete(`/users/me/unlike/${id}`);
+        set({ likedSongs: res.data });
+        try {
+        const ids = res.data.map((s: any) => s._id || s.externalId).filter(Boolean);
+        usePreferencesStore.getState().setLikedSongIds(ids);
+      } catch {}
+      }
+
       get()._markFetched("likedSongs");
     } catch (err: any) {
       console.error("Error unliking song", err);

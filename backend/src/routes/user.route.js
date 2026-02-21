@@ -7,6 +7,8 @@ import {
   likeSong,
   unlikeSong,
   getLikedSongs,
+  likeExternalSong,
+  unlikeExternalSong,
   getUnreadCounts,       // NEW
   markMessagesRead,      // NEW
 } from "../controller/user.controller.js";
@@ -25,5 +27,9 @@ router.post("/messages/mark-read", protectRoute, markMessagesRead);
 router.get("/me/liked-songs", protectRoute, getLikedSongs);
 router.post("/me/like/:songId", protectRoute, likeSong);
 router.delete("/me/unlike/:songId", protectRoute, unlikeSong);
+
+// Liked songs — external
+router.post("/me/like-external", protectRoute, likeExternalSong);
+router.delete("/me/unlike-external/:externalId", protectRoute, unlikeExternalSong);
 
 export default router;

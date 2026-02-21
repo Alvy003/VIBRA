@@ -63,20 +63,16 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
   const handleTogglePlaylist = async (playlistId: string) => {
     const isInPlaylist = isSongInPlaylist(playlistId);
     setIsSaving(playlistId);
-    
+  
     try {
       if (isInPlaylist) {
-        // Remove from playlist
         const res = await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
           op: "remove",
           songId: song._id,
         });
-        
-        // Update local state with response
-        setLocalPlaylists(prev => prev.map(p => 
-          p._id === playlistId ? res.data : p
-        ));
-        
+        setLocalPlaylists((prev) =>
+          prev.map((p) => (p._id === playlistId ? res.data : p))
+        );
         toast.custom(
           <motion.div
             initial={{ y: 30, opacity: 0 }}
@@ -88,17 +84,27 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
           { duration: 1500 }
         );
       } else {
-        // Add to playlist
+        // Send songData for external songs so backend can create a Song document
+        const isExternal = !/^[0-9a-fA-F]{24}$/.test(song._id);
         const res = await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
           op: "add",
           songId: song._id,
+          ...(isExternal && {
+            songData: {
+              title: song.title,
+              artist: song.artist,
+              imageUrl: song.imageUrl,
+              audioUrl: song.audioUrl,
+              streamUrl: (song as any).streamUrl || song.audioUrl,
+              duration: song.duration,
+              videoId: (song as any).videoId || null,
+              language: (song as any).language || null,
+            },
+          }),
         });
-        
-        // Update local state with response
-        setLocalPlaylists(prev => prev.map(p => 
-          p._id === playlistId ? res.data : p
-        ));
-        
+        setLocalPlaylists((prev) =>
+          prev.map((p) => (p._id === playlistId ? res.data : p))
+        );
         toast.custom(
           <motion.div
             initial={{ y: 30, opacity: 0 }}
@@ -121,26 +127,36 @@ const AddToPlaylistDialog = ({ isOpen, onClose, song }: AddToPlaylistDialogProps
   const handleCreateAndAdd = async () => {
     if (!newPlaylistName.trim()) return;
     setIsSaving("new");
-    
+  
     try {
-      // Create playlist
-      const createRes = await axiosInstance.post("/playlists", { 
-        name: newPlaylistName.trim() 
+      const createRes = await axiosInstance.post("/playlists", {
+        name: newPlaylistName.trim(),
       });
       const newPlaylist = createRes.data;
-      
-      // Add song to new playlist
-      const addRes = await axiosInstance.patch(`/playlists/${newPlaylist._id}/songs`, {
-        op: "add",
-        songId: song._id,
-      });
-      
-      // Add to local state
-      setLocalPlaylists(prev => [addRes.data, ...prev]);
-      
-      // Also update the store for sidebar
+  
+      const isExternal = !/^[0-9a-fA-F]{24}$/.test(song._id);
+      const addRes = await axiosInstance.patch(
+        `/playlists/${newPlaylist._id}/songs`,
+        {
+          op: "add",
+          songId: song._id,
+          ...(isExternal && {
+            songData: {
+              title: song.title,
+              artist: song.artist,
+              imageUrl: song.imageUrl,
+              audioUrl: song.audioUrl,
+              streamUrl: (song as any).streamUrl || song.audioUrl,
+              duration: song.duration,
+              videoId: (song as any).videoId || null,
+              language: (song as any).language || null,
+            },
+          }),
+        }
+      );
+  
+      setLocalPlaylists((prev) => [addRes.data, ...prev]);
       usePlaylistStore.getState().fetchUserPlaylists();
-      
       toast.success("Created playlist and added song!");
       setShowCreate(false);
       setNewPlaylistName("");

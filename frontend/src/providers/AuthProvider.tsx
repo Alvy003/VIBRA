@@ -1,67 +1,76 @@
-// src/providers/AuthProvider.tsx
-import { useEffect, useState } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@clerk/clerk-react";
-import { Loader } from "lucide-react";
 import { useAuthStore } from "@/stores/useAuthStore";
 import { useChatStore } from "@/stores/useChatStore";
 import { useMusicStore } from "@/stores/useMusicStore";
 
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const { getToken, userId, isSignedIn } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const { getToken, userId, isSignedIn, isLoaded } = useAuth();
+  const hasInitializedRef = useRef(false);
 
   const { setToken, checkAdminStatus } = useAuthStore();
   const { initSocket, disconnectSocket } = useChatStore();
   const { fetchLikedSongs, clearLikedSongs } = useMusicStore();
 
-  useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (!isSignedIn) {
+  const initAuth = useCallback(async () => {
+    try {
+      if (!isLoaded) return;
+
+      if (!isSignedIn) {
+        if (navigator.onLine) {
           setToken(null);
-          clearLikedSongs(); // 🧹 reset likes on logout
-          return;
+          clearLikedSongs();
         }
+        return;
+      }
 
-        const token = await getToken({ template: "api" }).catch(() => null);
-        setToken(token);
+      const token = await getToken({ template: "api" }).catch(() => null);
+      setToken(token);
 
-        if (token) {
-          await checkAdminStatus();
-          await fetchLikedSongs(); // ✅ preload liked songs
-          if (userId) initSocket(userId); // ✅ init chat socket
-        }
-      } catch (error) {
-        console.error("Error in auth provider", error);
+      if (token) {
+        // Run these in parallel, non-blocking
+        Promise.allSettled([
+          checkAdminStatus(),
+          fetchLikedSongs(),
+        ]);
+        if (userId) initSocket(userId);
+      }
+
+      hasInitializedRef.current = true;
+    } catch (error) {
+      console.error("Error in auth provider", error);
+      if (navigator.onLine) {
         setToken(null);
         clearLikedSongs();
-      } finally {
-        setLoading(false);
       }
-    };
-
-    initAuth();
-    return () => disconnectSocket();
+    }
   }, [
     isSignedIn,
+    isLoaded,
     userId,
     getToken,
     setToken,
     checkAdminStatus,
     initSocket,
-    disconnectSocket,
     fetchLikedSongs,
     clearLikedSongs,
   ]);
 
-  if (loading) {
-    return (
-      <div className="h-screen w-full flex items-center justify-center">
-        <Loader className="size-8 animate-spin" style={{ color: "#6A0DAD" }} />
-      </div>
-    );
-  }
+  useEffect(() => {
+    initAuth();
+    return () => disconnectSocket();
+  }, [initAuth, disconnectSocket]);
 
+  // Re-initialize auth when coming back online
+  useEffect(() => {
+    const handleOnline = () => {
+      setTimeout(() => initAuth(), 1000);
+    };
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
+  }, [initAuth]);
+
+  // Always render children immediately — no loading spinner
   return <>{children}</>;
 };
 

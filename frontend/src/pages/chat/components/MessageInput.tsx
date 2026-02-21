@@ -252,7 +252,18 @@ const MessageInput = ({ onFocus }: Props) => {
   const { selectedUser, sendMessage, socket, replyingTo, setReplyingTo } = useChatStore();
   const { isRecording, permissionError, start, stop, cancel } = useRecorder();
 
-  const holdTimerRef = useRef<number | null>(null);
+  const [recordingMode, setRecordingMode] = useState<
+    "idle" | "holding" | "locked"
+  >("idle");
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [slideCancelled, setSlideCancelled] = useState(false);
+  
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const touchStartXRef = useRef<number>(0);
+  const isHoldingRef = useRef(false);
+  const didRecordRef = useRef(false);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -477,57 +488,139 @@ const MessageInput = ({ onFocus }: Props) => {
     inputRef.current?.focus();
   };
 
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+  
+  const startDurationTimer = () => {
+    setRecordingDuration(0);
+    recordingTimerRef.current = setInterval(() => {
+      setRecordingDuration((prev) => prev + 1);
+    }, 1000);
+  };
+  
+  const stopDurationTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    setRecordingDuration(0);
+  };
+  
+  useEffect(() => {
+    return () => {
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+      if (recordingTimerRef.current)
+        clearInterval(recordingTimerRef.current);
+    };
+  }, []);
+  
   const startRecording = async () => {
     await start();
+    startDurationTimer();
   };
-
+  
   const stopAndSend = async () => {
+    stopDurationTimer();
+    setRecordingMode("idle");
+  
     const out = await stop();
-    if (!out || !selectedUser || !user) return;
-    try {
-      const form = new FormData();
-      form.append("audio", out.blob, "voice.webm");
-      form.append("duration", String(out.duration));
-      const { data } = await axiosInstance.post("/chat/voice/upload", form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const { url, duration } = data || {};
-      if (url) {
-        socket.emit("send_voice", {
-          senderId: user.id,
-          receiverId: selectedUser.clerkId,
-          audioUrl: url,
-          duration,
-          replyToId: replyingTo?._id || null,
-        });
-        setReplyingTo(null);
-      }
-    } catch (e) {
-      console.error("Voice upload failed:", e);
+    if (!out || out.duration < 0.5 || !selectedUser || !user) return;
+  
+    const form = new FormData();
+    form.append("audio", out.blob, "voice.webm");
+    form.append("duration", String(out.duration));
+  
+    const { data } = await axiosInstance.post(
+      "/chat/voice/upload",
+      form
+    );
+  
+    socket.emit("send_voice", {
+      senderId: user.id,
+      receiverId: selectedUser.clerkId,
+      audioUrl: data.url,
+      duration: data.duration,
+      replyToId: replyingTo?._id || null,
+    });
+  
+    setReplyingTo(null);
+  };
+  
+  const cancelRecording = () => {
+    stopDurationTimer();
+    setRecordingMode("idle");
+    setSlideCancelled(false);
+    cancel();
+  };
+
+  const handlePointerDown = (e: React.MouseEvent | React.TouchEvent) => {
+    if ("touches" in e) {
+      touchStartXRef.current = e.touches[0].clientX;
     }
+  
+    if (recordingMode === "locked") return;
+  
+    isHoldingRef.current = true;
+    didRecordRef.current = false;
+    setSlideCancelled(false);
+  
+    holdTimerRef.current = setTimeout(async () => {
+      if (!isHoldingRef.current) return;
+      didRecordRef.current = true;
+      setRecordingMode("holding");
+      await startRecording();
+    }, 300);
   };
-
-  const cancelRecording = () => cancel();
-
-  const onHoldStart = () => {
-    holdTimerRef.current = window.setTimeout(() => startRecording(), 120) as unknown as number;
-  };
-
-  const onHoldEnd = () => {
+  
+  const handlePointerUp = (e: React.MouseEvent | React.TouchEvent) => {
     if (holdTimerRef.current) {
-      window.clearTimeout(holdTimerRef.current);
+      clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    if (isRecording) stopAndSend();
+  
+    isHoldingRef.current = false;
+  
+    if (recordingMode === "holding" && isRecording) {
+      slideCancelled ? cancelRecording() : stopAndSend();
+      e.preventDefault();
+    }
   };
 
-  const onHoldCancel = () => {
+  const handlePointerLeave = () => {
+    // Only relevant for mouse - cancel if dragged away while holding
+    if (recordingMode === "holding" && isHoldingRef.current) {
+      cancelRecording();
+      isHoldingRef.current = false;
+    }
+
     if (holdTimerRef.current) {
-      window.clearTimeout(holdTimerRef.current);
+      clearTimeout(holdTimerRef.current);
       holdTimerRef.current = null;
     }
-    if (isRecording) cancelRecording();
   };
+  
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (recordingMode !== "holding") return;
+    const deltaX = touchStartXRef.current - e.touches[0].clientX;
+    setSlideCancelled(deltaX > 100);
+  };
+  
+  const handleMicClick = async () => {
+    if (didRecordRef.current) {
+      didRecordRef.current = false;
+      return;
+    }
+  
+    if (recordingMode === "locked") {
+      await stopAndSend();
+    } else {
+      setRecordingMode("locked");
+      await startRecording();
+    }
+  };  
 
   const showSend = newMessage.trim().length > 0 || selectedFiles.length > 0;
 
@@ -586,14 +679,15 @@ const MessageInput = ({ onFocus }: Props) => {
           )}
         </AnimatePresence>
 
-        {/* Upload Progress */}
+        {/* Upload Progress - UNCHANGED */}
         <AnimatePresence>
           {isUploading && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              className="mb-2 px-3 py-2 bg-[#1c1c24]/95 backdrop-blur-md rounded-2xl border border-[#2a2a35]/60"
+              className="mb-2 px-3 py-2 bg-[#1c1c24]/95 backdrop-blur-md 
+                         rounded-2xl border border-[#2a2a35]/60"
             >
               <div className="h-1.5 bg-[#2a2a35] rounded-full overflow-hidden">
                 <motion.div
@@ -603,12 +697,14 @@ const MessageInput = ({ onFocus }: Props) => {
                   transition={{ duration: 0.3 }}
                 />
               </div>
-              <p className="text-xs text-zinc-400 mt-1.5 text-center">Uploading... {uploadProgress}%</p>
+              <p className="text-xs text-zinc-400 mt-1.5 text-center">
+                Uploading... {uploadProgress}%
+              </p>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Emoji Picker */}
+        {/* Emoji Picker - UNCHANGED */}
         <AnimatePresence>
           {showEmojiPicker && (
             <EmojiPicker
@@ -618,73 +714,155 @@ const MessageInput = ({ onFocus }: Props) => {
           )}
         </AnimatePresence>
 
-        {/* Main Input Island - Glass Effect */}
+        {/* ===== RECORDING OVERLAY ===== */}
+        <AnimatePresence>
+          {isRecording && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 10 }}
+              className="mb-2 px-4 py-3 bg-[#1c1c24]/95 backdrop-blur-md 
+                         rounded-2xl border border-[#2a2a35]/60 shadow-xl"
+            >
+              <div className="flex items-center justify-between">
+                {/* Cancel button */}
+                <button
+                  onClick={cancelRecording}
+                  className="flex items-center gap-2 text-red-400 
+                             hover:text-red-300 transition-colors"
+                >
+                  <X className="size-5" />
+                  <span className="text-sm font-medium">Cancel</span>
+                </button>
+
+                {/* Recording indicator */}
+                <div className="flex items-center gap-2">
+                  <motion.div
+                    animate={{ opacity: [1, 0.3, 1] }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 1.5,
+                    }}
+                    className="w-2.5 h-2.5 rounded-full bg-red-500"
+                  />
+                  <span className="text-white text-sm font-mono font-medium">
+                    {formatDuration(recordingDuration)}
+                  </span>
+                </div>
+
+                {/* Mode indicator */}
+                <div className="text-xs text-zinc-500">
+                  {recordingMode === "holding" ? (
+                    slideCancelled ? (
+                      <span className="text-red-400">Release to cancel</span>
+                    ) : (
+                      "Release to send"
+                    )
+                  ) : (
+                    "Tap mic to send"
+                  )}
+                </div>
+              </div>
+
+              {/* Slide to cancel hint (mobile, holding mode) */}
+              {recordingMode === "holding" && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="mt-2 text-center"
+                >
+                  <span className="text-xs text-zinc-500">
+                    ← Slide to cancel
+                  </span>
+                </motion.div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Main Input Row */}
         <div className="flex items-end gap-2">
-          {/* Text Input Container */}
-          <div className="flex-1 flex items-center bg-[#1c1c24]/90 backdrop-blur-md rounded-full border border-[#2a2a35]/60 shadow-xl min-h-[48px]">
-            {/* Emoji Button */}
-            <button
-              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-              disabled={isUploading || isRecording}
-              className={`shrink-0 p-3 transition-colors ${
-                showEmojiPicker
-                  ? 'text-violet-400'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-              title="Emoji"
+          {/* Text Input Container - hide during recording */}
+          {!isRecording ? (
+            <div
+              className="flex-1 flex items-center bg-[#1c1c24]/90 
+                          backdrop-blur-md rounded-full border 
+                          border-[#2a2a35]/60 shadow-xl min-h-[48px]"
             >
-              <Smile className="size-5" />
-            </button>
+              {/* Emoji Button */}
+              <button
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                disabled={isUploading || isRecording}
+                className={`shrink-0 p-3 transition-colors ${
+                  showEmojiPicker
+                    ? "text-violet-400"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+                title="Emoji"
+              >
+                <Smile className="size-5" />
+              </button>
 
-            {/* Text Input */}
-            <input
-              ref={inputRef}
-              placeholder={
-                permissionError
-                  ? permissionError
-                  : replyingTo
-                    ? "Type a reply..."
-                    : "Message"
-              }
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              disabled={isUploading}
-              className="flex-1 bg-transparent text-[15px] placeholder:text-zinc-500 text-white py-3 outline-none"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendText();
+              {/* Text Input */}
+              <input
+                ref={inputRef}
+                placeholder={
+                  permissionError
+                    ? permissionError
+                    : replyingTo
+                      ? "Type a reply..."
+                      : "Message"
                 }
-              }}
-              onFocus={() => {
-                setShowEmojiPicker(false);
-                onFocus?.();
-              }}
-            />
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                disabled={isUploading}
+                className="flex-1 bg-transparent text-[15px] 
+                           placeholder:text-zinc-500 text-white 
+                           py-3 outline-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendText();
+                  }
+                }}
+                onFocus={() => {
+                  setShowEmojiPicker(false);
+                  onFocus?.();
+                }}
+              />
 
-            {/* Attachment Button */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading || selectedFiles.length >= MAX_FILES || isRecording}
-              className="shrink-0 p-3 pr-3.5 text-zinc-500 hover:text-zinc-300 active:text-zinc-200 transition-colors disabled:opacity-40"
-              title="Attach files"
-            >
-              <Paperclip className="size-[18px] sm:size-5" />
-            </button>
+              {/* Attachment Button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={
+                  isUploading ||
+                  selectedFiles.length >= MAX_FILES ||
+                  isRecording
+                }
+                className="shrink-0 p-3 pr-3.5 text-zinc-500 
+                          active:text-zinc-200 transition-colors disabled:opacity-40"
+                title="Attach files"
+              >
+                <Paperclip className="size-[18px] sm:size-5" />
+              </button>
 
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ALLOWED_TYPES.join(',')}
-              onChange={handleFileSelect}
-              className="hidden"
-            />
-          </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ALLOWED_TYPES.join(",")}
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+            </div>
+          ) : (
+            /* During recording, show expanded recording area */
+            <div className="flex-1" />
+          )}
 
-          {/* Send / Mic Button */}
+          {/* ===== FIXED: Send / Mic Button ===== */}
           <AnimatePresence mode="wait">
-            {showSend ? (
+            {showSend && !isRecording ? (
               <motion.div
                 key="send"
                 initial={{ scale: 0.8, opacity: 0 }}
@@ -696,7 +874,9 @@ const MessageInput = ({ onFocus }: Props) => {
                   size="icon"
                   onClick={handleSendText}
                   disabled={isUploading}
-                  className="size-12 rounded-full bg-violet-600 hover:bg-violet-500 shadow-lg shadow-violet-600/25 border-0"
+                  className="size-12 rounded-full bg-violet-600 
+                             hover:bg-violet-500 shadow-lg 
+                             shadow-violet-600/25 border-0"
                   title="Send"
                 >
                   <Send className="size-5" />
@@ -713,40 +893,72 @@ const MessageInput = ({ onFocus }: Props) => {
               >
                 <Button
                   size="icon"
-                  className={`size-12 rounded-full shadow-lg transition-all border-0 ${
+                  className={`size-12 rounded-full shadow-lg 
+                    transition-all border-0 select-none touch-none ${
                     isRecording
-                      ? "bg-red-600 hover:bg-red-500 shadow-red-600/25"
-                      : "bg-violet-600 hover:bg-violet-500 shadow-violet-600/25"
+                      ? slideCancelled
+                        ? "bg-zinc-600 hover:bg-zinc-500 shadow-zinc-600/25"
+                        : "bg-red-600 hover:bg-red-500 shadow-red-600/25"
+                      : "bg-violet-500 hover:bg-violet-500 shadow-violet-600/25"
                   }`}
-                  title={isRecording ? "Stop & send" : "Hold to record"}
+                  title={
+                    isRecording
+                      ? recordingMode === "locked"
+                        ? "Tap to send"
+                        : "Release to send"
+                      : "Hold to record / Tap for hands-free"
+                  }
                   disabled={isUploading}
-                  onClick={async () => {
-                    if (!isRecording) await startRecording();
-                    else await stopAndSend();
+                  // FIXED: Separate click from hold properly
+                  onClick={handleMicClick}
+                  onMouseDown={handlePointerDown}
+                  onMouseUp={handlePointerUp}
+                  onMouseLeave={handlePointerLeave}
+                  onTouchStart={handlePointerDown}
+                  onTouchEnd={handlePointerUp}
+                  onTouchMove={handleTouchMove}
+                  onTouchCancel={() => {
+                    if (isRecording) cancelRecording();
+                    isHoldingRef.current = false;
+                    if (holdTimerRef.current) {
+                      clearTimeout(holdTimerRef.current);
+                      holdTimerRef.current = null;
+                    }
                   }}
-                  onMouseDown={onHoldStart}
-                  onMouseUp={onHoldEnd}
-                  onMouseLeave={onHoldCancel}
-                  onTouchStart={onHoldStart}
-                  onTouchEnd={onHoldEnd}
-                  onTouchCancel={onHoldCancel}
+                  onContextMenu={(e) => e.preventDefault()}
                 >
                   {isRecording ? (
-                    <Square className="size-5" fill="white" />
+                    recordingMode === "locked" ? (
+                      <Send className="size-5" />
+                    ) : (
+                      <Square className="size-5" fill="white" />
+                    )
                   ) : (
                     <Mic className="size-5" />
                   )}
                 </Button>
 
-                {isRecording && (
+                {/* Recording pulse indicator */}
+                {isRecording && !slideCancelled && (
                   <motion.span
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
-                    className="absolute -top-1 -right-1 flex h-4 w-4"
+                    className="absolute -top-1 -right-1 flex h-4 w-4 
+                               pointer-events-none"
                   >
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 items-center justify-center">
-                      <span className="text-[8px] text-white font-bold">●</span>
+                    <span
+                      className="animate-ping absolute inline-flex 
+                                   h-full w-full rounded-full 
+                                   bg-red-400 opacity-75"
+                    />
+                    <span
+                      className="relative inline-flex rounded-full 
+                                   h-4 w-4 bg-red-500 items-center 
+                                   justify-center"
+                    >
+                      <span className="text-[8px] text-white font-bold">
+                        ●
+                      </span>
                     </span>
                   </motion.span>
                 )}
