@@ -1,7 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
-import { ListMusic } from 'lucide-react-native';
+import { View, StyleSheet, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { PremiumCard } from '@/components/PremiumCard';
 import { useStreamStore } from '@/stores/useStreamStore';
@@ -20,11 +18,8 @@ export const FeaturedPlaylistsSection = React.memo(() => {
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
-            const id = (item._id || item.externalId || item.id || '').replace(
-                /jiosaavn_(album|playlist|artist)_/,
-                ''
-            );
-            if (id) router.push(`/playlist/external/jiosaavn/${id}` as any);
+            const id = item.externalId?.replace('jiosaavn_playlist_', '');
+            if (id) router.push(`/(tabs)/playlist/external/jiosaavn/${id}` as any);
         },
         [router]
     );
@@ -45,19 +40,27 @@ export const FeaturedPlaylistsSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="Featured Playlists"
-                icon={<ListMusic size={16} color="#ec4899" />}
                 accentColor="#ec4899"
             />
-            <View style={{ minHeight: 200 }}>
-                <FlashList<any>
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 20 }}
-                    data={topPlaylists.slice(0, 8)}
-                    keyExtractor={(item) => item.externalId || item.id || String(item._id)}
-                    renderItem={renderFeaturedPlaylist as any}
-                />
-            </View>
+            <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20 }}
+                data={topPlaylists.slice(0, 8)}
+                keyExtractor={(item) => item.externalId || item.id || String(item._id)}
+                renderItem={renderFeaturedPlaylist}
+                snapToInterval={ITEM_SIZE}
+                decelerationRate="fast"
+                initialNumToRender={4}
+                maxToRenderPerBatch={4}
+                windowSize={3}
+                removeClippedSubviews={true}
+                getItemLayout={(_, index) => ({
+                    length: ITEM_SIZE,
+                    offset: ITEM_SIZE * index,
+                    index,
+                })}
+            />
         </View>
     );
 });

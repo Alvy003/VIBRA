@@ -34,7 +34,7 @@ import Animated, {
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import { GestureDetector, Gesture, ScrollView as RNGHScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import DeviceSelector from './DeviceSelector';
 import { usePlayerStore } from '@/stores/usePlayerStore';
@@ -50,8 +50,12 @@ import ArtistModal from './player/ArtistModal';
 import LyricsModal from './player/LyricsModal';
 import ProgressBar from './ProgressBar';
 import ControlButton from './ControlButton';
+import MarqueeText from './MarqueeText';
 import Svg, { Path } from 'react-native-svg';
 import TrackPlayer, { Event, useTrackPlayerEvents } from 'react-native-track-player';
+import QueueBottomSheet from './QueueBottomSheet';
+
+const AnimatedRNGHScrollView = Animated.createAnimatedComponent(RNGHScrollView);
 
 const DEFAULT_GRADIENT = ['#1a1a2e', '#16213e', '#0f3460', '#121212'];
 
@@ -121,7 +125,7 @@ const ArtistCard = React.memo(
 
     return (
       <View style={styles.artistCardWrapper}>
-        {imageToUse && (
+        {!!imageToUse && (
           <View style={styles.artistImageContainer}>
             <Image source={imageToUse} style={styles.artistImage} contentFit="cover" />
             <LinearGradient
@@ -135,14 +139,14 @@ const ArtistCard = React.memo(
 
         <View style={styles.artistInfoSection}>
           <Text style={styles.artistInfoName}>
-            {artistInfo?.name || artist.split(',')[0].trim()}
+            {artistInfo?.name || (typeof artist === 'string' ? artist.split(',')[0].trim() : 'Artist')}
           </Text>
 
           {loading ? (
             <Text style={styles.artistInfoSubtext}>Loading artist info...</Text>
           ) : (
             <>
-              {artistInfo?.listeners && (
+              {!!artistInfo?.listeners && (
                 <Text style={styles.artistInfoListeners}>
                   {formatListeners(artistInfo.listeners)}
                 </Text>
@@ -187,13 +191,19 @@ export default function FullScreenPlayer({
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
 
   const ARTWORK_SIZE = useMemo(() => {
-    if (SCREEN_HEIGHT < 620) return SCREEN_WIDTH * 0.62;
+    if (SCREEN_HEIGHT < 550) return Math.min(SCREEN_WIDTH * 0.45, 180); // Floating window
+    if (SCREEN_HEIGHT < 620) return SCREEN_WIDTH * 0.60;
     if (SCREEN_HEIGHT < 700) return SCREEN_WIDTH * 0.72;
     return SCREEN_WIDTH * 0.87;
   }, [SCREEN_WIDTH, SCREEN_HEIGHT]);
 
-  const artworkTopSpacing = SCREEN_HEIGHT < 650 ? SCREEN_HEIGHT * 0.035 : SCREEN_HEIGHT * 0.05;
-  const artworkBottomSpacing = SCREEN_HEIGHT * 0.06;
+  const isTinyScreen = SCREEN_HEIGHT < 550;
+  const isSmallScreen = SCREEN_HEIGHT < 650;
+
+  const artworkTopSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.03 : SCREEN_HEIGHT * 0.08);
+  const artworkBottomSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.04 : SCREEN_HEIGHT * 0.06);
+
+  const [primaryContentHeight, setPrimaryContentHeight] = useState(0);
 
   const insets = useSafeAreaInsets();
   const gradientAnimationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -231,6 +241,7 @@ export default function FullScreenPlayer({
   const mainScrollRef = useRef<Animated.ScrollView>(null);
 
   const [showDelayedContent, setShowDelayedContent] = useState(false);
+  const [queueVisible, setQueueVisible] = useState(false);
   const delayedContentOpacity = useSharedValue(0);
   const delayedContentTranslateY = useSharedValue(50);
 
@@ -415,21 +426,9 @@ export default function FullScreenPlayer({
     'worklet';
     scrollY.value = event.nativeEvent.contentOffset.y;
 
-    const headerOpacity = interpolate(
-      scrollY.value,
-      [ARTWORK_SIZE * 0.7, ARTWORK_SIZE],
-      [0, 1],
-      Extrapolate.CLAMP
-    );
-    stickyHeaderOpacity.value = headerOpacity;
-
-    const headerTransY = interpolate(
-      scrollY.value,
-      [ARTWORK_SIZE * 0.7, ARTWORK_SIZE],
-      [-60, 0],
-      Extrapolate.CLAMP
-    );
-    stickyHeaderTranslateY.value = headerTransY;
+    const THRESHOLD = ARTWORK_SIZE + 160;
+    stickyHeaderOpacity.value = scrollY.value > THRESHOLD ? 1 : 0;
+    stickyHeaderTranslateY.value = scrollY.value > THRESHOLD ? 0 : -60;
   }, [ARTWORK_SIZE]);
 
   const scrollToTop = useCallback(() => {
@@ -441,6 +440,7 @@ export default function FullScreenPlayer({
   // ─── Dismiss Gesture ───
   const dismissGesture = Gesture.Pan()
     .activeOffsetY(10)
+    .failOffsetY(-10)
     .onBegin(() => {
       isAtTopWhenPanStarted.value = scrollY.value <= 10;
     })
@@ -548,20 +548,12 @@ export default function FullScreenPlayer({
   }, []);
 
   const RepeatIcon = repeatMode === 'track' ? Repeat1 : Repeat;
+  const hasLyrics = (syncedLines && syncedLines.length > 0) || (currentLyricsState?.status === 'plain');
 
   return (
     <GestureDetector gesture={dismissGesture}>
       <Animated.View style={[styles.container, containerStyle]}>
         <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-
-        {/* Animated Gradient Background */}
-        <Animated.View style={[StyleSheet.absoluteFill, gradientStyle]}>
-          <LinearGradient
-            colors={gradientColors}
-            locations={[0, 0.25, 0.55, 1]}
-            style={StyleSheet.absoluteFill}
-          />
-        </Animated.View>
 
         {/* Sticky Header */}
         <Animated.View
@@ -601,16 +593,26 @@ export default function FullScreenPlayer({
         </Animated.View>
 
         {/* Main Scrollable Content */}
-        <Animated.ScrollView
-          ref={mainScrollRef}
+        <AnimatedRNGHScrollView
+          ref={mainScrollRef as any}
           onScroll={scrollHandler}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + SCREEN_HEIGHT * 0.12 }]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 32 }]}
         >
-          <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]}>
-            <TouchableOpacity
-              onPress={animateClose}
+          {/* Animated Gradient Background (Scrolls with content) */}
+          <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT }, gradientStyle]}>
+            <LinearGradient
+              colors={gradientColors}
+              locations={[0, 0.25, 0.55, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+
+          <View onLayout={(e) => setPrimaryContentHeight(e.nativeEvent.layout.height)}>
+            <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]}>
+              <TouchableOpacity
+                onPress={animateClose}
               style={styles.headerButton}
               activeOpacity={0.7}
             >
@@ -644,14 +646,18 @@ export default function FullScreenPlayer({
             </GestureDetector>
           </View>
 
-          <View style={styles.trackInfo}>
+          <View style={[styles.trackInfo, isTinyScreen && { marginBottom: 8 }]}>
             <View style={styles.trackTextContainer}>
-              <Text style={styles.trackTitle} numberOfLines={1} adjustsFontSizeToFit>
-                {currentTrack?.title}
-              </Text>
-              <Text style={styles.trackArtist} numberOfLines={1}>
-                {currentTrack?.artist}
-              </Text>
+              <MarqueeText 
+                text={currentTrack?.title || ''}
+                style={styles.trackTitle}
+                delay={2000}
+              />
+              <MarqueeText 
+                text={currentTrack?.artist || ''}
+                style={styles.trackArtist}
+                delay={3000}
+              />
             </View>
             <TouchableOpacity style={styles.likeButton} activeOpacity={0.7}>
               <CirclePlus size={30} color="rgba(218, 214, 214, 1)" />
@@ -661,7 +667,7 @@ export default function FullScreenPlayer({
           <ProgressBar onSeek={handleSeek} />
           <TimeDisplay />
 
-          <View style={styles.mainControls}>
+          <View style={[styles.mainControls, isTinyScreen && { marginTop: 8, marginBottom: 16 }]}>
             <ControlButton onPress={toggleShuffle} size="medium">
               <Shuffle
                 size={20}
@@ -706,18 +712,16 @@ export default function FullScreenPlayer({
               <TouchableOpacity
                 style={styles.subActionButton}
                 activeOpacity={0.7}
-                onPress={onQueueOpen}
+                onPress={() => setQueueVisible(true)}
               >
                 <QueueIcon size={18} color="rgba(218, 214, 214, 1)" />
               </TouchableOpacity>
             </View>
           </View>
-
-          {/* Delayed Content */}
-          <View style={{ height: SCREEN_HEIGHT * 0.05 }} />
+          </View>
           {showDelayedContent && (
             <Animated.View style={delayedContentStyle}>
-              <LyricsPreviewCard />
+              {hasLyrics && <LyricsPreviewCard />}
 
               <ArtistCard
                 artist={currentTrack.artist || 'Unknown'}
@@ -729,7 +733,7 @@ export default function FullScreenPlayer({
               />
             </Animated.View>
           )}
-        </Animated.ScrollView>
+        </AnimatedRNGHScrollView>
 
         <TrackProgressObserver
           syncedLines={syncedLines as any}
@@ -738,6 +742,10 @@ export default function FullScreenPlayer({
         />
         <LyricsModal />
         <ArtistModal />
+        <QueueBottomSheet 
+          visible={queueVisible} 
+          onClose={() => setQueueVisible(false)} 
+        />
       </Animated.View>
     </GestureDetector>
   );
@@ -925,13 +933,15 @@ const styles = StyleSheet.create({
   trackTitle: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '800',
+    lineHeight: 24,
     letterSpacing: -0.5,
     marginBottom: 0,
   },
   trackArtist: {
-    color: 'rgba(255,255,255,0.65)',
+    color: 'rgba(255, 255, 255, 0.7)',
     fontSize: 15,
+    lineHeight: 20,
     fontWeight: '500',
     letterSpacing: 0.1,
   },

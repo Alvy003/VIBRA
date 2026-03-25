@@ -1,0 +1,124 @@
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { axiosInstance } from "@/lib/axios";
+
+interface Playlist {
+    _id: string;
+    name: string;
+    description?: string;
+    imageUrl?: string;
+    songs: any[];
+}
+
+interface PlaylistStore {
+    playlists: Playlist[];
+    isLoading: boolean;
+    error: string | null;
+
+    fetchUserPlaylists: () => Promise<void>;
+    fetchPlaylistById: (id: string) => Promise<void>;
+    addTrackToPlaylist: (playlistId: string, track: any) => Promise<void>;
+    removeTrackFromPlaylist: (playlistId: string, songId: string) => Promise<void>;
+    createPlaylist: (name: string, description?: string) => Promise<any>;
+}
+
+export const usePlaylistStore = create<PlaylistStore>()(
+    persist(
+        (set, get) => ({
+            playlists: [],
+            isLoading: false,
+            error: null,
+
+            fetchUserPlaylists: async () => {
+                set({ isLoading: true, error: null });
+                try {
+                    const response = await axiosInstance.get("/playlists/my-playlists");
+                    set({ playlists: response.data, isLoading: false });
+                } catch (error: any) {
+                    set({ isLoading: false, error: error.response?.data?.message || "Error fetching playlists" });
+                }
+            },
+
+            fetchPlaylistById: async (id) => {
+                set({ isLoading: true, error: null });
+                try {
+                    const response = await axiosInstance.get(`/playlists/${id}`);
+                    const updatedPlaylist = response.data;
+                    
+                    const currentPlaylists = get().playlists;
+                    const index = currentPlaylists.findIndex(p => p._id === id);
+                    
+                    if (index !== -1) {
+                        const newPlaylists = [...currentPlaylists];
+                        newPlaylists[index] = updatedPlaylist;
+                        set({ playlists: newPlaylists, isLoading: false });
+                    } else {
+                        set({ playlists: [...currentPlaylists, updatedPlaylist], isLoading: false });
+                    }
+                } catch (error: any) {
+                    set({ isLoading: false, error: error.response?.data?.message || "Error fetching playlist" });
+                }
+            },
+
+            addTrackToPlaylist: async (playlistId: string, track: any) => {
+                try {
+                    const songData = {
+                        title: track.title,
+                        artist: track.artist,
+                        imageUrl: track.artwork || track.imageUrl,
+                        audioUrl: track.url || track.audioUrl,
+                        duration: track.duration,
+                        source: track.source || 'jiosaavn',
+                        externalId: track.id || track.externalId
+                    };
+
+                    await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
+                        op: "add",
+                        songId: track.id || track.externalId,
+                        songData
+                    });
+
+                    // Refresh playlist data
+                    await get().fetchPlaylistById(playlistId);
+                } catch (error: any) {
+                    console.error("[PlaylistStore] addTrackToPlaylist failed:", error);
+                    throw error;
+                }
+            },
+
+            removeTrackFromPlaylist: async (playlistId: string, songId: string) => {
+                try {
+                    await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
+                        op: "remove",
+                        songId
+                    });
+                    await get().fetchPlaylistById(playlistId);
+                } catch (error: any) {
+                    console.error("[PlaylistStore] removeTrackFromPlaylist failed:", error);
+                    throw error;
+                }
+            },
+
+            createPlaylist: async (name: string, description: string = "") => {
+                try {
+                    const response = await axiosInstance.post("/playlists", {
+                        name,
+                        description
+                    });
+                    const newPlaylist = response.data;
+                    set(state => ({ playlists: [newPlaylist, ...state.playlists] }));
+                    return newPlaylist;
+                } catch (error: any) {
+                    console.error("[PlaylistStore] createPlaylist failed:", error);
+                    throw error;
+                }
+            },
+        }),
+        {
+            name: 'vibra-playlist-storage',
+            storage: createJSONStorage(() => AsyncStorage),
+            partialize: (state) => ({ playlists: state.playlists }),
+        }
+    )
+);

@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import {
   View,
   Text,
-  Dimensions,
+  useWindowDimensions,
   StyleSheet,
   GestureResponderEvent,
 } from 'react-native';
@@ -12,17 +12,15 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Play, Heart, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedCard } from './AnimatedCard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HERO_HEIGHT = SCREEN_HEIGHT * 0.45;
-const CROSSFADE_DURATION = 600;
-const AUTO_ROTATE_MS = 8000;
+const CROSSFADE_DURATION = 1000;
+const AUTO_ROTATE_MS = 10000;
 
 interface SongItem {
   _id: string;
@@ -42,6 +40,14 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
   onPlay,
   heroParallaxStyle,
 }) => {
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  // Responsive hero height: use screen height ratio, with a min/max for tablets/small phones
+  const HERO_HEIGHT = Math.min(
+    Math.max(screenHeight * 0.30 + insets.top, screenWidth * 0.45),
+    420
+  );
+
   const [heroIndex, setHeroIndex] = useState(0);
   const [touchStart, setTouchStart] = useState<number | null>(null);
 
@@ -135,7 +141,7 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
 
   return (
     <View
-      style={styles.heroContainer}
+      style={[styles.heroContainer, { height: HERO_HEIGHT }]}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
     >
@@ -162,33 +168,30 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
         </Animated.View>
       </Animated.View>
 
+      {/* Bottom gradient fade for smooth transition into content */}
       <LinearGradient
         colors={[
-          'rgba(9,9,11,0.1)',
-          'rgba(9,9,11,0.4)',
-          'rgba(9,9,11,0.8)',
+          'transparent',
+          'rgba(9,9,11,0.3)',
+          'rgba(9,9,11,0.7)',
           '#09090b',
         ]}
-        locations={[0, 0.4, 0.75, 1]}
-        style={StyleSheet.absoluteFillObject}
+        locations={[0, 0.45, 0.75, 1]}
+        style={styles.bottomGradient}
         pointerEvents="none"
       />
 
       <View style={styles.heroContent}>
-        <Animated.View style={textAnimStyle}>
           <View style={styles.badgeRow}>
-            <View style={styles.badge}>
-              <Sparkles size={11} color="#c084fc" fill="#c084fc" />
-              <Text style={styles.badgeText}>FEATURED</Text>
-            </View>
           </View>
-
-          <Text numberOfLines={2} style={styles.heroTitle}>
+        <Animated.View style={textAnimStyle}>
+          <Text numberOfLines={1} style={styles.heroTitle}>
             {currentSong.title}
           </Text>
           <Text numberOfLines={1} style={styles.heroArtist}>
             {currentSong.artist}
           </Text>
+        </Animated.View>
 
           <View style={styles.controlsRow}>
             <AnimatedCard
@@ -200,15 +203,6 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
               <View style={styles.playButton}>
                 <Play size={16} color="#000" fill="#000" />
                 <Text style={styles.playButtonText}>Play Now</Text>
-              </View>
-            </AnimatedCard>
-
-            <AnimatedCard
-              onPress={() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
-              scaleDown={0.92}
-            >
-              <View style={styles.heartButton}>
-                <Heart size={18} color="#fff" />
               </View>
             </AnimatedCard>
 
@@ -224,7 +218,7 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
                       {
                         width: i === heroIndex ? 20 : 6,
                         backgroundColor: i === heroIndex
-                          ? '#fff'
+                          ? '#ffffffb2'
                           : 'rgba(255,255,255,0.3)',
                       },
                     ]}
@@ -233,7 +227,6 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
               </View>
             )}
           </View>
-        </Animated.View>
       </View>
     </View>
   );
@@ -241,7 +234,6 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
 
 const styles = StyleSheet.create({
   heroContainer: {
-    height: HERO_HEIGHT,
     position: 'relative',
     overflow: 'hidden',
   },
@@ -256,13 +248,20 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  bottomGradient: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: '60%',
+  },
   heroContent: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     paddingHorizontal: 22,
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -279,20 +278,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 16,
   },
-  badgeText: {
-    color: '#c084fc',
-    fontSize: 10.5,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
   heroTitle: {
     color: '#fff',
-    fontSize: 28,
-    fontWeight: '900',
+    fontSize: 24,
+    fontWeight: '700',
     letterSpacing: -0.8,
     lineHeight: 32,
-    marginBottom: 3,
+    marginBottom: 2,
   },
   heroArtist: {
     color: 'rgba(255,255,255,0.6)',
@@ -309,7 +301,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 7,
-    backgroundColor: '#fff',
+    backgroundColor: '#f4f4f5',
     paddingHorizontal: 22,
     height: 44,
     borderRadius: 22,

@@ -1,7 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
-import { BarChart3 } from 'lucide-react-native';
+import { View, StyleSheet, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { PremiumCard } from '@/components/PremiumCard';
 import { useStreamStore } from '@/stores/useStreamStore';
@@ -10,9 +8,9 @@ import { ExternalItem } from './types';
 import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH_LG = SCREEN_WIDTH * 0.42;
+const CARD_WIDTH = SCREEN_WIDTH * 0.38;
 const CARD_MARGIN = 14;
-const ITEM_SIZE = CARD_WIDTH_LG + CARD_MARGIN;
+const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const TopChartsSection = React.memo(() => {
     const router = useRouter();
@@ -20,11 +18,8 @@ export const TopChartsSection = React.memo(() => {
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
-            const id = (item._id || item.externalId || item.id || '').replace(
-                /jiosaavn_(album|playlist|artist)_/,
-                ''
-            );
-            if (id) router.push(`/playlist/external/jiosaavn/${id}` as any);
+            const id = item.externalId?.replace('jiosaavn_playlist_', '');
+            if (id) router.push(`/(tabs)/playlist/external/jiosaavn/${id}` as any);
         },
         [router]
     );
@@ -35,7 +30,6 @@ export const TopChartsSection = React.memo(() => {
             subtitle={item.description}
             imageUrl={item.imageUrl}
             onPress={() => handleNavigateExternal(item)}
-            size="large"
             index={index}
         />
     ), [handleNavigateExternal]);
@@ -46,19 +40,27 @@ export const TopChartsSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="Top Charts"
-                icon={<BarChart3 size={16} color="#06b6d4" />}
                 accentColor="#06b6d4"
             />
-            <View style={{ minHeight: 200 }}>
-                <FlashList<any>
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 20 }}
-                    data={charts.slice(0, 8)}
-                    keyExtractor={(item) => item.externalId || item.id || String(item._id)}
-                    renderItem={renderTopChart as any}
-                />
-            </View>
+            <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20 }}
+                data={charts.slice(0, 8)}
+                keyExtractor={(item) => item.externalId || item.id || String(item._id)}
+                renderItem={renderTopChart}
+                snapToInterval={ITEM_SIZE}
+                decelerationRate="fast"
+                initialNumToRender={4}
+                maxToRenderPerBatch={4}
+                windowSize={3}
+                removeClippedSubviews={true}
+                getItemLayout={(_, index) => ({
+                    length: ITEM_SIZE,
+                    offset: ITEM_SIZE * index,
+                    index,
+                })}
+            />
         </View>
     );
 });

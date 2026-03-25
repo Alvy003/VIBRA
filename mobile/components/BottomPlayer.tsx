@@ -31,6 +31,8 @@ import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useColorStore } from '@/stores/useColorStore';
 import { useProgress } from 'react-native-track-player';
 import { Play, Pause, CirclePlus, MonitorSpeaker } from 'lucide-react-native';
+import MarqueeText from './MarqueeText';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -480,9 +482,11 @@ const panGesture = Gesture.Pan()
 
                   {/* Track Info */}
                   <Animated.View style={[styles.trackInfo, textAnimStyle]}>
-                    <Text style={styles.title} numberOfLines={1}>
-                      {currentTrack.title}
-                    </Text>
+                    <MarqueeText 
+                      text={currentTrack.title || ''}
+                      style={styles.title}
+                      delay={2000}
+                    />
                     <Text style={styles.artist} numberOfLines={1}>
                       {getFirstArtist(currentTrack.artist)}
                     </Text>
@@ -607,14 +611,15 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '800',
     letterSpacing: -0.2,
     marginBottom: 2,
+    lineHeight: 20,
   },
   artist: {
     color: 'rgba(255,255,255,0.65)',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
   },
   controls: {

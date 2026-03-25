@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, useSegments } from 'expo-router';
 import {
   View,
   Platform,
@@ -12,16 +12,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { BottomPlayer } from '@/components/BottomPlayer';
 import FullScreenPlayer from '@/components/FullScreenPlayer';
-import PlayerQueue from '@/components/PlayerQueue';
+import QueueBottomSheet from '@/components/QueueBottomSheet';
 import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { MessageCircle, Download, Library } from 'lucide-react-native';
+import { Sparkles, Library } from 'lucide-react-native';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const COLORS = {
   activeTab: '#FFFFFF',
-  inactiveTab: '#B3B3B3',
+  inactiveTab: '#A7A7A7',
   background: '#000000',
 };
 
@@ -87,6 +87,7 @@ const TabIcon: React.FC<TabIconProps> = ({ children }) => {
 };
 
 export default function TabLayout() {
+  const segments = useSegments();
   const { isPlayerExpanded, setIsPlayerExpanded } = usePlayerUIStore();
   const [isQueueVisible, setIsQueueVisible] = useState(false);
   const miniPlayerOpacity = useRef(new Animated.Value(1)).current;
@@ -133,6 +134,8 @@ export default function TabLayout() {
           headerShown: false,
           tabBarActiveTintColor: COLORS.activeTab,
           tabBarInactiveTintColor: COLORS.inactiveTab,
+          tabBarHideOnKeyboard: false,
+          freezeOnBlur: false,
           tabBarStyle: [
             styles.tabBar,
             {
@@ -143,16 +146,36 @@ export default function TabLayout() {
           ],
           tabBarBackground: () => (
             <View style={StyleSheet.absoluteFill}>
+
+              {/* subtle top divider */}
+              <View style={styles.tabBarTopLine} />
+
+              {/* gradient fade */}
               <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.55)', 'rgba(0,0,0,0.85)', 'rgba(0,0,0,0.98)']}
-                locations={[0, 0.15, 0.45, 0.8]}
+                colors={[
+                  'rgba(0,0,0,0)',
+                  'rgba(0,0,0,0.35)',
+                  'rgba(0,0,0,0.65)',
+                  'rgba(0,0,0,0.95)',
+                ]}
+                locations={[0, 0.25, 0.6, 1]}
                 style={StyleSheet.absoluteFill}
               />
-              <BlurView
-                intensity={Platform.OS === 'ios' ? 35 : 0}
-                tint="dark"
-                style={[StyleSheet.absoluteFill, styles.blurOverlay]}
-              />
+
+              {/* iOS blur */}
+              {Platform.OS === 'ios' && (
+                <BlurView
+                  intensity={60}
+                  tint="dark"
+                  style={StyleSheet.absoluteFill}
+                />
+              )}
+
+              {/* Android smoky tint */}
+              {Platform.OS === 'android' && (
+                <View style={styles.androidOverlay} />
+              )}
+
             </View>
           ),
           tabBarLabelStyle: styles.tabBarLabel,
@@ -195,28 +218,27 @@ export default function TabLayout() {
         <Tabs.Screen
           name="chat"
           options={{
-            title: 'Chat',
+            title: 'AI Chat',
+            freezeOnBlur: false,
+            lazy: false,
             tabBarIcon: ({ color, focused }) => (
               <TabIcon>
-                <MessageCircle size={23} color={color} strokeWidth={focused ? 2.5 : 1.8} />
+                <Sparkles size={23} color={color} fill={focused ? color : 'none'} strokeWidth={focused ? 2.5 : 1.8} />
               </TabIcon>
             ),
           }}
         />
-        <Tabs.Screen
-          name="downloads"
-          options={{
-            title: 'Downloads',
-            tabBarIcon: ({ color, focused }) => (
-              <TabIcon>
-                <Download size={23} color={color} strokeWidth={focused ? 2.5 : 1.8} />
-              </TabIcon>
-            ),
-          }}
-        />
+
+        {/* Hidden detail routes to maintain Player/Tab bar visibility */}
+        <Tabs.Screen name="album/[id]" options={{ href: null }} />
+        <Tabs.Screen name="album/external/jiosaavn/[id]" options={{ href: null }} />
+        <Tabs.Screen name="playlist/[id]" options={{ href: null }} />
+        <Tabs.Screen name="playlist/external/jiosaavn/[id]" options={{ href: null }} />
+        <Tabs.Screen name="artist/external/jiosaavn/[id]" options={{ href: null }} />
+        <Tabs.Screen name="downloads" options={{ href: null }} />
       </Tabs>
 
-      {!isPlayerExpanded && (
+      {!isPlayerExpanded && segments[1] !== 'chat' && (
         <Animated.View
           pointerEvents="box-none"
           style={[
@@ -237,7 +259,7 @@ export default function TabLayout() {
           initialColors={playerColors}
         />
       )}
-      <PlayerQueue visible={isQueueVisible} onClose={handleCloseQueue} />
+      <QueueBottomSheet visible={isQueueVisible} onClose={handleCloseQueue} />
     </View>
   );
 }
@@ -254,8 +276,23 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 0 },
     shadowRadius: 0,
   },
+  tabBarTopLine: {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: StyleSheet.hairlineWidth,
+  backgroundColor: 'rgba(255,255,255,0.06)',
+  zIndex: 10,
+  },
+  androidOverlay: {
+  ...StyleSheet.absoluteFillObject,
+  backgroundColor: 'rgba(0,0,0,0.55)',
+  },
   blurOverlay: {
-    backgroundColor: Platform.OS === 'android' ? 'rgba(0,0,0,0.88)' : 'transparent',
+    backgroundColor: Platform.OS === 'android'
+      ? 'rgba(0,0,0,0.65)'
+      : 'transparent',
   },
   tabBarLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.1, marginTop: 1 },
   tabBarItem: { paddingTop: 2, gap: 2 },

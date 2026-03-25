@@ -21,3 +21,10 @@ export interface ExternalItem {
     imageUrl?: string;
     songCount?: number;
 }
+export interface Album {
+    _id: string;
+    title: string;
+    artist: string;
+    imageUrl: string;
+    songs: string[] | any[];
+}

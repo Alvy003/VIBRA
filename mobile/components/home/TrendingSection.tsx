@@ -1,6 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { Image } from 'expo-image';
 import { TrendingUp, Play } from 'lucide-react-native';
 import { AnimatedCard } from '@/components/AnimatedCard';
@@ -10,6 +9,7 @@ import { usePlayerStore } from '@/stores/usePlayerStore';
 import { SectionHeader } from './SectionHeader';
 import { SongItem } from './types';
 import { Dimensions } from 'react-native';
+import { resolveAssetUrl } from '@/lib/url';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.38;
@@ -41,7 +41,7 @@ export const TrendingSection = React.memo(() => {
             subtitle={item.artist}
             imageUrl={item.imageUrl}
             onPress={() => handlePlay(item)}
-            index={index} // Just for staggered logic if any
+            index={index}
         />
     ), [handlePlay]);
 
@@ -51,19 +51,21 @@ export const TrendingSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="Trending Now"
-                icon={<TrendingUp size={16} color="#f97316" />}
+                subtitle="What everyone's listening to"
                 accentColor="#f97316"
             />
 
+            {/* Highlighted #1 Trending Card */}
             <AnimatedCard
                 onPress={() => handlePlay(trendingSongs[0])}
                 scaleDown={0.98}
                 enableHaptic
+                hapticStyle="medium"
                 style={styles.heroCardWrapper}
             >
                 <View style={styles.highlightCard}>
                     <Image
-                        source={{ uri: trendingSongs[0].imageUrl, width: 150, height: 150 }}
+                        source={{ uri: resolveAssetUrl(trendingSongs[0].imageUrl), width: 150, height: 150 }}
                         style={styles.highlightImage}
                         contentFit="cover"
                         cachePolicy="memory-disk"
@@ -88,16 +90,22 @@ export const TrendingSection = React.memo(() => {
                 </View>
             </AnimatedCard>
 
-            <View style={{ minHeight: 200 }}>
-                <FlashList<any>
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 20 }}
-                    data={trendingSongs.slice(1, 9)}
-                    keyExtractor={(item) => item._id}
-                    renderItem={renderTrendingSong as any}
-                />
-            </View>
+            {/* Horizontal scroll carousel */}
+            <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20 }}
+                data={trendingSongs.slice(1, 9)}
+                keyExtractor={(item) => item._id}
+                renderItem={renderTrendingSong}
+                snapToInterval={ITEM_SIZE}
+                decelerationRate="fast"
+                getItemLayout={(_, index) => ({
+                    length: ITEM_SIZE,
+                    offset: ITEM_SIZE * index,
+                    index,
+                })}
+            />
         </View>
     );
 });

@@ -1,10 +1,9 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useMemo } from 'react';
 import {
     View,
     Text,
     FlatList,
     TouchableOpacity,
-    ActivityIndicator,
     StyleSheet,
     ScrollView,
 } from 'react-native';
@@ -15,8 +14,9 @@ import { ArrowLeft, SearchX } from 'lucide-react-native';
 import { useSearchStore } from '@/stores/useSearchStore';
 import { TopResultCard } from '@/components/search/TopResultCard';
 import { SongResultCard } from '@/components/search/SongResultCard';
-import { AlbumResultCard } from '@/components/search/AlbumResultCard';
-import { ArtistResultCard } from '@/components/search/ArtistResultCard';
+import { AlbumResultRow } from '@/components/search/AlbumResultRow';
+import { ArtistResultRow } from '@/components/search/ArtistResultRow';
+import { Skeleton } from '@/components/Skeleton';
 
 // ── Section header ───────────────────────────────────────────────
 const SectionHeader = React.memo(({ title }: { title: string }) => (
@@ -30,6 +30,24 @@ const EmptyState = ({ query }: { query: string }) => (
         <Text style={styles.emptyTitle}>No results for</Text>
         <Text style={styles.emptyQuery}>"{query}"</Text>
         <Text style={styles.emptyHint}>Check spelling or try a different search</Text>
+    </View>
+);
+
+// ── Loading skeleton ─────────────────────────────────────────────
+const SearchSkeleton = () => (
+    <View style={{ padding: 16, gap: 20 }}>
+        <Skeleton width="100%" height={160} borderRadius={12} />
+        <View style={{ gap: 12 }}>
+            {[1, 2, 3, 4, 5].map((i) => (
+                <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                    <Skeleton width={48} height={48} borderRadius={4} />
+                    <View style={{ flex: 1, gap: 6 }}>
+                        <Skeleton width="60%" height={16} />
+                        <Skeleton width="40%" height={12} />
+                    </View>
+                </View>
+            ))}
+        </View>
     </View>
 );
 
@@ -50,10 +68,22 @@ export default function SearchResultsScreen() {
     const songs = results?.songs || [];
     const albums = results?.albums || [];
     const artists = results?.artists || [];
-    const topSong = songs[0] || null;
-    const remainingSongs = songs.slice(1);
+    
+    // Deduplicate songs to prevent duplicate key errors
+    const uniqueSongs = useMemo(() => {
+        const seen = new Set();
+        return songs.filter(s => {
+            const id = s.videoId || s._id || s.externalId;
+            if (!id || seen.has(id)) return false;
+            seen.add(id);
+            return true;
+        });
+    }, [songs]);
 
-    const hasContent = songs.length > 0 || albums.length > 0 || artists.length > 0;
+    const topSong = uniqueSongs[0] || null;
+    const remainingSongs = uniqueSongs.slice(1);
+
+    const hasContent = uniqueSongs.length > 0 || albums.length > 0 || artists.length > 0;
 
     const renderSong = useCallback(
         ({ item }: { item: any }) => <SongResultCard song={item} />,
@@ -61,12 +91,12 @@ export default function SearchResultsScreen() {
     );
 
     const renderAlbum = useCallback(
-        ({ item }: { item: any }) => <AlbumResultCard album={item} />,
+        ({ item }: { item: any }) => <AlbumResultRow album={item} />,
         []
     );
 
     const renderArtist = useCallback(
-        ({ item }: { item: any }) => <ArtistResultCard artist={item} />,
+        ({ item }: { item: any }) => <ArtistResultRow artist={item} />,
         []
     );
 
@@ -81,12 +111,7 @@ export default function SearchResultsScreen() {
             </View>
 
             {/* Loading state */}
-            {isSearching && (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#9333ea" />
-                    <Text style={styles.loadingText}>Searching Vibra...</Text>
-                </View>
-            )}
+            {isSearching && <SearchSkeleton />}
 
             {/* Results */}
             {!isSearching && results && (
@@ -100,7 +125,7 @@ export default function SearchResultsScreen() {
                         {/* Top Result */}
                         {topSong && (
                             <View style={styles.section}>
-                                <TopResultCard song={topSong} />
+                                <TopResultCard result={topSong} type="song" />
                             </View>
                         )}
 
@@ -160,11 +185,7 @@ export default function SearchResultsScreen() {
             )}
 
             {/* No results yet (first load, before search) */}
-            {!isSearching && !results && (
-                <View style={styles.loadingContainer}>
-                    <ActivityIndicator size="large" color="#9333ea" />
-                </View>
-            )}
+            {!isSearching && !results && <SearchSkeleton />}
         </SafeAreaView>
     );
 }

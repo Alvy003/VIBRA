@@ -123,8 +123,8 @@ export default ProgressBar;
 
 const styles = StyleSheet.create({
   progressContainer: {
-    marginHorizontal: 25,
-    marginTop: 14,
+    marginHorizontal: 24,
+    marginTop: 6,
   },
   trackContainer: {
     paddingVertical: HIT_SLOP,

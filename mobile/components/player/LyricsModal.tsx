@@ -17,12 +17,10 @@ import LyricsTimeDisplay from '../LyricsTimeDisplay';
 import ControlButton from '../ControlButton';
 
 // We inline ImmersiveLyricLine, LyricsLoadingSkeleton, NoLyricsView for simplicity if not extracted
-const ImmersiveLyricLine = React.memo(({ line, index, activeIndex }: { line: LyricLine, index: number, activeIndex: SharedValue<number> | number }) => {
-    // Normally this has reanimated styles based on activeLineIndex.
-    // For FlashList performance, it's usually better to just pass activeIndex as a prop or listen.
-    const currentIndex = usePlayerUIStore((s) => s.activeIndex);
-    const isActive = currentIndex === index;
-    const isPast = index < currentIndex;
+const ImmersiveLyricLine = React.memo(({ line, index }: { line: LyricLine, index: number }) => {
+    // Rely on Zustand selectors to only re-render this specific line when its state changes
+    const isActive = usePlayerUIStore((s) => s.activeIndex === index);
+    const isPast = usePlayerUIStore((s) => s.activeIndex > index);
 
     return (
         <View style={styles.lyricLineWrapper}>
@@ -77,8 +75,6 @@ const LyricsModal = React.memo(() => {
 
     const isLyricsModalVisible = usePlayerUIStore((s) => s.isLyricsModalVisible);
     const setLyricsModalVisible = usePlayerUIStore((s) => s.setLyricsModalVisible);
-    const activeIndex = usePlayerUIStore((s) => s.activeIndex);
-
     const lyricsState = currentTrack ? getLyrics(currentTrack.id) : { status: 'idle' };
     const trackColors = currentTrack ? getTrackColors(currentTrack.id) : ({} as any);
 
@@ -87,6 +83,7 @@ const LyricsModal = React.memo(() => {
     const syncedLines = useMemo(() => hasSyncedLyrics ? (lyricsState as any).lines as LyricLine[] : [], [hasSyncedLyrics, lyricsState]);
 
     const [autoScrollEnabled, setAutoScrollEnabled] = useState(true);
+    const autoScrollEnabledRef = useRef(true);
     const [showSyncButton, setShowSyncButton] = useState(false);
     const syncButtonTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const isUserScrolling = useRef(false);
@@ -94,26 +91,32 @@ const LyricsModal = React.memo(() => {
     const flashListRef = useRef<any>(null);
 
     useEffect(() => {
-        if (
-            !isLyricsModalVisible ||
-            !autoScrollEnabled ||
-            activeIndex < 0 ||
-            activeIndex === lastScrolledIndex.current
-        ) return;
+        autoScrollEnabledRef.current = autoScrollEnabled;
+    }, [autoScrollEnabled]);
 
-        lastScrolledIndex.current = activeIndex;
+    useEffect(() => {
+        const unsubscribe = usePlayerUIStore.subscribe((state: any) => {
+            const idx = state.activeIndex;
+            if (
+                !state.isLyricsModalVisible ||
+                !autoScrollEnabledRef.current ||
+                idx < 0 ||
+                idx === lastScrolledIndex.current
+            ) return;
 
-        const lineHeight = 60;
-        // We add an offset so the active line shows around 25% from top
-        const targetScroll = Math.max(0, (activeIndex * lineHeight) - (SCREEN_HEIGHT * 0.25));
+            lastScrolledIndex.current = idx;
+            const lineHeight = 80;
+            const targetScroll = Math.max(0, (idx * lineHeight) - (SCREEN_HEIGHT * 0.25));
 
-        if (flashListRef.current) {
-            flashListRef.current.scrollToOffset({
-                offset: targetScroll,
-                animated: true
-            });
-        }
-    }, [activeIndex, isLyricsModalVisible, autoScrollEnabled]);
+            if (flashListRef.current) {
+                flashListRef.current.scrollToOffset({
+                    offset: targetScroll,
+                    animated: true
+                });
+            }
+        });
+        return unsubscribe;
+    }, []);
 
     const handleLyricsScrollBegin = useCallback(() => {
         if (autoScrollEnabled) setAutoScrollEnabled(false);
@@ -135,15 +138,16 @@ const LyricsModal = React.memo(() => {
         setAutoScrollEnabled(true);
         setShowSyncButton(false);
 
-        if (activeIndex >= 0 && flashListRef.current) {
-            const lineHeight = 60;
-            const targetScroll = Math.max(0, (activeIndex * lineHeight) - (SCREEN_HEIGHT * 0.25));
+        const currentIndex = usePlayerUIStore.getState().activeIndex;
+        if (currentIndex >= 0 && flashListRef.current) {
+            const lineHeight = 80;
+            const targetScroll = Math.max(0, (currentIndex * lineHeight) - (SCREEN_HEIGHT * 0.25));
             flashListRef.current.scrollToOffset({
                 offset: targetScroll,
                 animated: true,
             });
         }
-    }, [activeIndex]);
+    }, []);
 
     useEffect(() => {
         return () => {
@@ -224,10 +228,9 @@ const LyricsModal = React.memo(() => {
                                 <ImmersiveLyricLine
                                     line={item}
                                     index={index}
-                                    activeIndex={activeIndex}
                                 />
                             )}
-                            estimatedItemSize={60}
+                            estimatedItemSize={80}
                             drawDistance={SCREEN_HEIGHT}
                             onScrollBeginDrag={handleLyricsScrollBegin}
                             onScrollEndDrag={handleLyricsScrollEnd}
@@ -341,7 +344,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
     },
     lyricLineWrapper: {
-        minHeight: 60,
+        minHeight: 80,
         justifyContent: 'center',
     },
     lyricText: {

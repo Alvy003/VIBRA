@@ -1,9 +1,10 @@
 // stores/usePlayerStore.ts
 import { create } from 'zustand';
-import TrackPlayer, {
-    Track,
-    RepeatMode,
-    State,
+import TrackPlayer, { 
+    RepeatMode, 
+    State, 
+    Event as TrackPlayerEvent,
+    type Track 
 } from 'react-native-track-player';
 import { useStreamStore } from './useStreamStore';
 import { setupPlayer } from '@/lib/trackPlayerSetup';
@@ -19,6 +20,7 @@ interface PlayerStore {
     shuffleMode: boolean;
     repeatMode: 'off' | 'track' | 'queue';
     isPlayerReady: boolean;
+    hasTrackedCurrentTrack: boolean;
 
     // Core actions
     initPlayer: () => Promise<void>;
@@ -40,6 +42,7 @@ interface PlayerStore {
     // Modes
     toggleShuffle: () => Promise<void>;
     toggleRepeat: () => Promise<void>;
+    reorderQueue: (fromIndex: number, toIndex: number) => void;
 
     // Helpers
     resolveAudioUrl: (track: Track) => Promise<string | null>;
@@ -49,6 +52,9 @@ interface PlayerStore {
     // Auto-fill
     _isRefilling: boolean;
     autoRefillQueue: () => Promise<void>;
+
+    // History
+    trackHistory: (track: Track) => Promise<void>;
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -60,17 +66,27 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     repeatMode: 'off',
     isPlayerReady: false,
     _isRefilling: false,
+    hasTrackedCurrentTrack: false,
 
     // ═══════════════════════════════════════════
     // INITIALIZATION
     // ═══════════════════════════════════════════
     initPlayer: async () => {
+        const currentIsReady = get().isPlayerReady;
+        if (currentIsReady) return;
+
         try {
             const success = await setupPlayer();
             set({ isPlayerReady: success });
 
             if (success) {
-                // Sync state with TrackPlayer
+                // Background service handles most events (playbackService.ts)
+                // We only add UI-specific listeners here if needed, but for now we keep it clean
+  TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackQueueEnded, () => {
+                    set({ isPlaying: false });
+                });
+
+                // Sync initial state
                 await get().syncWithTrackPlayer();
             }
         } catch (error) {
@@ -86,7 +102,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             const state = await TrackPlayer.getPlaybackState();
 
             set({
-                queue: queue.map(t => ({ ...t, artwork: t.artwork || t.imageUrl || '' })),
+                queue: queue.map((t: any) => ({ ...t, artwork: t.artwork || t.imageUrl || '' })),
                 currentIndex: index ?? -1,
                 currentTrack: index !== undefined ? { ...queue[index], artwork: queue[index].artwork || queue[index].imageUrl || '' } : null,
                 isPlaying: state.state === State.Playing,
@@ -102,7 +118,25 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     resolveAudioUrl: async (track: Track): Promise<string | null> => {
         if (!track.url || typeof track.url !== 'string') return null;
 
-        // Local/backend URLs (direct)
+        // 1. Check if it's already a local file
+        if (track.url.startsWith('file://')) {
+            return track.url;
+        }
+
+        // 2. Check if it's in our download store (Lazy import to avoid circular dependencies)
+        try {
+            const { useDownloadStore } = await import('./useDownloadStore');
+            const downloadedSong = useDownloadStore.getState().downloadedSongs[track.id];
+            
+            if (downloadedSong?.localUri) {
+                // console.log(`[PlayerStore] Playing track from local storage: ${track.title}`);
+                return downloadedSong.localUri;
+            }
+        } catch (e) {
+            // Silently fail if store is not accessible at this moment
+        }
+
+        // 3. Local/backend URLs (direct)
         if (
             track.url.includes('http') &&
             !(track as any).source
@@ -110,6 +144,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             return track.url;
         }
 
+        // 4. External stream resolution
         try {
             const { getPlayableUrl } = useStreamStore.getState();
 
@@ -140,9 +175,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
                 return;
             }
 
-            const playableTrack = {
+            const playableTrack: Track = {
                 ...track,
+                id: track.id || (track as any)._id || Math.random().toString(),
                 url: playableUrl,
+                title: track.title || 'Unknown Title',
+                artist: track.artist || 'Unknown Artist',
                 artwork: track.artwork || (track as any).imageUrl || '',
                 headers: {
                     "User-Agent": "Mozilla/5.0",
@@ -154,6 +192,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
             await TrackPlayer.reset();
             await TrackPlayer.add([playableTrack]);
+            
+            // Re-apply options to ensure Media Session is active for this track
+            const { setupPlayer } = await import('@/lib/trackPlayerSetup');
+            await setupPlayer(); // This handles updateOptions
+            
             await TrackPlayer.play();
 
             set({
@@ -326,8 +369,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             const startUrl = await get().resolveAudioUrl(startTrack);
 
             const resolvedTracks = tracks.map((track, i) => {
-                const mappedTrack = {
+                const mappedTrack: Track = {
                     ...track,
+                    id: track.id || (track as any)._id || `track-${i}-${Date.now()}`,
+                    title: track.title || 'Unknown Title',
+                    artist: track.artist || 'Unknown Artist',
                     artwork: track.artwork || (track as any).imageUrl || '',
                     headers: {
                         "User-Agent": "Mozilla/5.0",
@@ -335,7 +381,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
                     }
                 };
                 if (i === safeIndex && startUrl) {
-                    // console.log(`[PlayerStore] initQueue startUrl:`, startUrl);
                     return { ...mappedTrack, url: startUrl };
                 }
                 return { ...mappedTrack, url: mappedTrack.url || DUMMY_URL };
@@ -343,6 +388,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
             await TrackPlayer.reset();
             await TrackPlayer.add(resolvedTracks);
+
+            // Re-apply options
+            const { setupPlayer } = await import('@/lib/trackPlayerSetup');
+            await setupPlayer();
 
             await TrackPlayer.skip(safeIndex);
             await TrackPlayer.play();
@@ -401,9 +450,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     addToQueue: async (track: Track) => {
         try {
-            if (!track.url) {
-                track.url = DUMMY_URL;
-            }
             const url = await get().resolveAudioUrl(track);
             const playableTrack = {
                 ...track,
@@ -415,20 +461,24 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
                 }
             };
 
-            // console.log(`[PlayerStore] addToQueue appending:`, playableTrack.url);
+            const store = get();
+            const currentQueue = store.queue;
+            
             await TrackPlayer.add([playableTrack]);
 
-            set({ queue: [...get().queue, playableTrack] });
+            // If the player was stopped or queue empty, it might need explicit play 
+            // but usually we just want to add it to the END.
+            
+            set({ queue: [...currentQueue, playableTrack] });
+            
+            // console.log(`[PlayerStore] Added to queue: ${track.title}`);
         } catch (error) {
-            // console.error('[PlayerStore] addToQueue error:', error);
+            console.error('[PlayerStore] addToQueue error:', error);
         }
     },
 
     setPlayNext: async (track: Track) => {
         try {
-            if (!track.url) {
-                track.url = DUMMY_URL;
-            }
             const url = await get().resolveAudioUrl(track);
             const playableTrack = {
                 ...track,
@@ -439,15 +489,39 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
                     "Referer": "https://www.jiosaavn.com/"
                 }
             };
-            const currentIdx = await TrackPlayer.getActiveTrackIndex() ?? 0;
-            const insertIdx = currentIdx + 1;
+            
+            const store = get();
+            const currentIdx = await TrackPlayer.getActiveTrackIndex();
+            const insertIdx = (currentIdx !== undefined) ? currentIdx + 1 : 0;
 
-            // console.log(`[PlayerStore] setPlayNext appending:`, playableTrack.url);
-            await TrackPlayer.add([playableTrack], insertIdx);
+            // Find and remove existing occurrence of this track (if it's already in queue)
+            const existingIdx = store.queue.findIndex(
+                (t, i) => i > (currentIdx ?? -1) && (t.id === track.id)
+            );
 
-            const newQueue = [...get().queue];
-            newQueue.splice(insertIdx, 0, playableTrack);
-            set({ queue: newQueue });
+            if (existingIdx !== -1) {
+                // Remove from TrackPlayer and our queue first
+                await TrackPlayer.remove(existingIdx);
+                const newQueue = [...store.queue];
+                newQueue.splice(existingIdx, 1);
+                
+                // Recalculate insert index after removal
+                const adjustedInsertIdx = existingIdx < insertIdx ? insertIdx - 1 : insertIdx;
+                
+                await TrackPlayer.add([playableTrack], adjustedInsertIdx);
+                newQueue.splice(adjustedInsertIdx, 0, playableTrack);
+                
+                set({ queue: newQueue });
+            } else {
+                // Track not in queue yet, just insert
+                await TrackPlayer.add([playableTrack], insertIdx);
+                const newQueue = [...store.queue];
+                newQueue.splice(insertIdx, 0, playableTrack);
+                set({ 
+                    queue: newQueue,
+                    currentIndex: (currentIdx === undefined && store.queue.length === 0) ? 0 : store.currentIndex
+                });
+            }
         } catch (error) {
             console.error('[PlayerStore] setPlayNext error:', error);
         }
@@ -513,6 +587,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
         await TrackPlayer.setRepeatMode(tpMode);
         set({ repeatMode: nextMode });
+    },
+
+    reorderQueue: (fromIndex: number, toIndex: number) => {
+    set((state) => {
+        const newQueue = [...state.queue];
+        const [removed] = newQueue.splice(fromIndex, 1);
+        newQueue.splice(toIndex, 0, removed);
+        return { queue: newQueue };
+    });
     },
 
     // ═══════════════════════════════════════════
@@ -597,6 +680,46 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             // console.error('[PlayerStore] autoRefillQueue error', error);
         } finally {
             set({ _isRefilling: false });
+        }
+    },
+
+    trackHistory: async (track: Track) => {
+        if (!track || get().hasTrackedCurrentTrack) return;
+        
+        try {
+            const { axiosInstance } = await import('@/lib/axios');
+            
+            set({ hasTrackedCurrentTrack: true });
+
+            const isExternal = 
+                track.source === 'jiosaavn' || 
+                track.source === 'youtube' ||
+                track.id?.startsWith('jiosaavn_') ||
+                track.id?.startsWith('yt_');
+
+            if (isExternal) {
+                await axiosInstance.post('/history/track', {
+                    songId: track.id,
+                    isExternal: true,
+                    externalData: {
+                        title: track.title,
+                        artist: track.artist,
+                        imageUrl: track.artwork || track.url,
+                        duration: track.duration,
+                        source: track.source || 'jiosaavn',
+                        externalId: track.id,
+                        album: track.album || '',
+                        streamUrl: track.url || '',
+                    },
+                });
+            } else {
+                await axiosInstance.post('/history/track', {
+                    songId: track.id,
+                    isExternal: false,
+                });
+            }
+        } catch (error) {
+            console.error('[PlayerStore] Failed to track history:', error);
         }
     },
 }));

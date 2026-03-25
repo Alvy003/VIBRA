@@ -1,8 +1,6 @@
 import React, { useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
-import { Zap } from 'lucide-react-native';
-import { AnimatedCard } from '@/components/AnimatedCard';
+import { View, Text, StyleSheet, FlatList } from 'react-native';
+import { PremiumCard } from '@/components/PremiumCard';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { SectionHeader } from './SectionHeader';
@@ -10,49 +8,15 @@ import { SongItem } from './types';
 import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const QuickPickCard = React.memo(({
-    song,
-    onPress,
-}: {
-    song: SongItem;
-    onPress: () => void;
-}) => (
-    <AnimatedCard
-        onPress={onPress}
-        scaleDown={0.97}
-        style={{
-            width: (SCREEN_WIDTH - 48 - 10) / 2,
-            marginBottom: 10,
-        }}
-    >
-        <View style={styles.cardContainer}>
-            <Image
-                source={{ uri: song.imageUrl, width: 100, height: 100 }}
-                style={styles.image}
-                contentFit="cover"
-                cachePolicy="memory-disk"
-                priority="high"
-                transition={200}
-            />
-            <View style={styles.textContainer}>
-                <Text numberOfLines={1} style={styles.title}>
-                    {song.title}
-                </Text>
-                <Text numberOfLines={1} style={styles.subtitle}>
-                    {song.artist}
-                </Text>
-            </View>
-        </View>
-    </AnimatedCard>
-), (prev, next) => prev.song._id === next.song._id);
+const CARD_WIDTH = SCREEN_WIDTH * 0.38;
+const CARD_MARGIN = 14;
+const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const QuickPicksSection = React.memo(() => {
-    // Selective Zustand subscription
     const featuredSongs = useMusicStore(s => s.featuredSongs);
     const playTrack = usePlayerStore(s => s.playTrack);
 
-    const quickPicks = useMemo(() => featuredSongs.slice(0, 6), [featuredSongs]);
+    const quickPicks = useMemo(() => featuredSongs.slice(0, 8), [featuredSongs]);
 
     const handlePlay = useCallback(
         (song: SongItem) => {
@@ -69,11 +33,13 @@ export const QuickPicksSection = React.memo(() => {
         [playTrack]
     );
 
-    const renderQuickPick = useCallback((song: SongItem) => (
-        <QuickPickCard
-            key={song._id}
-            song={song}
-            onPress={() => handlePlay(song)}
+    const renderQuickPick = useCallback(({ item, index }: { item: SongItem; index: number }) => (
+        <PremiumCard
+            title={item.title}
+            subtitle={item.artist}
+            imageUrl={item.imageUrl}
+            onPress={() => handlePlay(item)}
+            index={index}
         />
     ), [handlePlay]);
 
@@ -83,12 +49,27 @@ export const QuickPicksSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="Quick Picks"
-                icon={<Zap size={16} color="#9333ea" />}
-                accentColor="#9333ea"
+                accentColor="#52525b"
             />
-            <View style={styles.grid}>
-                {quickPicks.map(renderQuickPick)}
-            </View>
+            <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20 }}
+                data={quickPicks}
+                keyExtractor={(item) => item._id}
+                renderItem={renderQuickPick}
+                snapToInterval={ITEM_SIZE}
+                decelerationRate="fast"
+                initialNumToRender={4}
+                maxToRenderPerBatch={4}
+                windowSize={3}
+                removeClippedSubviews={true}
+                getItemLayout={(_, index) => ({
+                    length: ITEM_SIZE,
+                    offset: ITEM_SIZE * index,
+                    index,
+                })}
+            />
         </View>
     );
 });
@@ -97,25 +78,6 @@ QuickPicksSection.displayName = 'QuickPicksSection';
 
 const styles = StyleSheet.create({
     sectionContainer: {
-        marginTop: 20,
-        paddingHorizontal: 20
+        marginTop: 28,
     },
-    grid: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        justifyContent: 'space-between',
-    },
-    cardContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: 'rgba(39, 39, 42, 0.6)',
-        borderRadius: 14,
-        overflow: 'hidden',
-        borderWidth: 0.5,
-        borderColor: 'rgba(255,255,255,0.05)',
-    },
-    image: { width: 50, height: 50 },
-    textContainer: { flex: 1, paddingHorizontal: 10, paddingVertical: 8 },
-    title: { color: '#fff', fontSize: 12.5, fontWeight: '600' },
-    subtitle: { color: '#71717a', fontSize: 11, marginTop: 1 },
 });

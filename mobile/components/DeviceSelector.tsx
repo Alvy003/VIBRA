@@ -318,7 +318,7 @@ export default function DeviceSelector({ compact = false }: DeviceSelectorProps)
           style={[styles.pillText, compact && styles.pillTextCompact]} 
           numberOfLines={1}
         >
-          {currentDevice?.name || 'This Device'}
+          {currentDevice?.type === 'local' ? 'This Phone' : (currentDevice?.name || 'This Phone')}
         </Text>
       </TouchableOpacity>
 
@@ -342,7 +342,7 @@ export default function DeviceSelector({ compact = false }: DeviceSelectorProps)
           <View style={styles.currentDeviceInfo}>
             <View style={styles.currentDeviceNameRow}>
               <Text style={styles.currentDeviceName}>
-                {currentDevice?.name || 'This Device'}
+                {currentDevice?.type === 'local' ? 'This Phone' : (currentDevice?.name || 'This Phone')}
               </Text>
               <SoundWave />
             </View>

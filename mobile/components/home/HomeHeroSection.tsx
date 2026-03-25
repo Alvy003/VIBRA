@@ -1,43 +1,49 @@
-import React, { useCallback, useMemo } from 'react';
-import { HeroSection } from '@/components/HeroSection';
-import { useMusicStore } from '@/stores/useMusicStore';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { SongItem } from './types';
+// components/home/HomeHeroSection.tsx
+import React from 'react';
+import { View, StyleSheet } from 'react-native';
+import Animated from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { HeroPattern } from './HeroPattern';
+import { QuickPicksGrid } from './QuickPicksGrid';
 
 interface HomeHeroSectionProps {
-    heroParallaxStyle: any;
+  heroParallaxStyle?: any;
 }
 
-export const HomeHeroSection = React.memo(({ heroParallaxStyle }: HomeHeroSectionProps) => {
-    const featuredSongs = useMusicStore(s => s.featuredSongs);
-    const playTrack = usePlayerStore(s => s.playTrack);
+export const HomeHeroSection = React.memo(({ 
+  heroParallaxStyle 
+}: HomeHeroSectionProps) => {
+  const insets = useSafeAreaInsets();
 
-    const heroSongs = useMemo(() => featuredSongs.slice(0, 5), [featuredSongs]);
+  return (
+    <View style={styles.container}>
+      {/* Pattern Background */}
+      <Animated.View style={[styles.patternWrapper, heroParallaxStyle]}>
+        <HeroPattern height={220 + insets.top} />
+      </Animated.View>
 
-    const handlePlay = useCallback(
-        (song: SongItem) => {
-            playTrack({
-                id: song.videoId || song.externalId || song._id || '',
-                url: song.streamUrl || song.audioUrl || '',
-                title: song.title,
-                artist: song.artist,
-                artwork: song.imageUrl,
-                duration: song.duration,
-                source: song.source || (song.videoId ? 'youtube' : 'jiosaavn'),
-            } as any);
-        },
-        [playTrack]
-    );
-
-    if (!heroSongs || heroSongs.length === 0) return null;
-
-    return (
-        <HeroSection
-            heroSongs={heroSongs}
-            onPlay={handlePlay}
-            heroParallaxStyle={heroParallaxStyle}
-        />
-    );
+      {/* Quick Picks overlaid on pattern */}
+      <View style={[styles.contentWrapper, { paddingTop: insets.top + 60 }]}>
+        <QuickPicksGrid />
+      </View>
+    </View>
+  );
 });
 
 HomeHeroSection.displayName = 'HomeHeroSection';
+
+const styles = StyleSheet.create({
+  container: {
+    position: 'relative',
+  },
+  patternWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+  },
+  contentWrapper: {
+    position: 'relative',
+    zIndex: 1,
+  },
+});

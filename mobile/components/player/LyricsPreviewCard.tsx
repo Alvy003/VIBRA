@@ -41,16 +41,21 @@ const LyricsPreviewCard = React.memo(() => {
     const setLyricsModalVisible = usePlayerUIStore((s) => s.setLyricsModalVisible);
 
     const previewLines = useMemo(() => {
-        if (!hasSyncedLyrics) return [];
-        const currentIdx = Math.max(0, activeIndex);
-        const startIdx = Math.max(0, currentIdx - 1);
-
-        const lines: LyricLine[] = [];
-        for (let i = 0; i < PREVIEW_LINE_COUNT; i++) {
-            lines.push(syncedLines[startIdx + i] || { time: -1, text: '' });
+        if (hasSyncedLyrics) {
+            const startIndex = activeIndex === -1 ? 0 : Math.max(0, activeIndex - 1);
+            const lines: LyricLine[] = [];
+            for (let i = 0; i < PREVIEW_LINE_COUNT; i++) {
+                lines.push(syncedLines[startIndex + i] || { time: -1, text: '' });
+            }
+            return { lines, startIndex };
+        } else if (hasPlainLyrics) {
+            const plainText = (lyricsState as any).text as string;
+            const textLines = plainText.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(0, PREVIEW_LINE_COUNT);
+            const lines = textLines.map((t, i) => ({ time: i, text: t }));
+            return { lines, startIndex: 0 };
         }
-        return lines;
-    }, [hasSyncedLyrics, activeIndex, syncedLines]);
+        return { lines: [], startIndex: 0 };
+    }, [hasSyncedLyrics, hasPlainLyrics, activeIndex, syncedLines, lyricsState]);
 
     const baseColor = trackColors.dominant || '#3a3a5c';
     const vibrantColor = getVibrantColor(baseColor);
@@ -75,10 +80,12 @@ const LyricsPreviewCard = React.memo(() => {
             </View>
 
             <View style={styles.lyricsPreviewContentWrapper}>
-                {hasSyncedLyrics ? (
-                    previewLines.map((line, idx) => {
-                        const isActive = idx === 1;
-                        const isPast = idx === 0;
+                {hasSyncedLyrics || hasPlainLyrics ? (
+                    previewLines.lines.map((line, idx) => {
+                        const originalIndex = previewLines.startIndex + idx;
+                        const isActive = hasSyncedLyrics ? (activeIndex !== -1 && originalIndex === activeIndex) : true;
+                        const isPast = hasSyncedLyrics ? (activeIndex !== -1 && originalIndex < activeIndex) : false;
+                        
                         return (
                             <View
                                 key={`preview-${idx}-${line.time}`}
@@ -101,19 +108,7 @@ const LyricsPreviewCard = React.memo(() => {
                 ) : (
                     <View style={styles.plainLyricsPreview}>
                         <Text style={styles.unsyncedLabel}>
-                            {lyricsState.status === 'loading' || lyricsState.status === 'idle' ? 'Loading lyrics...' :
-                                lyricsState.status === 'plain' ? 'Unsynced lyrics' : 'No lyrics available'}
-                        </Text>
-                        <Text
-                            style={[
-                                styles.lyricsPreviewLine,
-                                { color: 'rgba(255,255,255,0.9)', fontSize: 16 }
-                            ]}
-                            numberOfLines={4}
-                        >
-                            {lyricsState.status === 'plain'
-                                ? (lyricsState as any).text.substring(0, 200) + '...'
-                                : ''}
+                            {lyricsState.status === 'loading' || lyricsState.status === 'idle' ? 'Loading lyrics...' : 'No lyrics available'}
                         </Text>
                     </View>
                 )}

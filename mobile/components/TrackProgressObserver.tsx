@@ -13,7 +13,7 @@ const TrackProgressObserver = React.memo(({
     onIndexChange,
     onDurationChange
 }: TrackProgressObserverProps) => {
-    const progress = useProgress();
+    const progress = useProgress(100);
     const lastIndex = useRef<number>(-1);
 
     useEffect(() => {

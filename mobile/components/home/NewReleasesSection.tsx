@@ -1,7 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { FlashList } from '@shopify/flash-list';
-import { Star } from 'lucide-react-native';
+import { View, StyleSheet, FlatList } from 'react-native';
 import { useRouter } from 'expo-router';
 import { PremiumCard } from '@/components/PremiumCard';
 import { useStreamStore } from '@/stores/useStreamStore';
@@ -16,16 +14,12 @@ const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const NewReleasesSection = React.memo(() => {
     const router = useRouter();
-    // Selective subscription
     const newAlbums = useStreamStore(s => s.homepageData?.newAlbums);
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
-            const id = (item._id || item.externalId || item.id || '').replace(
-                /jiosaavn_(album|playlist|artist)_/,
-                ''
-            );
-            if (id) router.push(`/album/external/jiosaavn/${id}` as any);
+            const id = item.externalId?.replace('jiosaavn_album_', '');
+            if (id) router.push(`/(tabs)/album/external/jiosaavn/${id}` as any);
         },
         [router]
     );
@@ -46,19 +40,27 @@ export const NewReleasesSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="New Releases"
-                icon={<Star size={16} color="#f59e0b" />}
                 accentColor="#f59e0b"
             />
-            <View style={{ minHeight: 200 }}>
-                <FlashList<any>
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ paddingHorizontal: 20 }}
-                    data={newAlbums.slice(0, 8)}
-                    keyExtractor={(item) => item.externalId || item.id || String(item._id)}
-                    renderItem={renderNewRelease as any}
-                />
-            </View>
+            <FlatList
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ paddingHorizontal: 20 }}
+                data={newAlbums.slice(0, 8)}
+                keyExtractor={(item) => item.externalId || item.id || String(item._id)}
+                renderItem={renderNewRelease}
+                snapToInterval={ITEM_SIZE}
+                decelerationRate="fast"
+                initialNumToRender={4}
+                maxToRenderPerBatch={4}
+                windowSize={3}
+                removeClippedSubviews={true}
+                getItemLayout={(_, index) => ({
+                    length: ITEM_SIZE,
+                    offset: ITEM_SIZE * index,
+                    index,
+                })}
+            />
         </View>
     );
 });
@@ -66,5 +68,5 @@ export const NewReleasesSection = React.memo(() => {
 NewReleasesSection.displayName = 'NewReleasesSection';
 
 const styles = StyleSheet.create({
-    sectionContainer: { marginTop: 24 },
+    sectionContainer: { marginTop: 28 },
 });

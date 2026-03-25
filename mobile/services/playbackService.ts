@@ -1,141 +1,119 @@
-// services/playbackService.ts
-import TrackPlayer, { Event, State } from 'react-native-track-player';
-import { usePlayerStore } from '@/stores/usePlayerStore';
+import TrackPlayer, { Event, State, Capability, AppKilledPlaybackBehavior } from 'react-native-track-player';
 
-// This runs in a separate JS context for background playback
+// Minimalistic PlaybackService to isolate event bridge issues
 export async function PlaybackService() {
-    console.log('[PlaybackService] Service is successfully booting up');
+    console.warn('[PlaybackService] Service is booting (Headless Context)...');
 
-    TrackPlayer.addEventListener(Event.RemotePlay, async () => {
-        console.log('[PlaybackService] -> RemotePlay Event Fired!');
+    // Heartbeat for verification
+    setInterval(async () => {
         try {
-            await TrackPlayer.play();
-            usePlayerStore.setState({ isPlaying: true });
-        } catch (err) {
-            console.error('[PlaybackService] Play error:', err);
-        }
+            const state = await TrackPlayer.getPlaybackState();
+            // console.log('[PlaybackService] Heartbeat - State:', state.state);
+        } catch (e) { }
+    }, 5000);
+
+    // --- RE-REGISTER CAPABILITIES FROM BACKGROUND ---
+    // This helps Android 13/14 bridge the gap between main app and headless task
+    try {
+        await TrackPlayer.updateOptions({
+            android: {
+                appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+                alwaysPauseOnInterruption: true,
+                // @ts-ignore
+                stopForegroundServiceOnPause: false,
+                icon: require('../assets/images/vibra-512.png'),
+            },
+            capabilities: [
+                Capability.Play,
+                Capability.Pause,
+                Capability.SkipToNext,
+                Capability.SkipToPrevious,
+                Capability.SeekTo,
+                Capability.Stop,
+                Capability.JumpForward,
+                Capability.JumpBackward,
+            ],
+            compactCapabilities: [
+                Capability.Play,
+                Capability.Pause,
+                Capability.SkipToNext,
+            ],
+            notificationCapabilities: [
+                Capability.Play,
+                Capability.Pause,
+                Capability.SkipToNext,
+                Capability.SkipToPrevious,
+                Capability.SeekTo,
+                Capability.Stop,
+                Capability.JumpForward,
+                Capability.JumpBackward,
+            ],
+        });
+        console.warn('[PlaybackService] updateOptions applied from background.');
+    } catch (e) {
+        console.error('[PlaybackService] Failed to updateOptions:', e);
+    }
+
+    // --- Remote Event Listeners (using direct strings to be safe) ---
+
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-play', async () => {
+        console.warn('[PlaybackService] EVENT: remote-play');
+        await TrackPlayer.play();
     });
 
-    TrackPlayer.addEventListener(Event.RemotePause, async () => {
-        console.log('[PlaybackService] -> RemotePause Event Fired!');
-        try {
-            await TrackPlayer.pause();
-            usePlayerStore.setState({ isPlaying: false });
-        } catch (err) {
-            console.error('[PlaybackService] Pause error:', err);
-        }
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-pause', async () => {
+        console.warn('[PlaybackService] EVENT: remote-pause');
+        await TrackPlayer.pause();
     });
 
-    TrackPlayer.addEventListener(Event.RemoteNext, async () => {
-        console.log('[PlaybackService] -> RemoteNext Event Fired!');
-        try {
-            await usePlayerStore.getState().playNext();
-        } catch (err) {
-            console.error('[PlaybackService] Next error:', err);
-        }
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-next', async () => {
+        console.warn('[PlaybackService] EVENT: remote-next');
+        await TrackPlayer.skipToNext();
     });
 
-    TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
-        console.log('[PlaybackService] -> RemotePrevious Event Fired!');
-        try {
-            await usePlayerStore.getState().playPrevious();
-        } catch (err) {
-            console.error('[PlaybackService] Previous error:', err);
-        }
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-previous', async () => {
+        console.warn('[PlaybackService] EVENT: remote-previous');
+        await TrackPlayer.skipToPrevious();
     });
 
-    TrackPlayer.addEventListener(Event.RemoteSeek, async (event) => {
-        try {
-            await TrackPlayer.seekTo(event.position);
-        } catch (err) {
-            console.error('[PlaybackService] Seek error:', err);
-        }
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-stop', async () => {
+        console.warn('[PlaybackService] EVENT: remote-stop');
+        await TrackPlayer.stop();
     });
 
-    TrackPlayer.addEventListener(Event.RemoteStop, async () => {
-        try {
-            await TrackPlayer.stop();
-            usePlayerStore.setState({ isPlaying: false, currentTrack: null });
-        } catch (err) {
-            console.error('[PlaybackService] Stop error:', err);
-        }
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-seek', async (event: any) => {
+        console.warn('[PlaybackService] EVENT: remote-seek ->', event.position);
+        await TrackPlayer.seekTo(event.position);
     });
 
-    // Handle playback state changes
-    TrackPlayer.addEventListener(Event.PlaybackState, async (event) => {
-        const { state } = event;
-
-        if (state === State.Playing) {
-            usePlayerStore.setState({ isPlaying: true });
-        } else if (state === State.Paused || state === State.Stopped) {
-            usePlayerStore.setState({ isPlaying: false });
-        } else if (state === State.Error) {
-            console.error('[PlaybackService] Playback error');
-            // Try to recover by playing next track
-            const store = usePlayerStore.getState();
-            if (store.queue.length > store.currentIndex + 1) {
-                await store.playNext();
-            }
-        }
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-jump-forward', async (event: any) => {
+        console.warn('[PlaybackService] EVENT: remote-jump-forward');
+        const pos = await TrackPlayer.getPosition();
+        await TrackPlayer.seekTo(pos + (event.interval || 15));
     });
 
-    // Handle track changes
-    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, async (event) => {
-        if (event.track) {
-            const index = event.index ?? -1;
-            usePlayerStore.setState({
-                currentTrack: event.track,
-                currentIndex: index,
-            });
-
-            // Background preload upcoming track URLs to prevent auto-play failure
-            usePlayerStore.getState().preloadUpcomingTracks();
-        }
+    // @ts-ignore
+    TrackPlayer.addEventListener('remote-jump-backward', async (event: any) => {
+        console.warn('[PlaybackService] EVENT: remote-jump-backward');
+        const pos = await TrackPlayer.getPosition();
+        await TrackPlayer.seekTo(Math.max(0, pos - (event.interval || 15)));
     });
 
-    // Handle queue ending
-    TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async (event) => {
-        const store = usePlayerStore.getState();
-
-        if (store.repeatMode === 'queue' && store.queue.length > 0) {
-            // Restart queue
-            await TrackPlayer.skip(0);
-            await TrackPlayer.play();
-        } else {
-            usePlayerStore.setState({ isPlaying: false });
-        }
+    // --- Observer Listeners ---
+    TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+        console.log('[PlaybackService] Native State Change:', event.state);
     });
 
-    // Handle playback errors
-    TrackPlayer.addEventListener(Event.PlaybackError, async (event) => {
-        console.error('[PlaybackService] Playback error:', event);
-
-        // Try to recover
-        const store = usePlayerStore.getState();
-        const currentTrack = store.currentTrack;
-
-        // For YouTube tracks, try refreshing the URL
-        if (currentTrack && (currentTrack as any).source === 'youtube') {
-            try {
-                const newUrl = await store.resolveAudioUrl(currentTrack);
-                if (newUrl) {
-                    const index = await TrackPlayer.getActiveTrackIndex();
-                    if (index !== undefined) {
-                        await TrackPlayer.remove(index);
-                        await TrackPlayer.add([{ ...currentTrack, url: newUrl }], index);
-                        await TrackPlayer.skip(index);
-                        await TrackPlayer.play();
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.error('[PlaybackService] Recovery failed:', e);
-            }
-        }
-
-        // If recovery fails, skip to next
-        if (store.queue.length > store.currentIndex + 1) {
-            await store.playNext();
-        }
+    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
+        console.log('[PlaybackService] Native Track Change:', event.track?.title || 'None');
     });
+
+    console.warn('[PlaybackService] Listeners registered successfully.');
 }

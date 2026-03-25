@@ -1,6 +1,6 @@
 // components/MarqueeText.tsx
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import TextTicker from 'react-native-text-ticker';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
@@ -17,65 +17,79 @@ interface MarqueeTextProps {
 const MarqueeText = React.memo(({
   text,
   style,
-  duration = 6000,
+  duration = 10000,
   delay = 2000,
-  fadeWidth = 20,
+  fadeWidth = 24,
   disableFade = false,
 }: MarqueeTextProps) => {
   const flatStyle = StyleSheet.flatten(style) || {};
   const fontSize = flatStyle.fontSize || 16;
   const lineHeight = flatStyle.lineHeight || fontSize * 1.3;
 
+  const [containerWidth, setContainerWidth] = React.useState(0);
+  const [textWidth, setTextWidth] = React.useState(0);
+
+  // Consider it overflowing only if it exceeds the animation threshold securely
+  const isOverflowing = containerWidth > 0 && textWidth > containerWidth + 2;
+
   const ticker = (
     <TextTicker
       style={style}
       duration={duration}
       loop
-      bounce
+      bounce={false}
       repeatSpacer={50}
       marqueeDelay={delay}
       shouldAnimateTreshold={10}
-      animationType="bounce"
-      bouncePadding={{ left: 0, right: 0 }}
+      animationType="auto"
     >
       {text}
     </TextTicker>
   );
 
-  if (disableFade) {
-    return (
-      <View style={[styles.container, { height: lineHeight }]}>
-        {ticker}
-      </View>
-    );
-  }
-
   return (
-    <View style={[styles.container, { height: lineHeight }]}>
-      <MaskedView
-        style={styles.maskedView}
-        maskElement={
-          <View style={styles.maskRow}>
-            <LinearGradient
-              colors={['transparent', '#000']}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={{ width: fadeWidth, height: '100%' }}
-            />
-            <View style={styles.solidMask} />
-            <LinearGradient
-              colors={['#000', 'transparent']}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={{ width: fadeWidth, height: '100%' }}
-            />
-          </View>
-        }
+    <View 
+      style={[styles.container, { height: lineHeight }]}
+      onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
+    >
+      <Text
+        pointerEvents="none"
+        style={[style, { position: 'absolute', opacity: 0, width: 5000, left: -9999 }]}
+        onTextLayout={(e) => {
+          if (e.nativeEvent.lines.length > 0) {
+            setTextWidth(e.nativeEvent.lines[0].width);
+          }
+        }}
       >
+        {text}
+      </Text>
+
+      {(!isOverflowing || disableFade) ? (
         <View style={[styles.tickerWrapper, { height: lineHeight }]}>
-          {ticker}
+          <Text style={style} numberOfLines={1}>{text}</Text>
         </View>
-      </MaskedView>
+      ) : (
+        <MaskedView
+          style={styles.maskedView}
+          maskElement={
+            <View style={styles.maskRow}>
+              {/* Spotify uses a sharp clip on the left, so no mask gradient here! */}
+              <View style={styles.solidMask} />
+              {/* Only the right edge fades out to indicate more text */}
+              <LinearGradient
+                colors={['#000', 'transparent']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={{ width: fadeWidth, height: '100%' }}
+              />
+            </View>
+          }
+        >
+          <View style={[styles.tickerWrapper, { height: lineHeight }]}>
+            {ticker}
+          </View>
+        </MaskedView>
+      )}
     </View>
   );
 });
@@ -102,5 +116,6 @@ const styles = StyleSheet.create({
   },
   tickerWrapper: {
     justifyContent: 'center',
+    width: '100%',
   },
 });

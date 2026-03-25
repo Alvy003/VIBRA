@@ -1,123 +1,168 @@
+// components/search/TopResultCard.tsx
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
-import { Play } from 'lucide-react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useSearchStore } from '@/stores/useSearchStore';
 
 interface TopResultCardProps {
-    song: any;
+  result: any;
+  type: 'song' | 'artist' | 'album' | 'playlist';
 }
 
-export const TopResultCard = React.memo(({ song }: TopResultCardProps) => {
-    const playTrack = usePlayerStore((s) => s.playTrack);
+export const TopResultCard = React.memo(({ result, type }: TopResultCardProps) => {
+  const router = useRouter();
+  const playTrack = usePlayerStore((s) => s.playTrack);
+  const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
 
-    const handlePlay = () => {
-        playTrack({
-            id: song.videoId || song._id || song.externalId,
-            url: song.streamUrl || song.audioUrl || '',
-            title: song.title,
-            artist: song.artist,
-            artwork: song.imageUrl,
-            duration: song.duration,
-            source: song.source || (song.videoId ? 'youtube' : 'jiosaavn'),
-        } as any);
-    };
+  const handlePress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    return (
-        <View style={styles.container}>
-            <Text style={styles.heading}>Top Result</Text>
-            <TouchableOpacity onPress={handlePlay} activeOpacity={0.85} style={styles.card}>
-                <Image
-                    source={song.imageUrl}
-                    style={styles.artwork}
-                    contentFit="cover"
-                    cachePolicy="memory-disk"
-                    transition={200}
-                />
-                <View style={styles.info}>
-                    <Text style={styles.title} numberOfLines={2}>{song.title}</Text>
-                    <Text style={styles.artist} numberOfLines={1}>{song.artist}</Text>
-                    <View style={styles.songBadge}>
-                        <Text style={styles.songBadgeText}>SONG</Text>
-                    </View>
-                </View>
-                <TouchableOpacity onPress={handlePlay} style={styles.playBtn} activeOpacity={0.8}>
-                    <Play size={24} color="#fff" fill="#fff" />
-                </TouchableOpacity>
-            </TouchableOpacity>
+    if (type === 'song') {
+      const songId = result.videoId || result._id || result.externalId || `${result.title}-${result.artist}`;
+
+      addRecentSearch({
+        id: songId,
+        title: result.title,
+        artist: result.artist,
+        imageUrl: result.imageUrl,
+        type: 'song',
+        timestamp: Date.now(),
+      });
+
+      playTrack({
+        id: songId,
+        url: result.streamUrl || result.audioUrl || '',
+        title: result.title,
+        artist: result.artist,
+        artwork: result.imageUrl,
+        duration: result.duration,
+        source: result.source || 'jiosaavn',
+      } as any);
+    } 
+    else if (type === 'artist') {
+      // All search results are external (JioSaavn)
+      if (result.type === 'artist') {
+        const cleanId = result.externalId.replace('jiosaavn_artist_', '');
+        router.push(`/(tabs)/artist/external/jiosaavn/${cleanId}` as any);
+        return;
+      }
+    } 
+    else if (type === 'album') {
+      // All search results are external (JioSaavn)
+      if (result.type === 'album') {
+        const cleanId = result.externalId.replace('jiosaavn_album_', '');
+        router.push(`/(tabs)/album/external/jiosaavn/${cleanId}` as any);
+        return;
+      }
+    }
+    else if (type === 'playlist') {
+      if (result.type === 'playlist') {
+        const cleanId = result.externalId.replace('jiosaavn_playlist_', '');
+        router.push(`/(tabs)/playlist/external/jiosaavn/${cleanId}` as any);
+        return;
+      }
+    }
+  };
+
+  const getTypeLabel = () => {
+    switch (type) {
+      case 'song': return 'Song';
+      case 'artist': return 'Artist';
+      case 'album': return 'Album';
+      case 'playlist': return 'Playlist';
+      default: return 'Top Result';
+    }
+  };
+
+  return (
+    <Animated.View entering={FadeIn.duration(300)}>
+      <TouchableOpacity
+        onPress={handlePress}
+        style={styles.container}
+        activeOpacity={0.8}
+      >
+        <Image
+          source={result.imageUrl}
+          style={[styles.image, type === 'artist' && styles.imageCircle]}
+          contentFit="cover"
+          transition={200}
+          cachePolicy="memory-disk"
+        />
+
+        <View style={styles.content}>
+          <Text style={styles.title} numberOfLines={2}>
+            {result.title || result.name}
+          </Text>
+
+          <View style={styles.meta}>
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{getTypeLabel()}</Text>
+            </View>
+            {result.artist && type !== 'artist' && (
+              <Text style={styles.artist} numberOfLines={1}>
+                • {result.artist}
+              </Text>
+            )}
+          </View>
         </View>
-    );
+      </TouchableOpacity>
+    </Animated.View>
+  );
 });
 
 TopResultCard.displayName = 'TopResultCard';
 
 const styles = StyleSheet.create({
-    container: {
-        paddingHorizontal: 16,
-        marginBottom: 8,
-    },
-    heading: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: '700',
-        marginBottom: 12,
-        letterSpacing: -0.3,
-    },
-    card: {
-        backgroundColor: '#18181b',
-        borderRadius: 16,
-        padding: 16,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.06)',
-    },
-    artwork: {
-        width: 80,
-        height: 80,
-        borderRadius: 10,
-    },
-    info: {
-        flex: 1,
-        marginLeft: 14,
-        justifyContent: 'center',
-    },
-    title: {
-        color: '#fff',
-        fontSize: 17,
-        fontWeight: '800',
-        letterSpacing: -0.3,
-        marginBottom: 4,
-    },
-    artist: {
-        color: '#a1a1aa',
-        fontSize: 13,
-        marginBottom: 8,
-    },
-    songBadge: {
-        backgroundColor: 'rgba(147, 51, 234, 0.2)',
-        borderRadius: 4,
-        paddingHorizontal: 6,
-        paddingVertical: 3,
-        alignSelf: 'flex-start',
-    },
-    songBadgeText: {
-        color: '#9333ea',
-        fontSize: 9,
-        fontWeight: '800',
-        letterSpacing: 0.5,
-    },
-    playBtn: {
-        width: 52,
-        height: 52,
-        borderRadius: 26,
-        backgroundColor: '#9333ea',
-        alignItems: 'center',
-        justifyContent: 'center',
-        shadowColor: '#9333ea',
-        shadowOpacity: 0.5,
-        shadowRadius: 10,
-        shadowOffset: { width: 0, height: 4 },
-        elevation: 8,
-    },
+  container: {
+    backgroundColor: '#282828',
+    borderRadius: 8,
+    padding: 20,
+    marginBottom: 24,
+  },
+  image: {
+    width: 92,
+    height: 92,
+    borderRadius: 4,
+    marginBottom: 16,
+  },
+  imageCircle: {
+    borderRadius: 46,
+  },
+  content: {
+    gap: 8,
+  },
+  title: {
+    color: '#fff',
+    fontSize: 28,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  meta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  badge: {
+    backgroundColor: '#000000ff',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  badgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  artist: {
+    color: '#b3b3b3',
+    fontSize: 14,
+    fontWeight: '500',
+    flex: 1,
+  },
 });

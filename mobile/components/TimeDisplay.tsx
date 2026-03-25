@@ -26,8 +26,8 @@ const styles = StyleSheet.create({
     timeContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        paddingHorizontal: 25,
-        marginBottom: 12,
+        paddingHorizontal: 24,
+        marginBottom: 4,
         marginTop: 0,
     },
     timeText: {

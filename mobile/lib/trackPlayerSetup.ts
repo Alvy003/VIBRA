@@ -13,13 +13,6 @@ export async function setupPlayer(): Promise<boolean> {
 
   try {
     await TrackPlayer.setupPlayer({
-      // Buffer settings for smooth playback
-      minBuffer: 15,        // Minimum buffer in seconds
-      maxBuffer: 50,        // Maximum buffer in seconds
-      playBuffer: 2.5,      // Start playing when this much is buffered
-      backBuffer: 30,       // Keep this much behind current position
-
-      // iOS specific
       waitForBuffer: true,
       autoHandleInterruptions: true,
     });
@@ -29,9 +22,12 @@ export async function setupPlayer(): Promise<boolean> {
       android: {
         appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
         alwaysPauseOnInterruption: true,
+        icon: require('../assets/images/vibra-512.png'),
+        // @ts-ignore
+        stopForegroundServiceOnPause: false, // Keeps controls alive in some Android 14 versions
       },
 
-      // Capabilities for lock screen controls
+      // Capabilities for all media controllers
       capabilities: [
         Capability.Play,
         Capability.Pause,
@@ -39,6 +35,8 @@ export async function setupPlayer(): Promise<boolean> {
         Capability.SkipToPrevious,
         Capability.SeekTo,
         Capability.Stop,
+        Capability.JumpForward,
+        Capability.JumpBackward,
       ],
 
       // Compact notification capabilities
@@ -46,11 +44,22 @@ export async function setupPlayer(): Promise<boolean> {
         Capability.Play,
         Capability.Pause,
         Capability.SkipToNext,
-        Capability.SkipToPrevious,
       ],
 
-      // Progress updating
-      progressUpdateEventInterval: 1,
+      // Specifically for the system notification
+      notificationCapabilities: [
+        Capability.Play,
+        Capability.Pause,
+        Capability.SkipToNext,
+        Capability.SkipToPrevious,
+        Capability.SeekTo,
+        Capability.Stop,
+        Capability.JumpForward,
+        Capability.JumpBackward,
+      ],
+
+      // Progress updating info
+      progressUpdateEventInterval: 2,
     });
 
     // Set default repeat mode

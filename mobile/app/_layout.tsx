@@ -8,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import 'react-native-reanimated';
 import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/clerk-expo';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 
 import * as SecureStore from 'expo-secure-store';
 
@@ -59,6 +60,7 @@ export const unstable_settings = {
 import TrackPlayer from 'react-native-track-player';
 import { PlaybackService } from '@/services/playbackService';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import { ClerkAuthHandler } from '@/components/ClerkAuthHandler';
 
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -87,11 +89,11 @@ function InitialLayout() {
   }, []);
 
   return (
-    <Stack>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="(auth)" />
       <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      <Stack.Screen name="search-results" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="search-results" options={{ animation: 'slide_from_right' }} />
     </Stack>
   );
 }
@@ -124,9 +126,12 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
         <ClerkLoaded>
-          <ThemeProvider value={DarkTheme}>
-            <InitialLayout />
-          </ThemeProvider>
+          <ClerkAuthHandler />
+          <BottomSheetModalProvider>
+            <ThemeProvider value={DarkTheme}>
+              <InitialLayout />
+            </ThemeProvider>
+          </BottomSheetModalProvider>
         </ClerkLoaded>
       </ClerkProvider>
     </GestureHandlerRootView>
