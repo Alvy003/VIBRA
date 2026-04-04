@@ -19,7 +19,14 @@ const playHistorySchema = new mongoose.Schema({
     source: { type: String, enum: ["jiosaavn", "youtube"] },
     externalId: String,
     album: String,
+    albumId: String,
     streamUrl: String,
+  },
+
+  context: {
+    type: { type: String, enum: ["album", "playlist", "artist", "discovery"] },
+    id: String,
+    title: String,
   },
 
   playedAt: { type: Date, default: Date.now, index: true },

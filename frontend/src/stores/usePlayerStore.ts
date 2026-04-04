@@ -21,7 +21,7 @@ function proxyAudioUrl(originalUrl: string): string {
     if (shouldProxy) {
       return `${AUDIO_PROXY_URL}?url=${encodeURIComponent(originalUrl)}`;
     }
-  } catch {}
+  } catch { }
   return originalUrl;
 }
 
@@ -98,7 +98,7 @@ const shuffleArray = <T,>(array: T[]): T[] => {
   return copy;
 };
 
-const REFILL_DEBOUNCE_MS = 5000;
+const REFILL_DEBOUNCE_MS = 2000;
 const SAVE_POSITION_DEBOUNCE_MS = 5000;
 
 let savePositionTimeout: NodeJS.Timeout | null = null;
@@ -150,7 +150,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (song.source === "jiosaavn") {
       const url = song.streamUrl || song.audioUrl;
       return url ? proxyAudioUrl(url) : null;
-  }
+    }
 
     // YouTube - URLs expire, need to fetch fresh
     if (song.source === "youtube" && song.videoId) {
@@ -369,14 +369,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     emitActivity(`Playing ${nextSong.title} by ${nextSong.artist}`);
     get().saveToCache();
 
-    // Pre-emptive refill - SAME AS YOUR CURRENT CODE
+    // Pre-emptive refill — keep at least 8 songs buffered ahead
     const postState = get();
     const upcomingCount =
       postState.nextUpQueue.length +
       Math.max(0, postState.mainQueue.length - (postState.currentIndex + 1)) +
       postState.laterQueue.length;
 
-    if (upcomingCount < 5) {
+    if (upcomingCount < 8) {
       get().autoRefillQueue();
     }
   },
@@ -546,6 +546,13 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     if (autoplay) {
       get().saveToCache();
     }
+
+    // Proactively refill if queue is thin
+    const upcomingAfterInit =
+      Math.max(0, songs.length - 1 - startIndex);
+    if (upcomingAfterInit < 8) {
+      get().autoRefillQueue();
+    }
   },
 
   playAlbum: (songs: Song[], startIndex = 0) => {
@@ -568,6 +575,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     emitActivity(`Playing ${song.title} by ${song.artist}`);
     set({ isPlaying: true });
     get().saveToCache();
+
+    // Proactively refill if album has few remaining tracks
+    const remaining = songs.length - 1 - idx;
+    if (remaining < 8) {
+      get().autoRefillQueue();
+    }
   },
 
   setCurrentSong: (song: Song | null) => {
@@ -767,7 +780,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     get()._rebuildDisplay();
   },
 
-autoRefillQueue: async () => {
+  autoRefillQueue: async () => {
     const state = get();
 
     if (state._isRefilling) return;
@@ -778,7 +791,7 @@ autoRefillQueue: async () => {
       Math.max(0, state.mainQueue.length - (state.currentIndex + 1)) +
       state.laterQueue.length;
 
-    if (totalUpcoming >= 5) return;
+    if (totalUpcoming >= 8) return;
 
     set({ _isRefilling: true });
 

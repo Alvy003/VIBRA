@@ -1,5 +1,5 @@
-// src/components/OnboardingModal.tsx
 import { useState } from "react";
+import { useUser } from "@clerk/clerk-react";
 import { useOnboardingStore } from "@/stores/useOnboardingStore";
 import { useStreamStore } from "@/stores/useStreamStore";
 import { motion, AnimatePresence } from "framer-motion";
@@ -16,8 +16,9 @@ const OnboardingModal = () => {
   } = useOnboardingStore();
 
   const [step, setStep] = useState(0);
+  const { isSignedIn } = useUser();
 
-  if (!shouldShowOnboarding()) return null;
+  if (!isSignedIn || !shouldShowOnboarding()) return null;
 
   const selectedCount = preferences.languages.length;
 

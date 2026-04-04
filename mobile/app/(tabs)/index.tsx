@@ -31,11 +31,13 @@ import { CollectionSection } from '@/components/home/CollectionSection';
 import { HeroSkeleton, CarouselSkeleton } from '@/components/home/HomeSkeleton';
 import { HomeFooter } from '@/components/home/HomeFooter';
 import { AIPlaylistCard } from '@/components/home/AIPlaylistCard';
+import { OnboardingModal } from '@/components/home/OnboardingModal';
+import { MixSection } from '@/components/home/MixSection';
 
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 export default function HomeScreen() {
-  const { user } = useUser();
+  const { user, isLoaded } = useUser();
   const insets = useSafeAreaInsets();
 
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -43,8 +45,9 @@ export default function HomeScreen() {
 
   const isLoading = useMusicStore(s => s.isLoading);
   const featuredSongsLength = useMusicStore(s => s.featuredSongs.length);
-  const { fetchAlbums, fetchFeaturedSongs, fetchRecentlyPlayed } = useMusicStore.getState();
-  const { fetchHomepage } = useStreamStore.getState();
+  
+  const musicStore = useMusicStore.getState();
+  const streamStore = useStreamStore.getState();
 
   const scrollY = useSharedValue(0);
 
@@ -53,6 +56,52 @@ export default function HomeScreen() {
       scrollY.value = event.contentOffset.y;
     },
   });
+
+  // ─── Data Initial Load ───
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    // Public fetches
+    musicStore.fetchFeaturedSongs();
+    streamStore.fetchHomepage();
+
+    // Public fetches
+    musicStore.fetchFeaturedSongs();
+    streamStore.fetchHomepage();
+  }, [isLoaded]);
+
+  // ─── Progressive Mounting ───
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setMountLevel(1);
+      setTimeout(() => setMountLevel(2), 120);
+      setTimeout(() => setMountLevel(3), 240);
+    });
+    return () => task.cancel();
+  }, []);
+
+  // ─── Refresh Logic ───
+  const onRefresh = useCallback(async () => {
+    if (!isLoaded) return;
+
+    setIsRefreshing(true);
+    const fetchPromises = [
+      musicStore.fetchFeaturedSongs(),
+      streamStore.fetchHomepage(true),
+    ];
+
+    if (user) {
+      fetchPromises.push(
+        musicStore.fetchRecentlyPlayed(),
+        musicStore.fetchRecentCollections(),
+        streamStore.fetchDailyMix(),
+        streamStore.fetchWeeklyMix()
+      );
+    }
+
+    await Promise.all(fetchPromises);
+    setIsRefreshing(false);
+  }, [isLoaded, !!user]);
 
   const heroParallaxStyle = useAnimatedStyle(() => ({
     transform: [{
@@ -71,33 +120,6 @@ export default function HomeScreen() {
       ),
     }],
   }));
-
-  useEffect(() => {
-    fetchAlbums();
-    fetchFeaturedSongs();
-    fetchRecentlyPlayed();
-    fetchHomepage();
-  }, []);
-
-  useEffect(() => {
-    const task = InteractionManager.runAfterInteractions(() => {
-      setMountLevel(1);
-      setTimeout(() => setMountLevel(2), 120);
-      setTimeout(() => setMountLevel(3), 240);
-    });
-    return () => task.cancel();
-  }, []);
-
-  const onRefresh = useCallback(async () => {
-    setIsRefreshing(true);
-    await Promise.all([
-      fetchAlbums(),
-      fetchFeaturedSongs(),
-      fetchRecentlyPlayed(),
-      fetchHomepage(),
-    ]);
-    setIsRefreshing(false);
-  }, []);
 
   const showSkeletons = isLoading && featuredSongsLength === 0;
 
@@ -140,7 +162,9 @@ export default function HomeScreen() {
             </>
           ) : (
             <>
+              {mountLevel >= 1 ? <OnboardingModal /> : null}
               {mountLevel >= 1 ? <AIPlaylistCard /> : null}
+              {mountLevel >= 1 ? <MixSection /> : null}
               {mountLevel >= 1 ? <NewReleasesSection /> : null}
               {mountLevel >= 2 ? <TopChartsSection /> : null}
               {mountLevel >= 2 ? <CollectionSection /> : null}

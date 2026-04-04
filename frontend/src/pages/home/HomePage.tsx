@@ -20,6 +20,7 @@ import {
   Star,
   BarChart3,
   WifiOff,
+  Trophy,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -493,18 +494,24 @@ const ResponsiveRail = ({
 const HomePage = () => {
   const {
     fetchFeaturedSongs,
-    fetchMadeForYouSongs,
+    fetchDailyMixSongs,
     fetchTrendingSongs,
     fetchAlbums,
-    madeForYouSongs,
+    fetchQuickPicks,
+    dailyMixSongs,
     featuredSongs,
+    quickPicks,
     trendingSongs,
     albums,
   } = useMusicStore();
 
   const {
     homepageData,
+    dailyMix,
+    weeklyMix,
     fetchHomepage,
+    fetchDailyMix,
+    fetchWeeklyMix,
   } = useStreamStore();
 
   const navigate = useNavigate();
@@ -570,11 +577,12 @@ const HomePage = () => {
     };
   }, []);
 
-  // Shuffled recently played for Quick Picks — session-stable
+  // Shuffled weighted favorites/recently played for Quick Picks — session-stable
   const quickPickSongs = useMemo(() => {
-    if (recentlyPlayed.length === 0) return featuredSongs.slice(0, 6);
+    const source = quickPicks.length > 0 ? quickPicks : recentlyPlayed;
+    if (source.length === 0) return featuredSongs.slice(0, 6);
 
-    const copy = [...recentlyPlayed];
+    const copy = [...source];
     const seed = sessionStorage.getItem("quickPickSeed") || Date.now().toString();
     if (!sessionStorage.getItem("quickPickSeed")) {
       sessionStorage.setItem("quickPickSeed", seed);
@@ -613,7 +621,7 @@ const HomePage = () => {
 
   const isInitialLoading =
     featuredSongs.length === 0 &&
-    madeForYouSongs.length === 0 &&
+    dailyMixSongs.length === 0 &&
     trendingSongs.length === 0 &&
     albums.length === 0 &&
     !homepageData;
@@ -641,9 +649,11 @@ const HomePage = () => {
 
       await Promise.all([
         fetchFeaturedSongs(true),
-        fetchMadeForYouSongs(true),
+        fetchDailyMixSongs(true),
         fetchTrendingSongs(true),
         fetchAlbums(true),
+        fetchQuickPicks(true),
+        fetchDailyMix(),
         fetchHomepage().then(() => {
           homepageAttempted.current = true;
           setHomepageSettled(true);
@@ -671,7 +681,7 @@ const HomePage = () => {
         setPullDistance(0);
       }, 400);
     }
-  }, [isRefreshing, fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs, fetchAlbums, fetchHomepage, isSignedIn]);
+  }, [isRefreshing, fetchFeaturedSongs, fetchDailyMixSongs, fetchTrendingSongs, fetchAlbums, fetchHomepage, isSignedIn]);
 
   // Pull-to-refresh handlers
   const handlePullStart = useCallback(
@@ -778,15 +788,18 @@ const HomePage = () => {
   }, [heroSong?.imageUrl]);
 
   useEffect(() => {
-    if (!currentSong && madeForYouSongs.length && featuredSongs.length && trendingSongs.length) {
-      initializeQueue([...featuredSongs, ...madeForYouSongs, ...trendingSongs]);
+    if (!currentSong && dailyMixSongs.length && featuredSongs.length && trendingSongs.length) {
+      initializeQueue([...featuredSongs, ...dailyMixSongs, ...trendingSongs]);
     }
-  }, [initializeQueue, currentSong, madeForYouSongs, featuredSongs, trendingSongs]);
+  }, [initializeQueue, currentSong, dailyMixSongs, featuredSongs, trendingSongs]);
 
   // Fetch all data on mount
   useEffect(() => {
     fetchFeaturedSongs();
-    fetchMadeForYouSongs();
+    fetchDailyMixSongs();
+    fetchDailyMix();
+    fetchWeeklyMix();
+    fetchQuickPicks();
     fetchTrendingSongs();
     fetchAlbums();
 
@@ -806,7 +819,7 @@ const HomePage = () => {
       homepageAttempted.current = true;
       setHomepageSettled(true);
     }
-  }, [fetchFeaturedSongs, fetchMadeForYouSongs, fetchTrendingSongs, fetchAlbums, fetchHomepage]);
+  }, [fetchFeaturedSongs, fetchDailyMixSongs, fetchTrendingSongs, fetchAlbums, fetchHomepage]);
 
   // Fetch recently played with caching
   useEffect(() => {
@@ -1104,15 +1117,89 @@ const HomePage = () => {
           )}
         </SignedIn>
 
-        {/* Fallback: Made For You + Trending — only when JioSaavn unavailable */}
+        {/* ─── Daily Mix (External) ─── */}
+        {dailyMix && dailyMix.length > 0 && (
+          <LazySection fallbackHeight={280}>
+            <section>
+              <SectionHeader icon={Sparkles} title="Daily Mix" gradient="bg-gradient-to-br from-pink-500/20 to-rose-500/20" />
+              <ResponsiveRail isTouchDevice={isTouchDevice}>
+                {dailyMix.slice(0, 12).map((song) => (
+                  <div key={song.externalId} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                    <ExternalCard
+                      title={song.title}
+                      subtitle={song.artist}
+                      imageUrl={song.imageUrl}
+                      onClick={() => handlePlayRecentSong(song as any)}
+                      isTouchDevice={isTouchDevice}
+                    />
+                  </div>
+                ))}
+              </ResponsiveRail>
+            </section>
+          </LazySection>
+        )}
+
+        {/* ─── Weekly Mix (The Weekend Vibe) ─── */}
+        {weeklyMix && (
+          <LazySection fallbackHeight={280}>
+            <section>
+              <SectionHeader 
+                icon={Trophy} 
+                title={weeklyMix.eligible ? (weeklyMix.metadata?.name || "The Weekend Vibe") : "The Weekly Recap"} 
+                gradient="bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20" 
+              />
+              {weeklyMix.eligible ? (
+                <ResponsiveRail isTouchDevice={isTouchDevice}>
+                  {weeklyMix.songs?.slice(0, 20).map((song: any) => (
+                    <div key={song._id || song.externalId} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
+                      <ExternalCard
+                        title={song.title}
+                        subtitle={song.artist}
+                        imageUrl={song.imageUrl}
+                        onClick={() => handlePlayRecentSong(song as any)}
+                        isTouchDevice={isTouchDevice}
+                      />
+                    </div>
+                  ))}
+                </ResponsiveRail>
+              ) : (
+                <div className="bg-gradient-to-br from-zinc-800 to-zinc-900 border border-zinc-700/50 rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-center gap-6">
+                  <div className="w-16 h-16 rounded-full bg-violet-500/10 flex items-center justify-center shrink-0">
+                    <Trophy className="w-8 h-8 text-violet-400" />
+                  </div>
+                  <div className="flex-1 text-center sm:text-left">
+                    <h3 className="text-xl font-bold text-white mb-2">Almost at your Weekly Mix!</h3>
+                    <p className="text-zinc-400 text-sm mb-4 max-w-lg">
+                      Listen to {20 - (weeklyMix.progress?.count || 0)} more songs or {Math.max(0, 60 - (weeklyMix.progress?.minutes || 0))} mins of music to unlock your personalized recap AI mix.
+                    </p>
+                    <div className="w-full max-w-md space-y-2">
+                       <div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-violet-500 transition-all duration-500" 
+                            style={{ width: `${Math.min(100, (Math.max((weeklyMix.progress?.count || 0)/20, (weeklyMix.progress?.minutes || 0)/60)) * 100)}%` }} 
+                          />
+                       </div>
+                       <div className="flex justify-between text-[10px] font-bold text-violet-400 uppercase tracking-wider">
+                          <span>{weeklyMix.progress?.count || 0} / 20 Songs</span>
+                          <span>{weeklyMix.progress?.minutes || 0} / 60 Mins</span>
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+          </LazySection>
+        )}
+
+        {/* Fallback: Internal Daily Mix + Trending — only when JioSaavn unavailable */}
         {showFallbackSections && (
           <>
-            {madeForYouSongs.length > 0 && (
+            {dailyMixSongs.length > 0 && (
               <LazySection fallbackHeight={280}>
                 <section>
-                  <SectionHeader icon={Music2} title="Made For You" gradient="bg-gradient-to-br from-emerald-500/20 to-teal-500/20" />
+                  <SectionHeader icon={Music2} title="Daily Mix (Vibra Originals)" gradient="bg-gradient-to-br from-emerald-500/20 to-teal-500/20" />
                   <ResponsiveRail isTouchDevice={isTouchDevice}>
-                    {madeForYouSongs.slice(0, 12).map((song) => (
+                    {dailyMixSongs.slice(0, 12).map((song) => (
                       <div key={song._id} className="w-36 lg:w-40 xl:w-44 flex-shrink-0">
                         <SongCard
                           song={song}

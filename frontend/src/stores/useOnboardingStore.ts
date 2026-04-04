@@ -1,10 +1,10 @@
-// src/stores/useOnboardingStore.ts
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { axiosInstance } from "../lib/axios";
 
 export interface UserMusicPreferences {
   languages: string[];
-  completed: boolean;
+  completedOnboarding: boolean;
 }
 
 const AVAILABLE_LANGUAGES = [
@@ -35,6 +35,8 @@ interface OnboardingStore {
   toggleLanguage: (language: string) => void;
   completeOnboarding: () => void;
   resetOnboarding: () => void;
+  fetchPreferences: () => Promise<void>;
+  syncPreferences: (prefs: Partial<UserMusicPreferences & { completedOnboarding: boolean }>) => Promise<void>;
   getLanguageString: () => string;
   shouldShowOnboarding: () => boolean;
 }
@@ -44,15 +46,17 @@ export const useOnboardingStore = create<OnboardingStore>()(
     (set, get) => ({
       preferences: {
         languages: [],
-        completed: false,
+        completedOnboarding: false,
       },
       availableLanguages: AVAILABLE_LANGUAGES,
       showOnboarding: false,
 
-      setLanguages: (languages) =>
+      setLanguages: (languages) => {
         set((state) => ({
           preferences: { ...state.preferences, languages },
-        })),
+        }));
+        get().syncPreferences({ languages });
+      },
 
       toggleLanguage: (language) =>
         set((state) => {
@@ -65,17 +69,43 @@ export const useOnboardingStore = create<OnboardingStore>()(
           };
         }),
 
-      completeOnboarding: () =>
+      completeOnboarding: () => {
+        const { languages } = get().preferences;
         set((state) => ({
-          preferences: { ...state.preferences, completed: true },
+          preferences: { ...state.preferences, completedOnboarding: true },
           showOnboarding: false,
-        })),
+        }));
+        get().syncPreferences({ completedOnboarding: true, languages });
+      },
 
       resetOnboarding: () =>
         set({
-          preferences: { languages: [], completed: false },
+          preferences: { languages: [], completedOnboarding: false },
           showOnboarding: true,
         }),
+
+      fetchPreferences: async () => {
+        try {
+          const res = await axiosInstance.get("/users/me/preferences");
+          const data = res.data;
+          set({
+            preferences: {
+              languages: data.languages || [],
+              completedOnboarding: data.completedOnboarding || false,
+            }
+          });
+        } catch (error) {
+          console.error("[OnboardingStore] Failed to fetch preferences:", error);
+        }
+      },
+
+      syncPreferences: async (prefs) => {
+        try {
+          await axiosInstance.post("/users/me/preferences", prefs);
+        } catch (error) {
+          console.error("[OnboardingStore] Failed to sync preferences:", error);
+        }
+      },
 
       getLanguageString: () => {
         const langs = get().preferences.languages;
@@ -84,7 +114,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
       },
 
       shouldShowOnboarding: () => {
-        return !get().preferences.completed;
+        return !get().preferences.completedOnboarding;
       },
     }),
     {

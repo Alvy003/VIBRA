@@ -147,7 +147,7 @@ export default function SongOptions({ song, trigger }: SongOptionsProps) {
     return (
         <>
             <TouchableOpacity onPress={handlePresentModalPress}>
-                {trigger || <MoreVertical size={20} color="#71717a" />}
+                {trigger || <MoreVertical size={20} color="#b3b3b3" />}
             </TouchableOpacity>
 
             <BottomSheetModal

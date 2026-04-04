@@ -11,6 +11,8 @@ import {
   unlikeExternalSong,
   getUnreadCounts,       // NEW
   markMessagesRead,      // NEW
+  getUserPreferences,    // NEW
+  updateUserPreferences, // NEW
 } from "../controller/user.controller.js";
 
 const router = Router();
@@ -30,6 +32,8 @@ router.delete("/me/unlike/:songId", protectRoute, unlikeSong);
 
 // Liked songs — external
 router.post("/me/like-external", protectRoute, likeExternalSong);
-router.delete("/me/unlike-external/:externalId", protectRoute, unlikeExternalSong);
+// User Preferences
+router.get("/me/preferences", protectRoute, getUserPreferences);
+router.post("/me/preferences", protectRoute, updateUserPreferences);
 
 export default router;

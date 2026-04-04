@@ -102,14 +102,14 @@ const QuickPickCard = React.memo(({
 });
 
 export const QuickPicksGrid = React.memo(() => {
-  const recentlyPlayed = useMusicStore(s => s.recentlyPlayed);
+  const quickPicks = useMusicStore(s => s.quickPicks);
   const featuredSongs = useMusicStore(s => s.featuredSongs);
   const playTrack = usePlayerStore(s => s.playTrack);
 
-  const quickPicks = useMemo(() => {
-    if (recentlyPlayed.length > 0) return recentlyPlayed.slice(0, 6);
+  const displayPicks = useMemo(() => {
+    if (quickPicks.length > 0) return quickPicks.slice(0, 6);
     return featuredSongs.slice(0, 6);
-  }, [recentlyPlayed, featuredSongs]);
+  }, [quickPicks, featuredSongs]);
   
   const timeOfDay = useMemo(() => getTimeOfDay(), []);
   const accentColor = TIME_GRADIENTS[timeOfDay].accent;
@@ -129,8 +129,8 @@ export const QuickPicksGrid = React.memo(() => {
   if (quickPicks.length === 0) return null;
 
   const rows = [];
-  for (let i = 0; i < quickPicks.length; i += 2) {
-    rows.push(quickPicks.slice(i, i + 2));
+  for (let i = 0; i < displayPicks.length; i += 2) {
+    rows.push(displayPicks.slice(i, i + 2));
   }
 
   return (
@@ -165,7 +165,7 @@ QuickPicksGrid.displayName = 'QuickPicksGrid';
 
 const styles = StyleSheet.create({
   container: {
-    paddingTop: 8,
+    paddingTop: 2,
   },
   header: {
     flexDirection: 'row',

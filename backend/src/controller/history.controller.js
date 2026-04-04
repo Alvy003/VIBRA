@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 export const trackPlay = async (req, res, next) => {
   try {
     const userId = req.auth.userId;
-    const { songId, completionPercentage, playDuration, isExternal, externalData } = req.body;
+    const { songId, completionPercentage, playDuration, isExternal, externalData, context } = req.body;
 
     if (!songId) {
       return res.status(400).json({ message: "songId required" });
@@ -25,6 +25,7 @@ export const trackPlay = async (req, res, next) => {
       existing.playedAt = new Date();
       existing.completionPercentage = completionPercentage || existing.completionPercentage;
       existing.playDuration = playDuration || existing.playDuration;
+      existing.context = context || existing.context;
       await existing.save();
       return res.status(200).json({ success: true });
     }
@@ -36,6 +37,7 @@ export const trackPlay = async (req, res, next) => {
       isExternal: isExternal || false,
       completionPercentage: completionPercentage || 100,
       playDuration: playDuration || 0,
+      context: context || null,
     };
 
     // Store external song data
@@ -48,14 +50,15 @@ export const trackPlay = async (req, res, next) => {
         source: externalData.source || "jiosaavn",
         externalId: externalData.externalId || songId,
         album: externalData.album || "",
+        albumId: externalData.albumId || "",
         streamUrl: externalData.streamUrl || "",
       };
     }
 
     await PlayHistory.create(entry);
 
-    // Keep only last 50 records per user
-    const MAX_HISTORY = 50;
+    // Keep last 200 entries for better recommendations
+    const MAX_HISTORY = 200;
     const historyCount = await PlayHistory.countDocuments({ userId });
 
     if (historyCount > MAX_HISTORY) {
@@ -168,6 +171,118 @@ export const getRecentlyPlayed = async (req, res, next) => {
     res.json(cleaned);
   } catch (error) {
     console.error("Error fetching recently played:", error);
+    next(error);
+  }
+};
+
+// Get recently played collections (albums/playlists identified from song history)
+export const getRecentCollections = async (req, res, next) => {
+  try {
+    const userId = req.auth.userId;
+    
+    // 1. Get recent plays to extract albums/playlists
+    const recentPlays = await PlayHistory.find({ userId })
+      .sort({ playedAt: -1 })
+      .limit(100)
+      .lean();
+
+    const collections = new Map();
+
+    // 2. Extract from history
+    for (const play of recentPlays) {
+      // 2a. Priority: Playback Context (Accurate Playlist/Album context)
+      if (play.context && (play.context.type === 'album' || play.context.type === 'playlist')) {
+        const type = play.context.type;
+        const id = play.context.id;
+        const title = play.context.title || "Untitled Collection";
+        const source = (id && id.includes('yt_')) ? 'youtube' : 'jiosaavn';
+        const key = `${source}_${type}_${id}`;
+
+        if (!collections.has(key)) {
+          collections.set(key, {
+            _id: id,
+            type,
+            source,
+            title,
+            artist: type === 'album' ? (play.externalData?.artist || "Various Artists") : "Playlist",
+            imageUrl: play.externalData?.imageUrl || "",
+            lastPlayedAt: play.playedAt,
+          });
+        }
+        continue; // Context is the most accurate, skip album-name fallback if context exists
+      }
+
+      // 2b. Fallback: Album name from track metadata (Backward compatibility)
+      if (play.isExternal && play.externalData && play.externalData.album) {
+        const albumName = play.externalData.album;
+        const albumId = play.externalData.albumId || "";
+        const source = play.externalData.source || "jiosaavn";
+        
+        // Prioritize albumId if it exists, otherwise use name as key
+        const key = albumId ? `${source}_album_${albumId}` : `${source}_album_${albumName}`;
+        
+        if (!collections.has(key)) {
+          collections.set(key, {
+            _id: albumId || albumName, // Prefer the real ID
+            type: "album",
+            source,
+            title: albumName,
+            artist: play.externalData.artist || "Various Artists",
+            imageUrl: play.externalData.imageUrl || "",
+            lastPlayedAt: play.playedAt,
+          });
+        }
+      }
+    }
+
+    // 3. Get Saved Items (Playlists/Albums)
+    const { SavedItem } = await import("../models/savedItem.model.js");
+    const savedItems = await SavedItem.find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    for (const item of savedItems) {
+      const key = `${item.source}_${item.type}_${item.externalId}`;
+      if (!collections.has(key)) {
+        collections.set(key, {
+            _id: item.externalId,
+            type: item.type,
+            source: item.source,
+            title: item.title,
+            artist: item.artist,
+            imageUrl: item.imageUrl,
+            lastPlayedAt: item.createdAt, // Use creation as fallback
+            isSaved: true
+        });
+      }
+    }
+
+    // 4. Resolve IDs for items that only have names (backward compatibility)
+    const { jiosaavn } = await import("../lib/streamProviders.js");
+    
+    const resolveList = Array.from(collections.values()).sort((a, b) => {
+        return new Date(b.lastPlayedAt).getTime() - new Date(a.lastPlayedAt).getTime();
+    }).slice(0, 8); // Only the top 8
+
+    for (let i = 0; i < resolveList.length; i++) {
+        const item = resolveList[i];
+        if (item.source === "jiosaavn" && item.type === "album" && (!item._id || item._id === item.title)) {
+            // It's a name-only ID, resolve it
+            try {
+                const results = await jiosaavn.searchAlbums(item.title, 1);
+                if (results && results.length > 0) {
+                    item._id = results[0]._id; // This is the numeric ID
+                }
+            } catch (err) {
+                console.error("Resolve failed for:", item.title);
+            }
+        }
+    }
+
+    res.json(resolveList);
+  } catch (error) {
+    console.error("Error fetching recent collections:", error);
     next(error);
   }
 };

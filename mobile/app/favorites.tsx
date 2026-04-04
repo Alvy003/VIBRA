@@ -56,7 +56,7 @@ export default function FavoritesScreen() {
     return (
         <View style={styles.container}>
             <LinearGradient
-                colors={['#4c1d95', '#1e1b4b', '#000000']}
+                colors={['#4c1d95', '#310a5b', '#000000']}
                 style={StyleSheet.absoluteFill}
             />
 

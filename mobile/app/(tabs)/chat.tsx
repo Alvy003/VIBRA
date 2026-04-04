@@ -16,7 +16,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, {
   FadeOut,
   useSharedValue,
@@ -146,6 +146,7 @@ const MessageBubble = React.memo(({ item, onOpenPlaylist }: { item: Message, onO
 
 export default function ChatScreen() {
   const router = useRouter();
+  const { query } = useLocalSearchParams();
   const { getToken } = useAuth();
   const { user } = useUser();
   const { 
@@ -235,6 +236,13 @@ export default function ChatScreen() {
     }
     prevLength.current = messages.length;
   }, [messages]);
+
+  // Handle incoming query from Home screen
+  useEffect(() => {
+    if (query && typeof query === 'string' && query.length > 0) {
+      handleSend(query);
+    }
+  }, [query]);
 
   return (
     <View style={styles.container}>
@@ -362,14 +370,14 @@ export default function ChatScreen() {
                       <Text style={styles.platformChipText}>YouTube</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity 
+                    {/* <TouchableOpacity 
                       activeOpacity={0.8}
                       onPress={() => { setActivePlatform('ytmusic'); setShowImportModal(true); }}
                       style={[styles.modeChip, styles.platformChip]}
                     >
                       <Image source={require('../../assets/images/youtube_music.png')} style={styles.chipIcon} />
                       <Text style={styles.platformChipText}>YT Music</Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity> */}
                   </>
                 )}
               </View>
@@ -682,6 +690,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
     borderTopWidth: 1,
     borderTopColor: '#18181b',
+    marginBottom: 0,
   },
   modeSwitcherContent: {
     paddingHorizontal: 20,

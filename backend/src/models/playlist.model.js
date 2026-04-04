@@ -12,6 +12,13 @@ const playlistSchema = new mongoose.Schema(
     userId: { type: String, default: null, index: true }, // null = admin playlist
     isFeatured: { type: Boolean, default: false },
     isPublic: { type: Boolean, default: true },
+    
+    // Metadata for imported or AI-generated playlists
+    metadata: {
+      spotifyId: { type: String, index: true },
+      source: { type: String },
+      importStatus: { type: String, enum: ['pending', 'completed'], default: 'completed' }
+    }
   },
   { timestamps: true }
 );

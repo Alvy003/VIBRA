@@ -1,21 +1,36 @@
-// app/(tabs)/downloads.tsx
-import React, { useMemo } from 'react';
-import { View, Text, FlatList, TouchableOpacity, SafeAreaView, StyleSheet, StatusBar } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, FlatList, TouchableOpacity, SafeAreaView, StyleSheet, StatusBar, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
-import { ChevronLeft, Play, Shuffle, Download, Music } from 'lucide-react-native';
-import { useDownloadStore } from '@/stores/useDownloadStore';
+import { ArrowLeft, Play, Shuffle, Download, Music, User, Disc } from 'lucide-react-native';
+import { useDownloadStore, DownloadedSong, DownloadedCollection } from '@/stores/useDownloadStore';
+import { DownloadedIcon } from '@/components/DownloadedIcon';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { TrackListItem } from '@/components/TrackListItem';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
+import { resolveAssetUrl } from '@/lib/url';
+
+const { width } = Dimensions.get('window');
+
+type DownloadTab = 'songs' | 'playlists' | 'albums';
 
 export default function DownloadsScreen() {
     const router = useRouter();
-    const { downloadedSongs } = useDownloadStore();
+    const { downloadedSongs, downloadedPlaylists, downloadedAlbums } = useDownloadStore();
     const { playTrack, initializeQueue } = usePlayerStore();
+    const [activeTab, setActiveTab] = useState<DownloadTab>('songs');
 
     const songs = useMemo(() => {
         return Object.values(downloadedSongs).sort((a, b) => b.downloadedAt - a.downloadedAt);
     }, [downloadedSongs]);
+
+    const playlists = useMemo(() => {
+        return Object.values(downloadedPlaylists).sort((a, b) => b.downloadedAt - a.downloadedAt);
+    }, [downloadedPlaylists]);
+
+    const albums = useMemo(() => {
+        return Object.values(downloadedAlbums).sort((a, b) => b.downloadedAt - a.downloadedAt);
+    }, [downloadedAlbums]);
 
     const handlePlayAll = async (shuffle = false) => {
         if (songs.length === 0) return;
@@ -39,82 +54,154 @@ export default function DownloadsScreen() {
         <View className="flex-1 bg-black">
             <StatusBar barStyle="light-content" />
             <LinearGradient
-                colors={['#0891b2', '#000000']}
+                colors={['#4c1d95', '#000000']}
                 style={StyleSheet.absoluteFill}
                 start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 0.4 }}
+                end={{ x: 0.5, y: 0.5 }}
             />
 
-            <SafeAreaView className="flex-1">
+            <SafeAreaView className="flex-1 pt-6">
                 {/* Header */}
-                <View className="flex-row items-center px-4 py-4 justify-between">
-                    <View className="w-10" />
-                    <Text className="text-white text-lg font-bold">Downloads</Text>
+                <View className="flex-row items-center px-4 py-4">
+                    <TouchableOpacity 
+                        onPress={() => router.back()}
+                        className="w-10 h-10 items-center justify-center"
+                    >
+                        <ArrowLeft size={28} color="white" />
+                    </TouchableOpacity>
+                    <View className="flex-1 items-center">
+                        <Text className="text-white text-lg font-bold">Downloads</Text>
+                    </View>
                     <View className="w-10" />
                 </View>
 
                 {/* Hero section */}
-                <View className="px-6 py-8">
-                    <Text className="text-white text-4xl font-black mb-2">Offline Music</Text>
+                <View className="px-6 pb-6 pt-2">
+                    <Text className="text-white text-4xl font-black mb-2">
+                        {activeTab === 'songs' ? 'Offline Music' : activeTab === 'playlists' ? 'Offline Playlists' : 'Offline Albums'}
+                    </Text>
                     <Text className="text-zinc-400 text-base mb-6">
-                        {songs.length} tracks available for offline playback
+                        {activeTab === 'songs' ? songs.length : activeTab === 'playlists' ? playlists.length : albums.length} items available
                     </Text>
 
                     <View className="flex-row items-center space-x-4">
                         <TouchableOpacity 
                             onPress={() => handlePlayAll(false)}
-                            className="flex-1 flex-row items-center justify-center bg-cyan-500 py-4 rounded-full"
+                            className="flex-1 flex-row items-center justify-center bg-[#8B5CF6] py-3.5 rounded-full"
                         >
-                            <Play size={22} color="black" fill="black" />
-                            <Text className="text-black font-bold ml-2 text-lg">Play All</Text>
+                            <Play size={20} color="white" fill="white" />
+                            <Text className="text-white font-bold ml-2 text-lg">Play All</Text>
                         </TouchableOpacity>
                         
                         <TouchableOpacity 
                             onPress={() => handlePlayAll(true)}
-                            className="w-16 h-16 items-center justify-center bg-zinc-800 rounded-full"
+                            className="w-14 h-14 items-center justify-center bg-zinc-800/80 rounded-full"
                         >
-                            <Shuffle size={24} color="white" />
+                            <Shuffle size={22} color="white" />
                         </TouchableOpacity>
                     </View>
                 </View>
 
+                {/* Tabs */}
+                <View className="flex-row px-4 mb-4 border-b border-zinc-800/50">
+                    {(['songs', 'playlists', 'albums'] as const).map((tab) => (
+                        <TouchableOpacity
+                            key={tab}
+                            onPress={() => setActiveTab(tab)}
+                            className={`pb-3 px-4 mr-2 ${activeTab === tab ? 'border-b-2 border-[#8B5CF6]' : ''}`}
+                        >
+                            <Text className={`text-sm font-bold capitalize ${activeTab === tab ? 'text-white' : 'text-zinc-500'}`}>
+                                {tab}
+                            </Text>
+                        </TouchableOpacity>
+                    ))}
+                </View>
+
                 {/* List */}
                 <FlatList
-                    data={songs}
+                    data={(activeTab === 'songs' ? songs : activeTab === 'playlists' ? playlists : albums) as any[]}
                     keyExtractor={(item) => item.id}
-                    renderItem={({ item, index }) => (
-                        <TrackListItem
-                            track={{
-                                id: item.id,
-                                title: item.title,
-                                artist: item.artist,
-                                imageUrl: item.artwork,
-                                url: item.localUri,
-                                duration: item.duration
-                            }}
-                            index={index}
-                            isCurrent={false}
-                            onPress={() => {
-                                playTrack({
-                                    id: item.id,
-                                    title: item.title,
-                                    artist: item.artist,
-                                    url: item.localUri,
-                                    artwork: item.artwork,
-                                    duration: item.duration
-                                });
-                            }}
-                        />
-                    )}
-                    contentContainerStyle={{ paddingBottom: 100 }}
+                    renderItem={({ item, index }) => {
+                        if (activeTab === 'songs') {
+                            const song = item as DownloadedSong;
+                            return (
+                                <TrackListItem
+                                    track={{
+                                        id: song.id,
+                                        title: song.title,
+                                        artist: song.artist,
+                                        imageUrl: song.artwork,
+                                        url: song.localUri,
+                                        duration: song.duration
+                                    }}
+                                    index={index}
+                                    isCurrent={false}
+                                    onPress={() => {
+                                        playTrack({
+                                            id: song.id,
+                                            title: song.title,
+                                            artist: song.artist,
+                                            url: song.localUri,
+                                            artwork: song.artwork,
+                                            duration: song.duration
+                                        });
+                                    }}
+                                />
+                            );
+                        }
+
+                        const collection = item as DownloadedCollection;
+                        const resolvedUri = resolveAssetUrl(collection.artwork);
+                        const isAlbum = activeTab === 'albums';
+
+                        return (
+                            <TouchableOpacity
+                                className="flex-row items-center px-4 py-3 mb-1"
+                                onPress={() => {
+                                    let route = '';
+                                    const rawId = collection.id;
+                                    if (isAlbum) {
+                                        route = rawId.startsWith('jiosaavn_')
+                                            ? `/(tabs)/album/external/jiosaavn/${rawId.replace('jiosaavn_album_', '')}`
+                                            : `/(tabs)/album/${rawId}`;
+                                    } else {
+                                        route = rawId.startsWith('jiosaavn_')
+                                            ? `/(tabs)/playlist/external/jiosaavn/${rawId.replace('jiosaavn_playlist_', '')}`
+                                            : `/(tabs)/playlist/${rawId}`;
+                                    }
+                                    router.push(route as any);
+                                }}
+                            >
+                                <View className="w-14 h-14 bg-zinc-900 rounded-md overflow-hidden mr-4 items-center justify-center">
+                                    {resolvedUri ? (
+                                        <Image source={{ uri: resolvedUri }} style={{ width: '100%', height: '100%' }} />
+                                    ) : (
+                                        isAlbum ? <Disc size={24} color="#52525b" /> : <Music size={24} color="#52525b" />
+                                    )}
+                                </View>
+                                <View className="flex-1">
+                                    <View className="flex-row items-center">
+                                        <View className="mr-2">
+                                            <DownloadedIcon size={12} />
+                                        </View>
+                                        <Text className="text-white font-medium text-base flex-1" numberOfLines={1}>{collection.title}</Text>
+                                    </View>
+                                    <Text className="text-zinc-500 text-xs mt-1" numberOfLines={1}>
+                                        {isAlbum ? 'Album' : 'Playlist'} • {collection.artist} • {collection.songIds?.length || 0} songs
+                                    </Text>
+                                </View>
+                            </TouchableOpacity>
+                        );
+                    }}
+                    contentContainerStyle={{ paddingBottom: 120 }}
                     ListEmptyComponent={
                         <View className="py-20 items-center justify-center px-10">
                             <View className="w-20 h-20 bg-zinc-900 rounded-full items-center justify-center mb-6">
                                 <Download size={40} color="#52525b" />
                             </View>
-                            <Text className="text-white text-xl font-bold mb-2">No downloads yet</Text>
+                            <Text className="text-white text-xl font-bold mb-2">No {activeTab} yet</Text>
                             <Text className="text-zinc-400 text-center">
-                                Tracks you download will appear here for offline listening.
+                                Downloaded {activeTab} will appear here for offline listening.
                             </Text>
                         </View>
                     }

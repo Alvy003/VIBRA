@@ -6,14 +6,23 @@ import { shouldStopAfterCurrentSong, clearStopAfterCurrentSong } from "@/compone
 
 const AudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Hidden preloader for next song buffering
+  const preloadAudioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
   const currentSongIdRef = useRef<string | null>(null);
   const isSwitchingRef = useRef(false);
   const isFirstLoadRef = useRef(true);
   const wasPlayingBeforeOfflineRef = useRef(false);
-  // Track the current switch operation to cancel stale ones
+  // Incremented on each new song switch to cancel stale async chains
   const switchIdRef = useRef(0);
+  // Throttle rapid skip/previous presses from media session (hardware buttons)
+  const lastSkipTimeRef = useRef(0);
+  const SKIP_THROTTLE_MS = 400;
+  // Preload tracking
+  const preloadedSongIdRef = useRef<string | null>(null);
+  // Media session heartbeat timer
+  const msHeartbeatRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     currentSong,
@@ -26,6 +35,8 @@ const AudioPlayer = () => {
     volume,
     toggleShuffle,
     toggleRepeat,
+    displayQueue,
+    currentIndex,
   } = usePlayerStore();
 
   const hasMS = typeof navigator !== "undefined" && "mediaSession" in navigator;
@@ -34,7 +45,7 @@ const AudioPlayer = () => {
     (navigator.mediaSession as any) &&
     typeof (navigator.mediaSession as any).setPositionState === "function";
 
-  // Wake Lock
+  // ========== WAKE LOCK ==========
   const requestWakeLock = useCallback(async () => {
     if ("wakeLock" in navigator && isPlaying) {
       try {
@@ -64,7 +75,7 @@ const AudioPlayer = () => {
     return () => document.removeEventListener("visibilitychange", handler);
   }, [isPlaying, requestWakeLock]);
 
-  // Background playback
+  // ========== BACKGROUND PLAYBACK ==========
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -86,7 +97,7 @@ const AudioPlayer = () => {
     };
   }, [isPlaying]);
 
-  // iOS keep-alive
+  // ========== iOS KEEP-ALIVE ==========
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -183,7 +194,7 @@ const AudioPlayer = () => {
     };
   }, [currentSong, isPlaying, setIsPlaying]);
 
-  // Helpers
+  // ========== HELPERS ==========
   const resetMSPosition = () => {
     if (!canSetPos) return;
     try {
@@ -227,7 +238,7 @@ const AudioPlayer = () => {
     return proxyIfNeeded(url);
   };
 
-  // Smooth switch with switching guard and cancellation
+  // ========== SMOOTH SWITCH (fixed cancellation + isSwitchingRef cleanup) ==========
   const smoothSwitchAudio = async (
     audio: HTMLAudioElement,
     newSrc: string,
@@ -236,68 +247,100 @@ const AudioPlayer = () => {
   ) => {
     const FADE_OUT_MS = 120;
     const FADE_IN_MS = 150;
-    const steps = 10;
+    const steps = 8; // fewer steps = faster abort detection
     const startVolume = audio.volume;
 
     isSwitchingRef.current = true;
 
+    // Helper: check if this switch was superseded. Always cleans up before returning.
+    const isCancelled = () => switchIdRef.current !== thisSwitchId;
+
     try {
-      // Only fade out if currently playing something
+      // Fade out only if currently playing something
       if (!audio.paused && audio.src) {
         for (let i = steps; i >= 0; i--) {
-          // Check if this switch was cancelled by a newer one
-          if (switchIdRef.current !== thisSwitchId) return;
+          if (isCancelled()) {
+            // Restore volume so the winner switch starts from correct level
+            audio.volume = startVolume;
+            isSwitchingRef.current = false;
+            return;
+          }
           audio.volume = (startVolume * i) / steps;
-          await new Promise((r) => setTimeout(r, FADE_OUT_MS / steps));
+          await new Promise<void>((r) => setTimeout(r, FADE_OUT_MS / steps));
         }
         audio.pause();
       }
 
-      // Check cancellation again before loading new source
-      if (switchIdRef.current !== thisSwitchId) {
+      if (isCancelled()) {
+        audio.volume = startVolume;
         isSwitchingRef.current = false;
         return;
       }
 
+      // Stop any preload audio that was buffering the same or different song
+      if (preloadAudioRef.current) {
+        preloadAudioRef.current.src = "";
+        preloadedSongIdRef.current = null;
+      }
+
       audio.currentTime = 0;
+      audio.volume = startVolume; // restore before loading new src
       audio.src = newSrc;
       audio.load();
 
+      if (isCancelled()) {
+        isSwitchingRef.current = false;
+        return;
+      }
+
       if (shouldPlay) {
+        // Start at 0 volume and fade in
+        audio.volume = 0;
         await audio.play().catch(() => {});
       }
 
-      // Check cancellation after play
-      if (switchIdRef.current !== thisSwitchId) return;
+      if (isCancelled()) {
+        isSwitchingRef.current = false;
+        return;
+      }
 
       isSwitchingRef.current = false;
 
-      // Fade IN
-      for (let i = 0; i <= steps; i++) {
-        if (switchIdRef.current !== thisSwitchId) return;
-        audio.volume = (startVolume * i) / steps;
-        await new Promise((r) => setTimeout(r, FADE_IN_MS / steps));
+      if (!shouldPlay) {
+        audio.volume = startVolume;
+        return;
       }
 
-      // Ensure final volume is correct
+      // Fade in
+      for (let i = 0; i <= steps; i++) {
+        if (isCancelled()) {
+          audio.volume = startVolume;
+          return;
+        }
+        audio.volume = (startVolume * i) / steps;
+        await new Promise<void>((r) => setTimeout(r, FADE_IN_MS / steps));
+      }
+
       audio.volume = startVolume;
 
-      if (shouldPlay && hasMS) {
+      if (hasMS) {
         navigator.mediaSession.playbackState = "playing";
         setMSPositionFromAudio(audio);
       }
     } catch (e) {
       console.warn("Smooth switch failed", e);
-      if (switchIdRef.current !== thisSwitchId) return;
+      // Always clean up on error
       isSwitchingRef.current = false;
       audio.volume = startVolume;
-      audio.src = newSrc;
-      audio.load();
-      if (shouldPlay) audio.play().catch(() => {});
+      if (!isCancelled()) {
+        audio.src = newSrc;
+        audio.load();
+        if (shouldPlay) audio.play().catch(() => {});
+      }
     }
   };
 
-  // Volume sync
+  // ========== VOLUME SYNC ==========
   useEffect(() => {
     if (audioRef.current && !isSwitchingRef.current) {
       audioRef.current.volume = volume / 100;
@@ -309,17 +352,15 @@ const AudioPlayer = () => {
     if (!isFirstLoadRef.current) return;
     if (!audioRef.current) return;
     
-    // Only attempt resume if there's no current song loaded yet
     const store = usePlayerStore.getState();
-    if (store.currentSong) return; // Already has a song, skip resume
+    if (store.currentSong) return;
     
     const { lastPlayed } = usePreferencesStore.getState();
     if (!lastPlayed?.song) return;
     
     const age = Date.now() - lastPlayed.timestamp;
-    if (age > 24 * 60 * 60 * 1000) return; // Too old
+    if (age > 24 * 60 * 60 * 1000) return;
     
-    // Restore the song to the player without auto-playing
     usePlayerStore.setState({
       currentSong: lastPlayed.song,
       currentTime: lastPlayed.position,
@@ -327,7 +368,78 @@ const AudioPlayer = () => {
     });
   }, []);
 
-  // ========== LOAD NEW SONG (only when song actually changes) ==========
+  // ========== NEXT-SONG PRELOADER ==========
+  // Industry-standard: buffer the upcoming song while current is playing
+  useEffect(() => {
+    // Create the hidden preload element once
+    if (!preloadAudioRef.current) {
+      const el = new Audio();
+      el.preload = "auto";
+      el.muted = true; // silent — only for buffering
+      el.volume = 0;
+      preloadAudioRef.current = el;
+    }
+    return () => {
+      if (preloadAudioRef.current) {
+        preloadAudioRef.current.src = "";
+        preloadAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  // Determine next song from display queue
+  useEffect(() => {
+    const audio = audioRef.current;
+    const preload = preloadAudioRef.current;
+    if (!audio || !preload || !currentSong) return;
+
+    const nextSong = (() => {
+      if (currentIndex === -1 || displayQueue.length === 0) return null;
+      const upcoming = displayQueue.slice(currentIndex + 1);
+      return upcoming[0] || null;
+    })();
+
+    if (!nextSong) return;
+
+    const nextId = nextSong._id || nextSong.externalId || "";
+
+    // Only update preload when the track to preload actually changes
+    if (preloadedSongIdRef.current === nextId) return;
+
+    const preloadSong = () => {
+      if (isSwitchingRef.current) return; // don't preload during a switch
+      const src = getAudioSrc(nextSong);
+      if (!src) return;
+      preloadedSongIdRef.current = nextId;
+      preload.src = src;
+      preload.load();
+    };
+
+    // Start preloading when within 20s of end, or immediately if song is longer than 45s
+    const checkAndPreload = () => {
+      if (!audio.duration || !isPlaying) return;
+      const remaining = audio.duration - audio.currentTime;
+      if (remaining <= 20 && remaining > 0) {
+        preloadSong();
+      }
+    };
+
+    // Also preload proactively if next song changes while we have >20s left
+    // Do it after 3s of playing to avoid wasting bandwidth on short previews
+    const proactiveTimer = setTimeout(() => {
+      if (isPlaying && !preloadedSongIdRef.current) {
+        preloadSong();
+      }
+    }, 3000);
+
+    audio.addEventListener("timeupdate", checkAndPreload);
+    return () => {
+      clearTimeout(proactiveTimer);
+      audio.removeEventListener("timeupdate", checkAndPreload);
+    };
+  }, [currentSong, currentIndex, displayQueue, isPlaying]);
+
+  // ========== LOAD NEW SONG ==========
   useEffect(() => {
     if (!audioRef.current || !currentSong) return;
     const audio = audioRef.current;
@@ -338,7 +450,6 @@ const AudioPlayer = () => {
     }
     currentSongIdRef.current = songId;
 
-    // Increment switch ID to cancel any in-progress switch
     const thisSwitchId = ++switchIdRef.current;
 
     const shouldAutoPlay = isFirstLoadRef.current ? isPlaying : true;
@@ -382,6 +493,8 @@ const AudioPlayer = () => {
               ]
             : [],
         });
+        // Immediately mark as playing so OS doesn't hide the notification
+        navigator.mediaSession.playbackState = shouldAutoPlay ? "playing" : "paused";
       } catch {}
     }
 
@@ -393,27 +506,47 @@ const AudioPlayer = () => {
     };
   }, [currentSong]);
 
-  // ========== MEDIA SESSION ACTIONS ==========
+  // ========== MEDIA SESSION ACTIONS + HEARTBEAT ==========
+  // Use refs for the latest playNext/playPrevious so we only register handlers once
+  const playNextRef = useRef(playNext);
+  const playPreviousRef = useRef(playPrevious);
+  const setIsPlayingRef = useRef(setIsPlaying);
+  useEffect(() => { playNextRef.current = playNext; }, [playNext]);
+  useEffect(() => { playPreviousRef.current = playPrevious; }, [playPrevious]);
+  useEffect(() => { setIsPlayingRef.current = setIsPlaying; }, [setIsPlaying]);
+
   useEffect(() => {
-    if (!hasMS || !currentSong) return;
+    if (!hasMS) return;
+
+    const throttledSkip = (fn: () => void) => {
+      const now = Date.now();
+      if (now - lastSkipTimeRef.current < SKIP_THROTTLE_MS) return;
+      lastSkipTimeRef.current = now;
+      fn();
+    };
+
     try {
       navigator.mediaSession.setActionHandler?.("play", () => {
         audioRef.current?.play().catch(() => {});
-        setIsPlaying(true);
+        setIsPlayingRef.current(true);
         navigator.mediaSession.playbackState = "playing";
       });
       navigator.mediaSession.setActionHandler?.("pause", () => {
         audioRef.current?.pause();
-        setIsPlaying(false);
+        setIsPlayingRef.current(false);
         navigator.mediaSession.playbackState = "paused";
       });
       navigator.mediaSession.setActionHandler?.("previoustrack", () => {
-        setIsPlaying(true);
-        playPrevious();
+        throttledSkip(() => {
+          setIsPlayingRef.current(true);
+          playPreviousRef.current();
+        });
       });
       navigator.mediaSession.setActionHandler?.("nexttrack", () => {
-        setIsPlaying(true);
-        playNext();
+        throttledSkip(() => {
+          setIsPlayingRef.current(true);
+          playNextRef.current();
+        });
       });
       navigator.mediaSession.setActionHandler?.("seekto", (e: any) => {
         if (audioRef.current && typeof e.seekTime === "number") {
@@ -435,11 +568,46 @@ const AudioPlayer = () => {
       });
       navigator.mediaSession.setActionHandler?.("stop", () => {
         if (audioRef.current) { audioRef.current.pause(); audioRef.current.currentTime = 0; }
-        setIsPlaying(false);
+        setIsPlayingRef.current(false);
         navigator.mediaSession.playbackState = "none";
       });
     } catch {}
-  }, [currentSong, playNext, playPrevious, setIsPlaying]);
+
+    // Heartbeat: re-assert playback state every 20s so iOS/Android don't kill the session
+    msHeartbeatRef.current = setInterval(() => {
+      if (!hasMS) return;
+      const state = usePlayerStore.getState();
+      const audio = audioRef.current;
+      if (!audio || !state.currentSong) return;
+      try {
+        const expectedState = state.isPlaying && !audio.paused ? "playing" : "paused";
+        if (navigator.mediaSession.playbackState !== expectedState) {
+          navigator.mediaSession.playbackState = expectedState;
+        }
+        // Re-set metadata if it got wiped (some Android browsers clear it)
+        if (!navigator.mediaSession.metadata && state.currentSong) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: state.currentSong.title,
+            artist: state.currentSong.artist,
+            album: state.currentSong.album || "",
+            artwork: state.currentSong.imageUrl
+              ? [{ src: state.currentSong.imageUrl, sizes: "512x512", type: "image/png" }]
+              : [],
+          });
+        }
+        if (audio && !audio.paused) setMSPositionFromAudio(audio);
+      } catch {}
+    }, 20000);
+
+    return () => {
+      if (msHeartbeatRef.current) {
+        clearInterval(msHeartbeatRef.current);
+        msHeartbeatRef.current = null;
+      }
+    };
+  // Register once on mount — handlers use refs internally
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ========== YOUTUBE URL REFRESH ON ERROR ==========
   useEffect(() => {
@@ -472,7 +640,6 @@ const AudioPlayer = () => {
     if (!audio || isSwitchingRef.current) return;
 
     if (isPlaying) {
-      // Only play if we have a valid source
       if (audio.src && audio.src !== "" && audio.src !== window.location.href) {
         audio.play().catch(() => {});
         if (hasMS) navigator.mediaSession.playbackState = "playing";
@@ -499,7 +666,6 @@ const AudioPlayer = () => {
         setMSPositionFromAudio(audio);
         lastPosUpdate = now;
       }
-      // Save position every 5 seconds for resume capability
       if (now - lastSaveTime > 5000) {
         const cs = usePlayerStore.getState().currentSong;
         if (cs) {

@@ -18,11 +18,13 @@ export async function setupPlayer(): Promise<boolean> {
     });
 
     await TrackPlayer.updateOptions({
+      // Notification icon (resource name or required image)
+      icon: require('../assets/images/vibra-white.png'),
+
       // Android notification settings
       android: {
         appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
         alwaysPauseOnInterruption: true,
-        icon: require('../assets/images/vibra-512.png'),
         // @ts-ignore
         stopForegroundServiceOnPause: false, // Keeps controls alive in some Android 14 versions
       },
@@ -34,9 +36,6 @@ export async function setupPlayer(): Promise<boolean> {
         Capability.SkipToNext,
         Capability.SkipToPrevious,
         Capability.SeekTo,
-        Capability.Stop,
-        Capability.JumpForward,
-        Capability.JumpBackward,
       ],
 
       // Compact notification capabilities
@@ -53,9 +52,6 @@ export async function setupPlayer(): Promise<boolean> {
         Capability.SkipToNext,
         Capability.SkipToPrevious,
         Capability.SeekTo,
-        Capability.Stop,
-        Capability.JumpForward,
-        Capability.JumpBackward,
       ],
 
       // Progress updating info

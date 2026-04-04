@@ -5,6 +5,8 @@ import { Music, MoreVertical } from 'lucide-react-native';
 import { TrackSkeleton } from './Skeleton';
 import { resolveAssetUrl } from '@/lib/url';
 import SongOptions from './SongOptions';
+import { useDownloadStore } from '@/stores/useDownloadStore';
+import { DownloadedIcon } from './DownloadedIcon';
 
 interface TrackListItemProps {
   track: any;
@@ -12,6 +14,7 @@ interface TrackListItemProps {
   isCurrent: boolean;
   onPress: () => void;
   playlistImageUrl?: string | null;
+  accentColor?: string;
 }
 
 export const TrackListItem = React.memo(({ 
@@ -19,7 +22,8 @@ export const TrackListItem = React.memo(({
   index, 
   isCurrent, 
   onPress, 
-  playlistImageUrl 
+  playlistImageUrl,
+  accentColor = '#27272a'
 }: TrackListItemProps) => {
   const [isReady, setIsReady] = useState(false);
 
@@ -54,19 +58,33 @@ export const TrackListItem = React.memo(({
             transition={200}
           />
         ) : (
-          <Music size={20} color="#52525b" />
+          <View style={[styles.fallbackContainer, { backgroundColor: accentColor + '33' }]}>
+            <Music size={20} color={accentColor} />
+          </View>
         )}
       </View>
       <View style={styles.infoContainer}>
         <Text 
+          className="font-medium text-base"
           style={[styles.title, isCurrent && styles.activeText]} 
           numberOfLines={1}
         >
           {track.title}
         </Text>
-        <Text style={styles.artist} numberOfLines={1}>
-          {track.artist}
-        </Text>
+        <View style={styles.artistRow}>
+          {useDownloadStore.getState().isDownloaded(track.id || track.externalId || track._id) && (
+            <View style={{ marginRight: 6 }}>
+              <DownloadedIcon size={12} />
+            </View>
+          )}
+          <Text 
+            className="text-zinc-400 text-sm"
+            style={styles.artist} 
+            numberOfLines={1}
+          >
+            {track.artist}
+          </Text>
+        </View>
       </View>
       <SongOptions song={track} />
     </TouchableOpacity>
@@ -94,20 +112,27 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
   },
+  fallbackContainer: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   infoContainer: {
     flex: 1,
   },
   title: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
   },
   activeText: {
     color: '#8B5CF6',
   },
   artist: {
     color: '#71717a',
-    fontSize: 12,
+  },
+  artistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginTop: 2,
   },
   moreBtn: {

@@ -9,22 +9,24 @@ import { usePreferencesStore } from "./usePreferencesStore";
 // ===== CACHE CONFIGURATION =====
 const CACHE_CONFIG = {
   featuredSongs: 30 * 60 * 1000,      // 30 minutes
-  madeForYouSongs: 30 * 60 * 1000,   // 30 minutes
+  dailyMixSongs: 30 * 60 * 1000,     // 30 minutes
   trendingSongs: 30 * 60 * 1000,      // 30 minutes
   albums: 30 * 60 * 1000,            // 30 minutes
   songs: 30 * 60 * 1000,             // 30 minutes (admin songs list)
   stats: 30 * 60 * 1000,             // 30 minutes
   likedSongs: 30 * 60 * 1000,         // 30 minutes
+  quickPicks: 10 * 60 * 1000,         // 10 minutes
 };
 
 interface CacheTimestamps {
   featuredSongs: number;
-  madeForYouSongs: number;
+  dailyMixSongs: number;
   trendingSongs: number;
   albums: number;
   songs: number;
   stats: number;
   likedSongs: number;
+  quickPicks: number;
 }
 
 interface PatchAlbumSongsPayload {
@@ -40,10 +42,11 @@ interface MusicStore {
   error: string | null;
   currentAlbum: Album | null;
   featuredSongs: Song[];
-  madeForYouSongs: Song[];
+  dailyMixSongs: Song[];
   trendingSongs: Song[];
   stats: Stats;
   likedSongs: Song[];
+  quickPicks: Song[];
   searchResults: Song[];
   
   // Cache management
@@ -58,13 +61,14 @@ interface MusicStore {
   fetchAlbums: (forceRefresh?: boolean) => Promise<void>;
   fetchAlbumById: (id: string) => Promise<void>;
   fetchFeaturedSongs: (forceRefresh?: boolean) => Promise<void>;
-  fetchMadeForYouSongs: (forceRefresh?: boolean) => Promise<void>;
+  fetchDailyMixSongs: (forceRefresh?: boolean) => Promise<void>;
   fetchTrendingSongs: (forceRefresh?: boolean) => Promise<void>;
   fetchStats: (forceRefresh?: boolean) => Promise<void>;
   fetchSongs: (forceRefresh?: boolean) => Promise<void>;
   deleteSong: (id: string) => Promise<void>;
   deleteAlbum: (id: string) => Promise<void>;
   fetchLikedSongs: (forceRefresh?: boolean) => Promise<void>;
+  fetchQuickPicks: (forceRefresh?: boolean) => Promise<void>;
   likeSong: (id: string, songData?: any) => Promise<void>;
   unlikeSong: (id: string) => Promise<void>;
   searchSongs: (q: string) => Promise<void>;
@@ -85,10 +89,12 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
   isLoading: false,
   error: null,
   currentAlbum: null,
-  madeForYouSongs: [],
+  madeForYouSongs: [], // Legacy property preserved or just remove? I'll remove.
+  dailyMixSongs: [],
   featuredSongs: [],
   trendingSongs: [],
   likedSongs: [],
+  quickPicks: [],
   searchResults: [],
   stats: {
     totalSongs: 0,
@@ -100,12 +106,13 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
   // Cache timestamps - when data was last fetched
   _cacheTimestamps: {
     featuredSongs: 0,
-    madeForYouSongs: 0,
+    dailyMixSongs: 0,
     trendingSongs: 0,
     albums: 0,
     songs: 0,
     stats: 0,
     likedSongs: 0,
+    quickPicks: 0,
   },
   
   // Track which refreshes are in progress to avoid duplicates
@@ -191,31 +198,31 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     }
   },
 
-  // ===== MADE FOR YOU =====
-  fetchMadeForYouSongs: async (forceRefresh = false) => {
+  // ===== DAILY MIX =====
+  fetchDailyMixSongs: async (forceRefresh = false) => {
     const state = get();
-    const hasData = state.madeForYouSongs.length > 0;
-    const isFresh = state._isFresh("madeForYouSongs");
+    const hasData = state.dailyMixSongs.length > 0;
+    const isFresh = state._isFresh("dailyMixSongs");
     
     if (hasData && isFresh && !forceRefresh) return;
     
     if (hasData && !isFresh && !forceRefresh) {
-      if (state._pendingRefresh.has("madeForYouSongs")) return;
+      if (state._pendingRefresh.has("dailyMixSongs")) return;
       
-      set((s) => ({ _pendingRefresh: new Set(s._pendingRefresh).add("madeForYouSongs") }));
+      set((s) => ({ _pendingRefresh: new Set(s._pendingRefresh).add("dailyMixSongs") }));
       
       try {
         const response = await axiosInstance.get("/songs/made-for-you");
         set((s) => {
           const pending = new Set(s._pendingRefresh);
-          pending.delete("madeForYouSongs");
-          return { madeForYouSongs: response.data, _pendingRefresh: pending };
+          pending.delete("dailyMixSongs");
+          return { dailyMixSongs: response.data, _pendingRefresh: pending };
         });
-        get()._markFetched("madeForYouSongs");
+        get()._markFetched("dailyMixSongs");
       } catch (error) {
         set((s) => {
           const pending = new Set(s._pendingRefresh);
-          pending.delete("madeForYouSongs");
+          pending.delete("dailyMixSongs");
           return { _pendingRefresh: pending };
         });
       }
@@ -225,8 +232,8 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await axiosInstance.get("/songs/made-for-you");
-      set({ madeForYouSongs: response.data });
-      get()._markFetched("madeForYouSongs");
+      set({ dailyMixSongs: response.data });
+      get()._markFetched("dailyMixSongs");
     } catch (error: any) {
       set({ error: error.response?.data?.message || error.message });
     } finally {
@@ -409,7 +416,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
     // Force refresh all home page data in parallel
     await Promise.all([
       get().fetchFeaturedSongs(true),
-      get().fetchMadeForYouSongs(true),
+      get().fetchDailyMixSongs(true),
       get().fetchTrendingSongs(true),
       get().fetchAlbums(true),
     ]);
@@ -454,7 +461,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       }));
   
       // Invalidate caches that might contain this song
-      get()._invalidateCache(['featuredSongs', 'madeForYouSongs', 'trendingSongs', 'songs']);
+      get()._invalidateCache(['featuredSongs', 'dailyMixSongs', 'trendingSongs', 'songs']);
       
       toast.success("Song image updated successfully");
     } catch (error: any) {
@@ -490,7 +497,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
           : null,
       }));
   
-      get()._invalidateCache(['featuredSongs', 'madeForYouSongs', 'trendingSongs', 'songs']);
+      get()._invalidateCache(['featuredSongs', 'dailyMixSongs', 'trendingSongs', 'songs']);
       
       toast.success("Song audio updated successfully");
     } catch (error: any) {
@@ -518,7 +525,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
           : null,
       }));
       
-      get()._invalidateCache(['featuredSongs', 'madeForYouSongs', 'trendingSongs', 'songs']);
+      get()._invalidateCache(['featuredSongs', 'dailyMixSongs', 'trendingSongs', 'songs']);
       
       toast.success("Song updated successfully");
     } catch (error: any) {
@@ -587,7 +594,7 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
         songs: state.songs.filter((song) => song._id !== id),
       }));
       
-      get()._invalidateCache(['featuredSongs', 'madeForYouSongs', 'trendingSongs', 'songs', 'albums']);
+      get()._invalidateCache(['featuredSongs', 'dailyMixSongs', 'trendingSongs', 'songs', 'albums']);
       
       toast.success("Song deleted successfully");
     } catch (error: any) {
@@ -664,6 +671,17 @@ export const useMusicStore = create<MusicStore>((set, get) => ({
       get()._markFetched("likedSongs");
     } catch (err: any) {
       console.error("Error fetching liked songs", err);
+    }
+  },
+  
+  fetchQuickPicks: async (forceRefresh = false) => {
+    if (!forceRefresh && get()._isFresh("quickPicks")) return;
+    try {
+      const res = await axiosInstance.get("/stream/quick-picks");
+      set({ quickPicks: res.data });
+      get()._markFetched("quickPicks");
+    } catch (err: any) {
+      console.error("[MusicStore] Quick picks error:", err.message);
     }
   },
 

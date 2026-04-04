@@ -19,8 +19,23 @@ interface Album {
     imageUrl: string;
     songs: string[] | Song[];
     isActive?: boolean;
+    createdAt?: string | number;
 }
 
+interface Playlist {
+    _id: string;
+    title: string;
+    imageUrl: string;
+    songs: any[];
+    createdAt?: string | number;
+}
+
+interface SavedItem {
+    _id: string;
+    title: string;
+    imageUrl: string;
+    createdAt?: string | number;
+}
 
 interface MusicStore {
     albums: Album[];
@@ -30,6 +45,8 @@ interface MusicStore {
     musicError: string | null;
     likedSongs: Song[];
     recentlyPlayed: Song[];
+    quickPicks: Song[];
+    recentCollections: any[];
 
 
     currentAlbum: Album | null;
@@ -39,6 +56,9 @@ interface MusicStore {
     fetchAlbumById: (id: string) => Promise<void>;
     fetchLikedSongs: (token?: string) => Promise<void>;
     fetchRecentlyPlayed: () => Promise<void>;
+    fetchQuickPicks: () => Promise<void>;
+    fetchRecentCollections: () => Promise<void>;
+    reset: () => void;
 }
 
 
@@ -53,6 +73,8 @@ export const useMusicStore = create<MusicStore>()(
             musicError: null,
             likedSongs: [],
             recentlyPlayed: [],
+            quickPicks: [],
+            recentCollections: [],
 
             fetchAlbums: async () => {
                 console.log("[MusicStore] Fetching albums from:", axiosInstance.defaults.baseURL + "/albums");
@@ -135,6 +157,37 @@ export const useMusicStore = create<MusicStore>()(
                     console.error("[MusicStore] Failed to fetch recently played:", error.message);
                 }
             },
+            
+            fetchQuickPicks: async () => {
+                try {
+                    const response = await axiosInstance.get("/stream/quick-picks");
+                    set({ quickPicks: response.data });
+                } catch (error: any) {
+                    console.error("[MusicStore] Failed to fetch quick picks:", error.message);
+                }
+            },
+
+            fetchRecentCollections: async () => {
+                try {
+                    const response = await axiosInstance.get("/history/recent-collections");
+                    set({ recentCollections: response.data });
+                } catch (error: any) {
+                    console.error("[MusicStore] Failed to fetch recent collections:", error.message);
+                }
+            },
+
+            reset: () => {
+                set({
+                    likedSongs: [],
+                    recentlyPlayed: [],
+                    quickPicks: [],
+                    recentCollections: [],
+                    currentAlbum: null,
+                    musicError: null,
+                    isLoading: false
+                    // We keep featured/trending/albums as they are general discovery content
+                });
+            },
         }),
         {
             name: 'vibra-music-storage',
@@ -142,7 +195,8 @@ export const useMusicStore = create<MusicStore>()(
             partialize: (state) => ({ 
                 albums: state.albums, 
                 featuredSongs: state.featuredSongs,
-                likedSongs: state.likedSongs 
+                likedSongs: state.likedSongs,
+                recentCollections: state.recentCollections 
             }),
         }
     )

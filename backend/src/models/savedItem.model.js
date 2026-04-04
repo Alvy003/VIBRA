@@ -4,7 +4,7 @@ import mongoose from "mongoose";
 const savedItemSchema = new mongoose.Schema(
   {
     userId: { type: String, required: true, index: true },
-    type: { type: String, enum: ["album", "playlist"], required: true },
+    type: { type: String, enum: ["album", "playlist", "artist"], required: true },
     source: { type: String, enum: ["jiosaavn", "youtube"], required: true },
     externalId: { type: String, required: true },
     title: { type: String, required: true },

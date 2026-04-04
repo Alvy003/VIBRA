@@ -129,7 +129,7 @@ export const SearchHeader = React.memo(({
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="none"
-            selectionColor="#767676ff"
+            selectionColor="#8B5CF6"
           />
           {query.length > 0 && (
             <TouchableOpacity

@@ -8,7 +8,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 const FS = FileSystem as any;
 const documentDirectory = FS.documentDirectory || FS.DocumentDirectoryPath;
 
-interface DownloadedSong {
+export interface DownloadedSong {
     id: string;
     title: string;
     artist: string;
@@ -16,15 +16,33 @@ interface DownloadedSong {
     localUri: string;
     duration: number;
     downloadedAt: number;
+    playlistId?: string;
+    albumId?: string;
+}
+
+export interface DownloadedCollection {
+    id: string;
+    title: string;
+    artist: string;
+    artwork: string;
+    songIds: string[];
+    downloadedAt: number;
 }
 
 interface DownloadStore {
     downloadedSongs: Record<string, DownloadedSong>;
+    downloadedPlaylists: Record<string, DownloadedCollection>;
+    downloadedAlbums: Record<string, DownloadedCollection>;
     isDownloading: Record<string, boolean>;
 
-    downloadTrack: (song: any) => Promise<void>;
+    downloadTrack: (song: any, context?: { playlistId?: string, albumId?: string }) => Promise<void>;
+    downloadPlaylist: (playlist: any, songs: any[]) => Promise<void>;
+    downloadAlbum: (album: any, songs: any[]) => Promise<void>;
     removeDownload: (songId: string) => Promise<void>;
+    removePlaylistDownload: (playlistId: string) => Promise<void>;
+    removeAlbumDownload: (albumId: string) => Promise<void>;
     isDownloaded: (songId: string) => boolean;
+    reset: () => Promise<void>;
 }
 
 const DOWNLOAD_DIR = `${documentDirectory}downloads/`;
@@ -48,11 +66,13 @@ export const useDownloadStore = create<DownloadStore>()(
     persist(
         (set, get) => ({
             downloadedSongs: {},
+            downloadedPlaylists: {},
+            downloadedAlbums: {},
             isDownloading: {},
 
-            downloadTrack: async (song) => {
+            downloadTrack: async (song, context) => {
                 const songId = song.id || song.externalId || song._id;
-                if (!songId || get().downloadedSongs[songId] || get().isDownloading[songId]) return;
+                if (!songId || (get().downloadedSongs[songId] && !context) || get().isDownloading[songId]) return;
 
                 set((state) => ({ 
                     isDownloading: { ...state.isDownloading, [songId]: true } 
@@ -110,6 +130,8 @@ export const useDownloadStore = create<DownloadStore>()(
                         localUri: downloadRes.uri,
                         duration: song.duration,
                         downloadedAt: Date.now(),
+                        playlistId: context?.playlistId,
+                        albumId: context?.albumId,
                     };
 
                     set((state) => ({
@@ -122,6 +144,51 @@ export const useDownloadStore = create<DownloadStore>()(
                         isDownloading: { ...state.isDownloading, [songId]: false } 
                     }));
                 }
+            },
+
+            downloadPlaylist: async (playlist, songs) => {
+                const playlistId = playlist.id || playlist.externalId || playlist._id;
+                if (!playlistId) return;
+
+                // Download all songs in the playlist
+                for (const song of songs) {
+                    await get().downloadTrack(song, { playlistId });
+                }
+
+                const downloadedPlaylist: DownloadedCollection = {
+                    id: playlistId,
+                    title: playlist.name || playlist.title,
+                    artist: playlist.artist || 'Vibra',
+                    artwork: playlist.imageUrl || (songs[0]?.imageUrl),
+                    songIds: songs.map(s => s.id || s.externalId || s._id),
+                    downloadedAt: Date.now(),
+                };
+
+                set((state) => ({
+                    downloadedPlaylists: { ...state.downloadedPlaylists, [playlistId]: downloadedPlaylist }
+                }));
+            },
+
+            downloadAlbum: async (album, songs) => {
+                const albumId = album.id || album.externalId || album._id;
+                if (!albumId) return;
+
+                for (const song of songs) {
+                    await get().downloadTrack(song, { albumId });
+                }
+
+                const downloadedAlbum: DownloadedCollection = {
+                    id: albumId,
+                    title: album.title || album.name,
+                    artist: album.artist,
+                    artwork: album.imageUrl || (songs[0]?.imageUrl),
+                    songIds: songs.map(s => s.id || s.externalId || s._id),
+                    downloadedAt: Date.now(),
+                };
+
+                set((state) => ({
+                    downloadedAlbums: { ...state.downloadedAlbums, [albumId]: downloadedAlbum }
+                }));
             },
 
             removeDownload: async (songId) => {
@@ -142,8 +209,50 @@ export const useDownloadStore = create<DownloadStore>()(
                 }
             },
 
+            removePlaylistDownload: async (playlistId) => {
+                const playlist = get().downloadedPlaylists[playlistId];
+                if (!playlist) return;
+
+                // Remove songs that only belong to this playlist
+                for (const songId of playlist.songIds) {
+                    const song = get().downloadedSongs[songId];
+                    if (song && song.playlistId === playlistId && !song.albumId) {
+                        await get().removeDownload(songId);
+                    }
+                }
+
+                const newPlaylists = { ...get().downloadedPlaylists };
+                delete newPlaylists[playlistId];
+                set({ downloadedPlaylists: newPlaylists });
+            },
+
+            removeAlbumDownload: async (albumId) => {
+                const album = get().downloadedAlbums[albumId];
+                if (!album) return;
+
+                for (const songId of album.songIds) {
+                    const song = get().downloadedSongs[songId];
+                    if (song && song.albumId === albumId && !song.playlistId) {
+                        await get().removeDownload(songId);
+                    }
+                }
+
+                const newAlbums = { ...get().downloadedAlbums };
+                delete newAlbums[albumId];
+                set({ downloadedAlbums: newAlbums });
+            },
+
             isDownloaded: (songId) => {
                 return !!get().downloadedSongs[songId];
+            },
+
+            reset: async () => {
+                set({
+                    downloadedSongs: {},
+                    downloadedPlaylists: {},
+                    downloadedAlbums: {},
+                    isDownloading: {},
+                });
             },
         }),
         {

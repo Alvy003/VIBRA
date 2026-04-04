@@ -15,6 +15,7 @@ import RequestNotificationPermission from "./components/RequestNotificationPermi
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { HistoryTracker } from "@/components/HistoryTracker";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { useOnboardingStore } from "./stores/useOnboardingStore";
 
 
 // ─── Lazy loaded pages ───
@@ -76,6 +77,12 @@ function App() {
       navigator.serviceWorker?.removeEventListener("message", handleServiceWorkerMessage);
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (user) {
+      useOnboardingStore.getState().fetchPreferences();
+    }
+  }, [user]);
 
   return (
       <AccentToastProvider>

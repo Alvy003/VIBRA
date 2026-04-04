@@ -19,7 +19,19 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
 
 function proxyUrl(originalUrl) {
     return originalUrl || null;
+}
+
+// Interleave results from multiple arrays (e.g. to balance languages)
+function interleaveArrays(arrays) {
+  const result = [];
+  const maxLen = Math.max(...arrays.map(a => a.length));
+  for (let i = 0; i < maxLen; i++) {
+    for (const arr of arrays) {
+      if (arr[i]) result.push(arr[i]);
+    }
   }
+  return result;
+}
 
 // ============================================================================
 // JIOSAAVN
@@ -29,11 +41,10 @@ async function jiosaavnFetch(url) {
   try {
     const res = await fetch(url, {
       headers: {
-        Accept: "application/json",
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Referer: "https://www.jiosaavn.com/",
-        Origin: "https://www.jiosaavn.com",
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.jiosaavn.com/',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
       },
       timeout: 10000,
     });
@@ -44,6 +55,7 @@ async function jiosaavnFetch(url) {
     }
 
     const text = await res.text();
+    // console.log(`[JioSaavn] Raw Response (First 500): ${text.substring(0, 500)}`);
     let cleanText = text.trim();
     if (cleanText.startsWith("(") || cleanText.startsWith(")")) {
       cleanText = cleanText.replace(/^\(/, "").replace(/\);?$/, "");
@@ -124,6 +136,7 @@ function mapJioSaavnSong(song) {
           ""
       ),
       album: cleanHtml(song.album || song.more_info?.album || ""),
+      albumId: song.album_id || song.more_info?.album_id || "",
       duration:
         parseInt(song.more_info?.duration || song.duration) || 0,
       imageUrl: fixImageQuality(song.image || ""),
@@ -208,7 +221,7 @@ export const jiosaavn = {
   // ──────────────────────────────────────────────
   getSong: async (id) => {
     try {
-      const url = `https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0%3F_marker%3D0&_format=json&pids=${id}`;
+      const url = `https://www.jiosaavn.com/api.php?__call=song.getDetails&cc=in&_marker=0&_format=json&pids=${id}`;
       const data = await jiosaavnFetch(url);
       if (!data) return null;
 
@@ -463,15 +476,7 @@ export const jiosaavn = {
 
       // ─── Method 1: reco.getreco ───
       try {
-        // Get language preferences from a parameter or default
-        const langPref = (() => {
-          try {
-            // Try to read from environment or use sensible default
-            return "hindi,english";
-          } catch { return "hindi,english"; }
-        })();
-
-        const recoUrl = `https://www.jiosaavn.com/api.php?__call=reco.getreco&api_version=4&_format=json&_marker=0&ctx=web6dot0&pid=${songId}&language=${langPref}`;
+        const recoUrl = `https://www.jiosaavn.com/api.php?__call=reco.getreco&api_version=4&_format=json&_marker=0&ctx=web6dot0&pid=${songId}&language=${languages}`;
         const recoData = await jiosaavnFetch(recoUrl);
 
         if (recoData) {
@@ -674,9 +679,9 @@ export const jiosaavn = {
   },
 
   // ──────────────────────────────────────────────
-// NEW: Search-based homepage for accurate language results
-// ──────────────────────────────────────────────
-getHomepageBySearch: async (languages = "hindi,english") => {
+  // NEW: Search-based homepage for accurate language results
+  // ──────────────────────────────────────────────
+  getHomepageBySearch: async (languages = "hindi,english") => {
   try {
     const langList = languages.split(",").map(l => l.trim()).filter(Boolean);
     // console.log("[JioSaavn] Building homepage via search for:", langList.join(", "));
@@ -691,29 +696,26 @@ getHomepageBySearch: async (languages = "hindi,english") => {
       // Albums: search for each language
       Promise.allSettled(
         albumQueries.map(q => jiosaavn.searchAlbums(q, 8))
-      ).then(results =>
-        results
-          .filter(r => r.status === "fulfilled")
-          .flatMap(r => r.value)
-      ),
+      ).then(results => {
+        const arrays = results.filter(r => r.status === "fulfilled").map(r => r.value);
+        return interleaveArrays(arrays);
+      }),
 
       // Playlists: search for each language
       Promise.allSettled(
         playlistQueries.map(q => jiosaavn.searchPlaylists(q, 8))
-      ).then(results =>
-        results
-          .filter(r => r.status === "fulfilled")
-          .flatMap(r => r.value)
-      ),
+      ).then(results => {
+        const arrays = results.filter(r => r.status === "fulfilled").map(r => r.value);
+        return interleaveArrays(arrays);
+      }),
 
       // Trending songs: search for each language
       Promise.allSettled(
         trendingQueries.map(q => jiosaavn.search(q, 6))
-      ).then(results =>
-        results
-          .filter(r => r.status === "fulfilled")
-          .flatMap(r => r.value)
-      ),
+      ).then(results => {
+        const arrays = results.filter(r => r.status === "fulfilled").map(r => r.value);
+        return interleaveArrays(arrays);
+      }),
 
       // Charts: still use getLaunchData since charts are language-agnostic
       (async () => {

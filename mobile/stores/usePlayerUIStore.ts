@@ -9,6 +9,7 @@ interface PlayerUIStore {
     setArtistModalVisible: (visible: boolean) => void;
     isPlayerExpanded: boolean;
     setIsPlayerExpanded: (visible: boolean) => void;
+    reset: () => void;
 }
 
 export const usePlayerUIStore = create<PlayerUIStore>((set) => ({
@@ -20,4 +21,10 @@ export const usePlayerUIStore = create<PlayerUIStore>((set) => ({
     setArtistModalVisible: (visible) => set({ isArtistModalVisible: visible }),
     isPlayerExpanded: false,
     setIsPlayerExpanded: (visible) => set({ isPlayerExpanded: visible }),
+    reset: () => set({
+        activeIndex: -1,
+        isLyricsModalVisible: false,
+        isArtistModalVisible: false,
+        isPlayerExpanded: false,
+    }),
 }));

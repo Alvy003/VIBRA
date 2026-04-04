@@ -23,6 +23,11 @@ const userSchema = new mongoose.Schema(
     clerkId: { type: String, required: true, unique: true },
     likedSongs: [{ type: mongoose.Schema.Types.ObjectId, ref: "Song" }],
     likedExternalSongs: [externalSongSchema],
+    preferences: {
+      languages: [{ type: String }],
+      genres: [{ type: String }],
+      completedOnboarding: { type: Boolean, default: false },
+    },
   },
   { timestamps: true }
 );

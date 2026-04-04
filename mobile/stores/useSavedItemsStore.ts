@@ -6,25 +6,29 @@ import { axiosInstance } from "@/lib/axios";
 export interface SavedItem {
     _id: string;
     userId: string;
-    type: "album" | "playlist";
+    type: "album" | "playlist" | "artist";
     source: "jiosaavn" | "youtube";
     externalId: string;
     title: string;
     artist: string;
     description: string;
     imageUrl: string;
+    songs: any[];
     songCount: number;
+    createdAt?: string | number;
 }
 
 interface SavedItemsStore {
     savedItems: SavedItem[];
     isLoading: boolean;
     fetchSavedItems: () => Promise<void>;
+    toggleSaveItem: (item: any) => Promise<boolean>;
+    isItemSaved: (externalId: string) => boolean;
 }
 
 export const useSavedItemsStore = create<SavedItemsStore>()(
     persist(
-        (set) => ({
+        (set, get) => ({
             savedItems: [],
             isLoading: false,
 
@@ -39,6 +43,39 @@ export const useSavedItemsStore = create<SavedItemsStore>()(
                     set({ isLoading: false });
                 }
             },
+
+            toggleSaveItem: async (item) => {
+                const externalId = item.externalId || item.id;
+                const isSaved = get().isItemSaved(externalId);
+                
+                try {
+                    if (isSaved) {
+                        await axiosInstance.delete(`/library/saved/${externalId}`);
+                        set(state => ({
+                            savedItems: state.savedItems.filter(i => i.externalId !== externalId)
+                        }));
+                        return false;
+                    } else {
+                        const { data } = await axiosInstance.post("/library/saved", {
+                            ...item,
+                            externalId,
+                            type: item.type || (item.name && !item.title ? 'artist' : 'playlist'),
+                            source: item.source || 'jiosaavn'
+                        });
+                        set(state => ({
+                            savedItems: [data, ...state.savedItems]
+                        }));
+                        return true;
+                    }
+                } catch (err) {
+                    console.error("Failed to toggle save item:", err);
+                    return isSaved;
+                }
+            },
+
+            isItemSaved: (externalId) => {
+                return get().savedItems.some(i => i.externalId === externalId);
+            }
         }),
         {
             name: 'vibra-saved-items-storage',

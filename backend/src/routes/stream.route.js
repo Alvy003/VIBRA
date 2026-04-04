@@ -14,7 +14,12 @@ import {
   getExternalArtist,
   getHomepageData,
   getAutocomplete,
+  getDailyMix,
+  getQuickPicks,
+  getWeeklyMix,
+  redirectStream,
 } from "../controller/stream.controller.js";
+import { recognizeSong } from "../controller/recognizeSong.controller.js";
 
 const router = Router();
 
@@ -28,10 +33,17 @@ router.get("/proxy/audio", proxyAudio); // No auth for audio proxy (needed for p
 
 // ─── NEW routes ───
 router.get("/search/all", searchAll);
-router.get("/recommendations/:source/:id",getRecommendations);
-router.get("/playlists/:source/:id",  getExternalPlaylist);
-router.get("/artists/:source/:id",  getExternalArtist);
-router.get("/home",  getHomepageData);
-router.get("/autocomplete",  getAutocomplete);
+router.get("/recommendations/:source/:id", getRecommendations);
+router.get("/playlists/:source/:id", getExternalPlaylist);
+router.get("/artists/:source/:id", getExternalArtist);
+router.get("/home", getHomepageData);
+router.get("/daily-mix", protectRoute, getDailyMix);
+router.get("/quick-picks", protectRoute, getQuickPicks);
+router.get("/weekly-mix", protectRoute, getWeeklyMix);
+router.get("/play/:source/:id", redirectStream);
+router.get("/autocomplete", getAutocomplete);
+
+// ─── Song Recognition ───
+router.post("/recognize-song", recognizeSong);
 
 export default router;

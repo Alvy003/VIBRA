@@ -278,3 +278,44 @@ function mergeLocalAndExternalLikedSongs(user) {
   // Merge: local first, then external
   return [...localSongs, ...externalSongs];
 }
+
+// ============================================================================
+// USER PREFERENCES — Languages, Genres, Onboarding
+// ============================================================================
+
+export const getUserPreferences = async (req, res, next) => {
+  try {
+    const userId = req.auth.userId;
+    const user = await User.findOne({ clerkId: userId });
+    
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user.preferences || { languages: [], genres: [], completedOnboarding: false });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateUserPreferences = async (req, res, next) => {
+  try {
+    const userId = req.auth.userId;
+    const { languages, genres, completedOnboarding } = req.body;
+    
+    const update = {};
+    if (languages) update["preferences.languages"] = languages;
+    if (genres) update["preferences.genres"] = genres;
+    if (completedOnboarding !== undefined) update["preferences.completedOnboarding"] = completedOnboarding;
+
+    const user = await User.findOneAndUpdate(
+      { clerkId: userId },
+      { $set: update },
+      { new: true, upsert: true }
+    );
+    
+    res.json(user.preferences);
+  } catch (error) {
+    next(error);
+  }
+};

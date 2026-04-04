@@ -63,13 +63,7 @@ export default {
     plugins: [
       'expo-router',
       'expo-secure-store',
-      [
-        'expo-audio',
-        {
-          microphonePermission: 'Vibra needs microphone access to identify songs playing around you.'
-        }
-      ],
-      // Use our local manual plugin instead of the broken library plugin
+      // Using our local manual plugin instead of the broken library plugin
       './plugins/withTrackPlayer.js'
     ],
     experiments: {

@@ -336,7 +336,7 @@ export const getTrackTags = async (req, res) => {
 
 export const checkAdmin = async (req, res, next) => {
   try {
-    const userId = req.auth()?.userId;
+    const userId = req.auth?.userId;
     if (!userId) {
       return res.status(401).json({ isAdmin: false, message: "Unauthorized" });
     }

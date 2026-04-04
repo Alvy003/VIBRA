@@ -23,8 +23,11 @@ import Animated, {
   useSharedValue,
   useAnimatedStyle,
 } from 'react-native-reanimated';
+import { useOnboardingStore, AVAILABLE_LANGUAGES } from '@/stores/useOnboardingStore';
+import { useStreamStore } from '@/stores/useStreamStore';
+import { resetAllStores } from '@/stores/user';
 import {
-  ChevronLeft,
+  ArrowLeft,
   ChevronRight,
   User,
   Settings,
@@ -64,18 +67,8 @@ const SPOTIFY = {
 };
 
 // ─── Available Languages ───
-const AVAILABLE_LANGUAGES = [
-  { id: 'hindi', label: 'Hindi' },
-  { id: 'english', label: 'English' },
-  { id: 'punjabi', label: 'Punjabi' },
-  { id: 'tamil', label: 'Tamil' },
-  { id: 'telugu', label: 'Telugu' },
-  { id: 'kannada', label: 'Kannada' },
-  { id: 'malayalam', label: 'Malayalam' },
-  { id: 'bengali', label: 'Bengali' },
-  { id: 'marathi', label: 'Marathi' },
-  { id: 'gujarati', label: 'Gujarati' },
-];
+// Remove local AVAILABLE_LANGUAGES to use the store's version
+// const AVAILABLE_LANGUAGES = [...]
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -85,9 +78,11 @@ export default function ProfileScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const { preferences, setLanguages } = useOnboardingStore();
+  const { fetchHomepage, fetchDailyMix } = useStreamStore();
+
   // Local state
   const [showLanguageModal, setShowLanguageModal] = useState(false);
-  const [selectedLanguages, setSelectedLanguages] = useState<string[]>(['hindi', 'english']);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [emailNotifications, setEmailNotifications] = useState(false);
   const [dataSaver, setDataSaver] = useState(false);
@@ -96,12 +91,21 @@ export default function ProfileScreen() {
 
   const handleSignOut = useCallback(async () => {
     try {
+      await resetAllStores();
       await signOut();
       router.replace('/(auth)/login' as any);
     } catch (error) {
       console.error('Logout error:', error);
     }
-  }, [signOut, router]);
+  }, [signOut, router, resetAllStores]);
+
+  const handleSaveLanguages = useCallback((languages: string[]) => {
+    setLanguages(languages);
+    // Refresh content
+    useStreamStore.setState({ homepageData: null });
+    fetchHomepage(true);
+    fetchDailyMix();
+  }, [setLanguages, fetchHomepage, fetchDailyMix]);
 
   const handleBack = useCallback(() => {
     router.back();
@@ -110,7 +114,7 @@ export default function ProfileScreen() {
   if (!user) return null;
 
   const selectedLanguageLabels = AVAILABLE_LANGUAGES
-    .filter(l => selectedLanguages.includes(l.id))
+    .filter(l => preferences.languages.includes(l.id))
     .map(l => l.label);
 
   return (
@@ -126,7 +130,7 @@ export default function ProfileScreen() {
             activeOpacity={0.7}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <ChevronLeft size={28} color={SPOTIFY.textPrimary} />
+            <ArrowLeft size={24} color={SPOTIFY.textPrimary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Settings</Text>
           <View style={styles.headerSpacer} />
@@ -271,8 +275,8 @@ export default function ProfileScreen() {
       <LanguageModal
         visible={showLanguageModal}
         onClose={() => setShowLanguageModal(false)}
-        selectedLanguages={selectedLanguages}
-        onSave={setSelectedLanguages}
+        selectedLanguages={preferences.languages}
+        onSave={handleSaveLanguages}
       />
     </View>
   );

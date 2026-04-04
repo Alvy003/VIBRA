@@ -183,26 +183,26 @@ interface FullScreenPlayerProps {
   };
 }
 
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const ARTWORK_SIZE = (() => {
+  if (SCREEN_HEIGHT < 550) return Math.min(SCREEN_WIDTH * 0.45, 180); // Floating window
+  if (SCREEN_HEIGHT < 620) return SCREEN_WIDTH * 0.60;
+  if (SCREEN_HEIGHT < 700) return SCREEN_WIDTH * 0.72;
+  return SCREEN_WIDTH * 0.87;
+})();
+
+const isTinyScreen = SCREEN_HEIGHT < 550;
+const isSmallScreen = SCREEN_HEIGHT < 650;
+
+const artworkTopSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.03 : SCREEN_HEIGHT * 0.08);
+const artworkBottomSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.04 : SCREEN_HEIGHT * 0.06);
+
 export default function FullScreenPlayer({
   onClose,
   onQueueOpen,
   initialColors,
 }: FullScreenPlayerProps) {
-  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
-
-  const ARTWORK_SIZE = useMemo(() => {
-    if (SCREEN_HEIGHT < 550) return Math.min(SCREEN_WIDTH * 0.45, 180); // Floating window
-    if (SCREEN_HEIGHT < 620) return SCREEN_WIDTH * 0.60;
-    if (SCREEN_HEIGHT < 700) return SCREEN_WIDTH * 0.72;
-    return SCREEN_WIDTH * 0.87;
-  }, [SCREEN_WIDTH, SCREEN_HEIGHT]);
-
-  const isTinyScreen = SCREEN_HEIGHT < 550;
-  const isSmallScreen = SCREEN_HEIGHT < 650;
-
-  const artworkTopSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.03 : SCREEN_HEIGHT * 0.08);
-  const artworkBottomSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.04 : SCREEN_HEIGHT * 0.06);
-
   const [primaryContentHeight, setPrimaryContentHeight] = useState(0);
 
   const insets = useSafeAreaInsets();
@@ -212,6 +212,8 @@ export default function FullScreenPlayer({
 
   const {
     currentTrack,
+    queue,
+    currentIndex,
     isPlaying,
     togglePlay,
     playNext,
@@ -221,6 +223,9 @@ export default function FullScreenPlayer({
     toggleShuffle,
     toggleRepeat,
   } = usePlayerStore();
+
+  const prevTrack = currentIndex > 0 ? queue[currentIndex - 1] : null;
+  const nextTrack = currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null;
 
   const { extractColors, getTrackColors } = useColorStore();
   const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
@@ -487,6 +492,7 @@ export default function FullScreenPlayer({
     stickyHeaderOpacity.value = 0;
     stickyHeaderTranslateY.value = -60;
     scrollY.value = 0;
+    artworkTranslateX.value = 0;
 
     // Scroll to top
     setTimeout(() => {
@@ -503,22 +509,42 @@ export default function FullScreenPlayer({
     .activeOffsetX([-20, 20])
     .failOffsetY([-20, 20])
     .onUpdate((event) => {
-      artworkTranslateX.value = event.translationX * 0.5;
+      artworkTranslateX.value = event.translationX;
     })
     .onEnd((event) => {
-      const SWIPE_THRESHOLD = 80;
-      if (Math.abs(event.translationX) > Math.abs(event.translationY)) {
-        if (event.translationX < -SWIPE_THRESHOLD) {
-          runOnJS(playNext)();
-        } else if (event.translationX > SWIPE_THRESHOLD) {
-          runOnJS(playPrevious)();
+      const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
+      const velocity = event.velocityX;
+
+      if (event.translationX < -SWIPE_THRESHOLD || velocity < -500) {
+        if (nextTrack) {
+          // Slide current out to left
+          artworkTranslateX.value = withTiming(-SCREEN_WIDTH, { duration: 250 }, (finished) => {
+            if (finished) {
+              runOnJS(playNext)();
+            }
+          });
+        } else {
+          artworkTranslateX.value = withSpring(0);
         }
+      } else if (event.translationX > SWIPE_THRESHOLD || velocity > 500) {
+        if (prevTrack) {
+          // Slide current out to right
+          artworkTranslateX.value = withTiming(SCREEN_WIDTH, { duration: 250 }, (finished) => {
+            if (finished) {
+              runOnJS(playPrevious)();
+            }
+          });
+        } else {
+          artworkTranslateX.value = withSpring(0);
+        }
+      } else {
+        artworkTranslateX.value = withSpring(0, { damping: 25, stiffness: 250 });
       }
-      artworkTranslateX.value = withSpring(0, {
-        damping: 25,
-        stiffness: 250,
-      });
     });
+
+  const sideArtworkOpacity = useAnimatedStyle(() => ({
+    opacity: 1, // Full opacity as requested
+  }));
 
   const artworkAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: artworkTranslateX.value }],
@@ -631,18 +657,59 @@ export default function FullScreenPlayer({
             </TouchableOpacity>
           </View>
 
-          <View style={[styles.artworkContainer, { marginTop: artworkTopSpacing, marginBottom: artworkBottomSpacing }]}>
+          <View style={[styles.artworkContainer, { marginTop: artworkTopSpacing, marginBottom: artworkBottomSpacing, overflow: 'hidden', width: SCREEN_WIDTH }]}>
             <GestureDetector gesture={artworkGesture}>
-              <Animated.View style={[styles.artworkAnimatedWrapper, artworkAnimatedStyle, { width: ARTWORK_SIZE, height: ARTWORK_SIZE }]}>
-                <Image
-                  source={currentTrack?.artwork}
-                  style={styles.artwork}
-                  contentFit="cover"
-                  cachePolicy="memory-disk"
-                  priority="high"
-                  recyclingKey={currentTrack?.id}
-                />
-              </Animated.View>
+              <View style={{ width: SCREEN_WIDTH, height: ARTWORK_SIZE, alignItems: 'center', justifyContent: 'center' }}>
+                <Animated.View style={[styles.pagerContainer, artworkAnimatedStyle]}>
+                  {/* Previous Piece */}
+                  <View style={[styles.sideArtworkContainer, { width: SCREEN_WIDTH }]}>
+                    {prevTrack && (
+                      <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
+                        <Image
+                          source={prevTrack.artwork}
+                          style={styles.artwork}
+                          contentFit="cover"
+                        />
+                      </Animated.View>
+                    )}
+                  </View>
+
+                  {/* Current Piece */}
+                  <View style={[styles.centerArtworkContainer, { width: SCREEN_WIDTH }]}>
+                    <Animated.View style={{ 
+                        width: ARTWORK_SIZE, 
+                        height: ARTWORK_SIZE,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 12 },
+                        shadowOpacity: 0.58,
+                        shadowRadius: 16.00,
+                        elevation: 24,
+                    }}>
+                      <Image
+                        source={currentTrack?.artwork}
+                        style={styles.artwork}
+                        contentFit="cover"
+                        cachePolicy="memory-disk"
+                        priority="high"
+                        recyclingKey={currentTrack?.id}
+                      />
+                    </Animated.View>
+                  </View>
+
+                  {/* Next Piece */}
+                  <View style={[styles.sideArtworkContainer, { width: SCREEN_WIDTH }]}>
+                    {nextTrack && (
+                      <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
+                        <Image
+                          source={nextTrack.artwork}
+                          style={styles.artwork}
+                          contentFit="cover"
+                        />
+                      </Animated.View>
+                    )}
+                  </View>
+                </Animated.View>
+              </View>
             </GestureDetector>
           </View>
 
@@ -909,16 +976,39 @@ const styles = StyleSheet.create({
   },
   artworkContainer: {
     alignItems: 'center',
-    paddingHorizontal: 32,
+    justifyContent: 'center',
+  },
+  pagerContainer: {
+    flexDirection: 'row',
+    width: SCREEN_WIDTH * 3,
+    height: ARTWORK_SIZE,
+    alignItems: 'center',
+  },
+  sideArtworkContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  centerArtworkContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   artworkAnimatedWrapper: {
     borderRadius: 10,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 12,
+    },
+    shadowOpacity: 0.58,
+    shadowRadius: 16.0,
+    elevation: 24,
   },
   artwork: {
     width: '100%',
     height: '100%',
-    borderRadius: 10,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   trackInfo: {
     flexDirection: 'row',

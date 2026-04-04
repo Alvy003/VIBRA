@@ -208,11 +208,26 @@ export default function TabLayout() {
           name="library"
           options={{
             title: 'Library',
-            tabBarIcon: ({ color, focused }) => (
-              <TabIcon>
-                <Library size={23} color={color} strokeWidth={focused ? 2.5 : 1.8} />
-              </TabIcon>
-            ),
+            tabBarIcon: ({ color, focused }) => {
+              const isMediaDetail = ['playlist', 'album', 'artist', 'downloads'].includes(segments[1] ?? '');
+              const active = focused || isMediaDetail;
+              const activeColor = active ? COLORS.activeTab : COLORS.inactiveTab;
+              return (
+                <TabIcon>
+                  <Library size={23} color={activeColor} strokeWidth={active ? 2.5 : 1.8} />
+                </TabIcon>
+              );
+            },
+            tabBarLabel: ({ focused, children }) => {
+              const isMediaDetail = ['playlist', 'album', 'artist', 'downloads'].includes(segments[1] ?? '');
+              const active = focused || isMediaDetail;
+              const { Text: RNText } = require('react-native');
+              return (
+                <RNText style={[styles.tabBarLabel, { color: active ? COLORS.activeTab : COLORS.inactiveTab }]}>
+                  {children}
+                </RNText>
+              );
+            },
           }}
         />
         <Tabs.Screen

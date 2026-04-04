@@ -1,5 +1,6 @@
 import express from "express";
 import dotenv from "dotenv";
+import { fileURLToPath } from "url";
 import { clerkMiddleware } from "@clerk/express";
 import fileUpload from "express-fileupload";
 import path from "path";
@@ -24,10 +25,13 @@ import miscRoutes from "./routes/misc.route.js";
 import historyRoutes from "./routes/history.route.js";
 import streamRoutes from "./routes/stream.route.js";
 import savedItemRoutes from "./routes/savedItem.route.js";
+import aiPlaylistRoutes from './routes/aiPlaylist.routes.js';
+import { aiRateLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
-const __dirname = path.resolve();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT;
 
@@ -118,6 +122,26 @@ app.use(
 	express.static(path.join(process.cwd(), "uploads"))
 );
 
+// Serve frontend public assets (albums, cover-images, songs) for mobile access
+// __dirname is now backend/src, so we go up twice to reach Vibra/
+const publicDir = path.resolve(__dirname, "../../frontend/public");
+console.log("[Backend] Static assets directory (Surgical):", publicDir);
+
+if (fs.existsSync(publicDir)) {
+	const staticOptions = {
+		setHeaders: (res) => {
+			res.set("Access-Control-Allow-Origin", "*");
+		}
+	};
+	
+	app.use("/albums", express.static(path.join(publicDir, "albums"), staticOptions));
+	app.use("/cover-images", express.static(path.join(publicDir, "cover-images"), staticOptions));
+	app.use("/songs", express.static(path.join(publicDir, "songs"), staticOptions));
+	console.log("[Backend] Serving albums, cover-images, and songs from frontend public.");
+} else {
+	console.warn("[Backend] Warning: Frontend public directory not found at", publicDir);
+}
+
 // cron jobs
 const tempDir = path.join(process.cwd(), "tmp");
 cron.schedule("0 * * * *", () => {
@@ -145,6 +169,7 @@ app.use("/api/misc", miscRoutes);
 app.use("/api/history", historyRoutes);
 app.use("/api/stream", streamRoutes);
 app.use("/api/library/saved", savedItemRoutes);
+app.use('/api/ai-playlists', aiRateLimiter, aiPlaylistRoutes);
 
 // Production static (place AFTER /uploads so SPA doesn’t eat /uploads/voice)
 if (process.env.NODE_ENV === "production") {

@@ -1,5 +1,8 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { axiosInstance } from "@/lib/axios";
+import { useOnboardingStore } from "./useOnboardingStore";
 
 // Mobile does not have CORS restrictions, so we can stream directly from CDNs!
 function proxyAudioUrl(originalUrl: string): string {
@@ -19,7 +22,11 @@ interface StreamStore {
 
     // Discovery
     homepageData: any | null;
+    dailyMix: any | null;
+    weeklyMix: any | null;
     isLoadingHomepage: boolean;
+    isLoadingDailyMix: boolean;
+    isLoadingWeeklyMix: boolean;
 
     // Details
     currentExternalAlbum: any | null;
@@ -31,24 +38,33 @@ interface StreamStore {
 
     searchAll: (query: string) => Promise<void>;
     clearSearch: () => void;
-    fetchHomepage: () => Promise<void>;
+    fetchHomepage: (forceRefresh?: boolean) => Promise<void>;
+    fetchDailyMix: () => Promise<void>;
+    fetchWeeklyMix: () => Promise<void>;
     fetchExternalAlbum: (source: string, id: string) => Promise<void>;
     fetchExternalPlaylist: (source: string, id: string) => Promise<void>;
     fetchExternalArtist: (source: string, id: string) => Promise<void>;
     clearDetail: () => void;
     getPlayableUrl: (song: any) => Promise<string | null>;
+    reset: () => void;
 }
 
 
 
-export const useStreamStore = create<StreamStore>((set, get) => ({
+export const useStreamStore = create<StreamStore>()(
+  persist(
+    (set, get) => ({
     searchResults: [],
     searchAllResults: null,
     isSearching: false,
     searchQuery: "",
 
     homepageData: null,
+    dailyMix: null,
+    weeklyMix: null,
     isLoadingHomepage: false,
+    isLoadingDailyMix: false,
+    isLoadingWeeklyMix: false,
 
     currentExternalAlbum: null,
     currentExternalPlaylist: null,
@@ -95,19 +111,53 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
         });
     },
 
-    fetchHomepage: async () => {
-        if (get().homepageData) return;
+    fetchHomepage: async (forceRefresh = false) => {
+        // If we have data and it's not a force refresh, 
+        // the persisted state will already be there
+        if (get().homepageData && !forceRefresh) return;
+        
         set({ isLoadingHomepage: true });
         try {
-            // Mobile defaults to hindi,english for now
+            const languages = useOnboardingStore.getState().getLanguageString();
             const res = await axiosInstance.get("/stream/home", {
-                params: { languages: "hindi,english" },
+                params: { languages },
             });
             set({ homepageData: res.data });
         } catch (error) {
             console.error("[StreamStore] Failed to fetch homepage:", error);
         } finally {
             set({ isLoadingHomepage: false });
+        }
+    },
+
+    fetchDailyMix: async () => {
+        set({ isLoadingDailyMix: true });
+        try {
+            const languages = useOnboardingStore.getState().getLanguageString();
+            const res = await axiosInstance.get("/stream/daily-mix", {
+                params: { languages, limit: 15 },
+            });
+            // Handle new response format { title, description, results }
+            set({ dailyMix: res.data.results || [] });
+        } catch (error) {
+            console.error("[StreamStore] Failed to fetch daily mix:", error);
+        } finally {
+            set({ isLoadingDailyMix: false });
+        }
+    },
+
+    fetchWeeklyMix: async () => {
+        set({ isLoadingWeeklyMix: true });
+        try {
+            const languages = useOnboardingStore.getState().getLanguageString();
+            const res = await axiosInstance.get("/stream/weekly-mix", {
+                params: { languages },
+            });
+            set({ weeklyMix: res.data });
+        } catch (error) {
+            console.error("[StreamStore] Failed to fetch weekly mix:", error);
+        } finally {
+            set({ isLoadingWeeklyMix: false });
         }
     },
 
@@ -157,26 +207,58 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
 
 
     getPlayableUrl: async (song) => {
-        // Handle JioSaavn
-        if (song.source === "jiosaavn" && (song.streamUrl || song.audioUrl)) {
+            const id = song.id || (song as any).externalId;
+            const source = song.source === 'yt' ? 'youtube' : song.source;
+
+            // ALWAYS use the redirector for JioSaavn tracks to ensure fresh, valid links (Chat Parity)
+            if (song.source === 'jiosaavn' || song.source === 'saavn') {
+                if (id) {
+                    const cleanId = id.replace("jiosaavn_", "");
+                    return `${axiosInstance.defaults.baseURL}/stream/play/jiosaavn/${cleanId}`;
+                }
+            }
+
+            // Fallback for direct URLs (mostly YouTube or legacy)
             const url = song.streamUrl || song.audioUrl;
-            return proxyAudioUrl(url);
+            if (url && url.length > 10 && !url.includes('/api/stream/play/')) {
+                // If it's already a full URL and NOT a redirector link, wrap it in proxy
+                if (song.source === 'jiosaavn' || song.source === 'saavn') {
+                   return proxyAudioUrl(url);
+                }
+                return url;
+            }
+
+            // Fallback to redirector for YouTube/Others
+            if (id) {
+                const cleanId = id.replace("jiosaavn_", "").replace("yt_", "").replace("youtube_", "");
+                return `${axiosInstance.defaults.baseURL}/stream/play/${source}/${cleanId}`;
+            }
+
+        // --- SECONDARY FALLBACK: Local Resolution ---
+        if ((song.source === "jiosaavn" || song.source === "saavn") && (song.id || (song as any).externalId)) {
+            const url = song.streamUrl || song.audioUrl;
+            if (url && url.length > 10) return proxyAudioUrl(url);
+
+            try {
+                const id = song.id || (song as any).externalId;
+                const cleanId = id.replace("jiosaavn_", "");
+                const res = await axiosInstance.get(`/stream/stream-url/jiosaavn/${cleanId}`);
+                if (res.data?.url) return proxyAudioUrl(res.data.url);
+            } catch (error) {
+                console.error("[StreamStore] JioSaavn local resolution failed:", error);
+            }
         }
 
-        // Handle YouTube
+        // Handle YouTube Cache
         if (song.source === "youtube" && (song.videoId || song.id)) {
             const videoId = song.videoId || song.id;
             const cache = get().streamUrlCache;
             const cached = cache.get(videoId);
-
-            // Check if cached URL is still valid (5 min buffer)
-            if (cached && cached.expiresAt > Date.now() + 5 * 60 * 1000) {
-                return cached.url;
-            }
+            if (cached && cached.expiresAt > Date.now() + 5 * 60 * 1000) return cached.url;
 
             try {
-                const res = await axiosInstance.get(`/stream/stream-url/youtube/${videoId}`);
-
+                const cleanVideoId = videoId.replace("yt_", "").replace("youtube_", "");
+                const res = await axiosInstance.get(`/stream/stream-url/youtube/${cleanVideoId}`);
                 if (res.data?.url) {
                     const newCache = new Map(cache);
                     newCache.set(videoId, {
@@ -187,11 +269,35 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
                     return res.data.url;
                 }
             } catch (error) {
-                console.error("[StreamStore] Failed to get stream URL:", error);
+                console.error("[StreamStore] YouTube local resolution failed:", error);
             }
         }
 
-        // Default: return provided audioUrl (for local/fixed backend tracks)
-        return song.audioUrl || null;
+        return song.audioUrl || song.streamUrl || null;
     },
-}));
+
+    reset: () => {
+        set({
+            homepageData: null,
+            dailyMix: null,
+            weeklyMix: null,
+            searchResults: [],
+            searchAllResults: null,
+            searchQuery: "",
+            currentExternalAlbum: null,
+            currentExternalPlaylist: null,
+            currentExternalArtist: null,
+            streamUrlCache: new Map(),
+        });
+    },
+}),
+{
+    name: "vibra-stream-cache",
+    storage: createJSONStorage(() => AsyncStorage),
+    partialize: (state) => ({ 
+        homepageData: state.homepageData, 
+        dailyMix: state.dailyMix 
+    }),
+}
+)
+);

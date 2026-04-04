@@ -8,7 +8,7 @@ export const getAllAlbums = async (req, res, next) => {
     if (req.query.includeInactive === "true") {
       // Verify the requester is actually admin before honoring this
       try {
-        const userId = req.auth?.()?.userId;
+        const userId = req.auth?.userId;
         if (userId) {
           const user = await clerkClient.users.getUser(userId);
           if (process.env.ADMIN_EMAIL === user.primaryEmailAddress?.emailAddress) {

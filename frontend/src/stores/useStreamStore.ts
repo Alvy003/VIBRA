@@ -51,7 +51,11 @@ interface StreamStore {
 
   // Homepage discovery
   homepageData: HomepageData | null;
+  dailyMix: ExternalSong[] | null;
   isLoadingHomepage: boolean;
+  isLoadingDailyMix: boolean;
+  isLoadingWeeklyMix: boolean;
+  weeklyMix: any | null;
 
   // Recommendations
   recommendations: ExternalSong[];
@@ -74,6 +78,8 @@ interface StreamStore {
   getPlayableUrl: (song: ExternalSong) => Promise<string | null>;
   setSearchSource: (source: "all" | "jiosaavn" | "youtube") => void;
   fetchHomepage: () => Promise<void>;
+  fetchDailyMix: () => Promise<void>;
+  fetchWeeklyMix: () => Promise<void>;
   fetchRecommendations: (songId: string, source: string) => Promise<ExternalSong[]>;
   fetchAutocomplete: (query: string) => Promise<void>;
   clearAutocomplete: () => void;
@@ -101,7 +107,11 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
   isLoadingAutocomplete: false,
 
   homepageData: null,
+  dailyMix: null,
   isLoadingHomepage: false,
+  isLoadingDailyMix: false,
+  isLoadingWeeklyMix: false,
+  weeklyMix: null,
 
   recommendations: [],
   isLoadingRecommendations: false,
@@ -254,6 +264,42 @@ export const useStreamStore = create<StreamStore>((set, get) => ({
       console.error("Failed to fetch homepage:", error);
     } finally {
       set({ isLoadingHomepage: false });
+    }
+  },
+  
+  // ─── Daily Mix ───
+  fetchDailyMix: async () => {
+    set({ isLoadingDailyMix: true });
+    try {
+      const { useOnboardingStore } = await import("@/stores/useOnboardingStore");
+      const langString = useOnboardingStore.getState().getLanguageString();
+
+      const res = await axiosInstance.get("/stream/daily-mix", {
+        params: { languages: langString, limit: 15 },
+      });
+      set({ dailyMix: res.data.results || [] });
+    } catch (error) {
+      console.error("Failed to fetch daily mix:", error);
+    } finally {
+      set({ isLoadingDailyMix: false });
+    }
+  },
+
+  // ─── Weekly Mix ───
+  fetchWeeklyMix: async () => {
+    set({ isLoadingWeeklyMix: true });
+    try {
+      const { useOnboardingStore } = await import("@/stores/useOnboardingStore");
+      const langString = useOnboardingStore.getState().getLanguageString();
+
+      const res = await axiosInstance.get("/stream/weekly-mix", {
+        params: { languages: langString },
+      });
+      set({ weeklyMix: res.data });
+    } catch (error) {
+      console.error("Failed to fetch weekly mix:", error);
+    } finally {
+      set({ isLoadingWeeklyMix: false });
     }
   },
 

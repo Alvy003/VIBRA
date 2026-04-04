@@ -5,10 +5,12 @@ import { axiosInstance } from "@/lib/axios";
 
 interface Playlist {
     _id: string;
+    userId?: string;
     name: string;
     description?: string;
     imageUrl?: string;
     songs: any[];
+    createdAt?: string | number;
 }
 
 interface PlaylistStore {
@@ -21,6 +23,7 @@ interface PlaylistStore {
     addTrackToPlaylist: (playlistId: string, track: any) => Promise<void>;
     removeTrackFromPlaylist: (playlistId: string, songId: string) => Promise<void>;
     createPlaylist: (name: string, description?: string) => Promise<any>;
+    updatePlaylist: (id: string, name: string, description?: string) => Promise<void>;
 }
 
 export const usePlaylistStore = create<PlaylistStore>()(
@@ -111,6 +114,22 @@ export const usePlaylistStore = create<PlaylistStore>()(
                     return newPlaylist;
                 } catch (error: any) {
                     console.error("[PlaylistStore] createPlaylist failed:", error);
+                    throw error;
+                }
+            },
+
+            updatePlaylist: async (id, name, description) => {
+                try {
+                    const response = await axiosInstance.patch(`/playlists/${id}`, {
+                        name,
+                        description
+                    });
+                    const updatedPlaylist = response.data;
+                    set(state => ({
+                        playlists: state.playlists.map(p => p._id === id ? updatedPlaylist : p)
+                    }));
+                } catch (error: any) {
+                    console.error("[PlaylistStore] updatePlaylist failed:", error);
                     throw error;
                 }
             },

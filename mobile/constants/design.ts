@@ -37,9 +37,9 @@ export const TIME_GRADIENTS = {
     accent: '#a855f7',
   },
   night: {
-    // 10pm - 6am: Deep blues, dark purples
-    colors: ['#6366f1', '#4338ca', '#1e1b4b', '#09090b'] as const,
-    accent: '#6366f1',
+    // 10pm - 6am: Deep purples
+    colors: ['#9333ea', '#7c3aed', '#310a5b', '#09090b'] as const,
+    accent: '#9333ea',
   },
 };
 

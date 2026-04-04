@@ -18,7 +18,7 @@ import Animated, {
   Easing,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import { X, ChevronLeft, MessageSquare, SlidersHorizontal, Sparkles } from 'lucide-react-native';
+import { X, ArrowLeft, MessageSquare, SlidersHorizontal, Sparkles } from 'lucide-react-native';
 import { useAuth } from '@clerk/clerk-expo';
 
 import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
@@ -235,7 +235,7 @@ export default function AIPlaylistScreen() {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.headerBtn}>
-            <ChevronLeft size={24} color="#fff" />
+            <ArrowLeft size={24} color="#fff" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Curator</Text>
           <TouchableOpacity onPress={handleClose} style={styles.headerBtn}>

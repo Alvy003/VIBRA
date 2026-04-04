@@ -16,12 +16,12 @@ export async function PlaybackService() {
     // This helps Android 13/14 bridge the gap between main app and headless task
     try {
         await TrackPlayer.updateOptions({
+            icon: require('../assets/images/vibra-512.png'),
             android: {
                 appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
                 alwaysPauseOnInterruption: true,
                 // @ts-ignore
                 stopForegroundServiceOnPause: false,
-                icon: require('../assets/images/vibra-512.png'),
             },
             capabilities: [
                 Capability.Play,
@@ -30,8 +30,6 @@ export async function PlaybackService() {
                 Capability.SkipToPrevious,
                 Capability.SeekTo,
                 Capability.Stop,
-                Capability.JumpForward,
-                Capability.JumpBackward,
             ],
             compactCapabilities: [
                 Capability.Play,
@@ -45,8 +43,6 @@ export async function PlaybackService() {
                 Capability.SkipToPrevious,
                 Capability.SeekTo,
                 Capability.Stop,
-                Capability.JumpForward,
-                Capability.JumpBackward,
             ],
         });
         console.warn('[PlaybackService] updateOptions applied from background.');

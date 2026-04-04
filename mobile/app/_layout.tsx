@@ -19,7 +19,7 @@ const tokenCache = {
     try {
       const item = await SecureStore.getItemAsync(key);
       if (item) {
-        console.log(`${key} was used 🔐 \n`);
+        // console.log(`${key} was used 🔐 \n`);
       } else {
         console.log('No values stored under key: ' + key);
       }
@@ -60,6 +60,7 @@ export const unstable_settings = {
 import TrackPlayer from 'react-native-track-player';
 import { PlaybackService } from '@/services/playbackService';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useOnboardingStore } from '@/stores/useOnboardingStore';
 import { ClerkAuthHandler } from '@/components/ClerkAuthHandler';
 
 
@@ -88,10 +89,15 @@ function InitialLayout() {
     usePlayerStore.getState().initPlayer();
   }, []);
 
+  if (!isLoaded) return null;
+
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="(auth)" />
+      {isSignedIn ? (
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+      ) : (
+        <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+      )}
       <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       <Stack.Screen name="search-results" options={{ animation: 'slide_from_right' }} />
     </Stack>
