@@ -30,9 +30,9 @@ interface QuickPickCardProps {
   onPress: () => void;
 }
 
-const QuickPickCard = React.memo(({ 
-  item, 
-  index, 
+const QuickPickCard = React.memo(({
+  item,
+  index,
   onPress,
 }: QuickPickCardProps) => {
   const scale = useSharedValue(1);
@@ -46,11 +46,11 @@ const QuickPickCard = React.memo(({
 
   const playButtonStyle = useAnimatedStyle(() => ({
     opacity: playOpacity.value,
-    transform: [{ scale: 0.8 + playOpacity.value * 0.2 }],
+    transform: [{ scale: 0.9 + playOpacity.value * 0.1 }],
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.97, { damping: 15, stiffness: 400 });
+    scale.value = withSpring(0.99, { damping: 15, stiffness: 400 });
     playOpacity.value = withSpring(1, { damping: 15, stiffness: 300 });
   };
 
@@ -81,7 +81,7 @@ const QuickPickCard = React.memo(({
           transition={200}
           cachePolicy="memory-disk"
         />
-        
+
         {/* Play overlay on press */}
         <Animated.View style={[styles.playOverlay, playButtonStyle]}>
           <Play size={14} color="#fff" fill="#fff" />
@@ -110,7 +110,7 @@ export const QuickPicksGrid = React.memo(() => {
     if (quickPicks.length > 0) return quickPicks.slice(0, 6);
     return featuredSongs.slice(0, 6);
   }, [quickPicks, featuredSongs]);
-  
+
   const timeOfDay = useMemo(() => getTimeOfDay(), []);
   const accentColor = TIME_GRADIENTS[timeOfDay].accent;
 
@@ -137,7 +137,7 @@ export const QuickPicksGrid = React.memo(() => {
     <View style={styles.container}>
       {/* Section header */}
       <View style={styles.header}>
-        <View style={[styles.headerAccent, { backgroundColor: accentColor }]} />
+        {/* <View style={[styles.headerAccent, { backgroundColor: accentColor }]} /> */}
         <Text style={styles.headerTitle}>Quick Picks</Text>
       </View>
 
@@ -145,15 +145,15 @@ export const QuickPicksGrid = React.memo(() => {
       <View style={styles.grid}>
         {rows.map((row, rowIndex) => (
           <View key={rowIndex} style={styles.row}>
-            {row.map((item, colIndex) => (
+            {Array.isArray(row) && row.map((item, colIndex) => (
               <QuickPickCard
-                key={item._id}
+                key={`${item._id || item.id}-${rowIndex * 2 + colIndex}`}
                 item={item}
                 index={rowIndex * 2 + colIndex}
                 onPress={() => handlePlay(item)}
               />
             ))}
-            {row.length === 1 && <View style={styles.cardPlaceholder} />}
+            {Array.isArray(row) && row.length === 1 ? <View style={styles.cardPlaceholder} /> : null}
           </View>
         ))}
       </View>
@@ -196,7 +196,11 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    backgroundColor: COLORS.surface,
+    backgroundColor: '#121214',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.04)',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
     borderRadius: RADIUS.sm,
     flexDirection: 'row',
     alignItems: 'center',
@@ -213,6 +217,9 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xs,
     overflow: 'hidden',
     position: 'relative',
+    shadowColor: '#000',
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
   },
   artwork: {
     width: '100%',
@@ -220,7 +227,7 @@ const styles = StyleSheet.create({
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -237,7 +244,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   artist: {
-    color: COLORS.textMuted,
+    color: 'rgba(255,255,255,0.45)',
     fontSize: 11,
     fontWeight: '500',
   },

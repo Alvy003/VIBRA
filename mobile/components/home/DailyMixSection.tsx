@@ -51,7 +51,7 @@ export const DailyMixSection = React.memo(() => {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingHorizontal: 20 }}
                 data={dailyMix}
-                keyExtractor={(item, idx) => item.externalId || item._id || String(idx)}
+                keyExtractor={(item, idx) => `${item.externalId || item._id || item.id}-${idx}`}
                 renderItem={renderPick}
                 snapToInterval={ITEM_SIZE}
                 decelerationRate="fast"

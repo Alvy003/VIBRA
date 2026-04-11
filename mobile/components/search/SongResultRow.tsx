@@ -8,9 +8,10 @@ import { useSearchStore } from '@/stores/useSearchStore';
 
 interface SongResultRowProps {
   song: any;
+  searchQuery?: string;
 }
 
-export const SongResultRow = React.memo(({ song }: SongResultRowProps) => {
+export const SongResultRow = React.memo(({ song, searchQuery }: SongResultRowProps) => {
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
 
@@ -38,7 +39,7 @@ export const SongResultRow = React.memo(({ song }: SongResultRowProps) => {
         artwork: song.imageUrl,
         duration: song.duration,
         source: song.source || 'jiosaavn',
-    } as any);
+    } as any, searchQuery ? { type: 'search', id: 'search', title: searchQuery } : undefined);
     };
 
   return (

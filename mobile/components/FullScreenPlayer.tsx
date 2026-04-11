@@ -9,28 +9,21 @@ import {
   BackHandler,
   useWindowDimensions,
 } from 'react-native';
+import { State } from 'react-native-track-player';
 import { Image } from 'expo-image';
 import {
   ChevronDown,
   MoreVertical,
-  Play,
-  Pause,
-  SkipBack,
-  SkipForward,
-  Repeat,
-  Repeat1,
-  Shuffle,
-  CirclePlus,
   Share2,
 } from 'lucide-react-native';
+import { SaveToPlaylistButton } from './SaveToPlaylistButton';
+import { SharpPlay, SharpPause, SharpSkipNext, SharpSkipBack, SharpShuffle, SharpRepeat } from './SharpIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
   withSpring,
-  interpolate,
-  Extrapolate,
   runOnJS,
   Easing,
 } from 'react-native-reanimated';
@@ -54,6 +47,8 @@ import MarqueeText from './MarqueeText';
 import Svg, { Path } from 'react-native-svg';
 import TrackPlayer, { Event, useTrackPlayerEvents } from 'react-native-track-player';
 import QueueBottomSheet from './QueueBottomSheet';
+import SongOptions from './SongOptions';
+
 
 const AnimatedRNGHScrollView = Animated.createAnimatedComponent(RNGHScrollView);
 
@@ -152,7 +147,7 @@ const ArtistCard = React.memo(
                 </Text>
               )}
 
-              {artistInfo?.bio && (
+              {!!artistInfo?.bio && (
                 <Text style={styles.artistInfoBio} numberOfLines={3}>
                   {artistInfo.bio}
                 </Text>
@@ -203,12 +198,14 @@ export default function FullScreenPlayer({
   onQueueOpen,
   initialColors,
 }: FullScreenPlayerProps) {
-  const [primaryContentHeight, setPrimaryContentHeight] = useState(0);
-
+  // 1. Hooks (Above ALL early returns)
   const insets = useSafeAreaInsets();
-  const gradientAnimationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
+  
+  const [primaryContentHeight, setPrimaryContentHeight] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
+  const [showDelayedContent, setShowDelayedContent] = useState(false);
+  const [queueVisible, setQueueVisible] = useState(false);
 
   const {
     currentTrack,
@@ -222,68 +219,52 @@ export default function FullScreenPlayer({
     repeatMode,
     toggleShuffle,
     toggleRepeat,
+    currentContext,
+    playbackState,
   } = usePlayerStore();
-
-  const prevTrack = currentIndex > 0 ? queue[currentIndex - 1] : null;
-  const nextTrack = currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null;
 
   const { extractColors, getTrackColors } = useColorStore();
   const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
   const { artistCache, fetchArtistInfo, isLoading: isArtistLoading } = useArtistStore();
   const { getLyrics } = useLyricsStore();
+  const { setActiveIndex } = usePlayerUIStore();
 
-  // Self-contained translateY for entrance/exit/gesture
+  // Shared values
   const translateY = useSharedValue(SCREEN_HEIGHT);
-  const isClosing = useRef(false);
-
   const scrollY = useSharedValue(0);
   const gradientOpacity = useSharedValue(initialColors ? 1 : 0);
   const isAtTopWhenPanStarted = useSharedValue(true);
   const activeLineIndex = useSharedValue(-1);
-
   const stickyHeaderOpacity = useSharedValue(0);
   const stickyHeaderTranslateY = useSharedValue(-60);
-  const mainScrollRef = useRef<Animated.ScrollView>(null);
-
-  const [showDelayedContent, setShowDelayedContent] = useState(false);
-  const [queueVisible, setQueueVisible] = useState(false);
   const delayedContentOpacity = useSharedValue(0);
   const delayedContentTranslateY = useSharedValue(50);
+  const artworkTranslateX = useSharedValue(0);
 
-  // ─── Entrance Animation ───
-  useEffect(() => {
-    // Slide up from bottom
-    translateY.value = withSpring(0, {
-      damping: 32,
-      stiffness: 300,
-      mass: 0.9,
-      overshootClamping: true,
-    });
-  }, []);
+  // Refs
+  const isClosing = useRef(false);
+  const gradientAnimationRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mainScrollRef = useRef<Animated.ScrollView>(null);
+  const hasAnimatedInitial = useRef(false);
+  const prevTrackIdRef = useRef<string | null>(null);
 
-  // ─── Close Animation Handler ───
-  const animateClose = useCallback(() => {
-    if (isClosing.current) return;
-    isClosing.current = true;
+  // Computed
+  const prevTrack = currentIndex > 0 ? queue[currentIndex - 1] : null;
+  const nextTrack = currentIndex < queue.length - 1 ? queue[currentIndex + 1] : null;
+  const trackColors = getTrackColors(currentTrack?.id || 'none');
+  const currentLyricsState = currentTrack ? getLyrics(currentTrack.id) : null;
+  const currentArtistLoading = currentTrack?.artist ? isArtistLoading(currentTrack.artist) : false;
+  const syncedLines = useMemo(() => {
+    if (currentLyricsState?.status === 'synced' && 'lines' in currentLyricsState) {
+      return currentLyricsState.lines;
+    }
+    return [];
+  }, [currentLyricsState]);
 
-    translateY.value = withTiming(
-      SCREEN_HEIGHT,
-      {
-        duration: 280,
-        easing: Easing.out(Easing.cubic),
-      },
-      (finished) => {
-        if (finished) {
-          runOnJS(onClose)();
-        }
-      }
-    );
-  }, [onClose, translateY]);
+  const hasLyrics = useMemo(() => {
+    return currentLyricsState?.status === 'synced' || currentLyricsState?.status === 'plain';
+  }, [currentLyricsState]);
 
-  // Early return if no track
-  if (!currentTrack) return null;
-
-  const trackColors = getTrackColors(currentTrack.id);
   const gradientColors = useMemo(() => {
     if (trackColors.gradient && !trackColors.isLoading) {
       return trackColors.gradient;
@@ -294,20 +275,60 @@ export default function FullScreenPlayer({
     return DEFAULT_GRADIENT as unknown as readonly [string, string, string, string];
   }, [trackColors.gradient, trackColors.isLoading, initialColors?.gradient]);
 
-  // ─── Extract Colors and Fetch Lyrics on Track Change ───
+  // ─── Callbacks ───
+  const animateClose = useCallback(() => {
+    if (isClosing.current) return;
+    isClosing.current = true;
+
+    translateY.value = withTiming(
+      SCREEN_HEIGHT,
+      { duration: 280, easing: Easing.out(Easing.cubic) },
+      (finished) => {
+        if (finished) runOnJS(onClose)();
+      }
+    );
+  }, [onClose]);
+
+  const handleIndexChange = useCallback((newIndex: number) => {
+    setActiveIndex(newIndex);
+    activeLineIndex.value = newIndex;
+  }, [setActiveIndex]);
+
+  const handleDurationChange = useCallback((duration: number) => {
+    setTrackDuration(duration);
+  }, []);
+
+  const handleSeek = useCallback(async (value: number) => {
+    await TrackPlayer.seekTo(value);
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    mainScrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
+
+  const scrollHandler = useCallback((event: any) => {
+    'worklet';
+    scrollY.value = event.nativeEvent.contentOffset.y;
+    const THRESHOLD = ARTWORK_SIZE + 160;
+    stickyHeaderOpacity.value = scrollY.value > THRESHOLD ? 1 : 0;
+    stickyHeaderTranslateY.value = scrollY.value > THRESHOLD ? 0 : -60;
+  }, []);
+
+  // ─── Effects ───
+  useEffect(() => {
+    translateY.value = withSpring(0, {
+      damping: 32, stiffness: 300, mass: 0.9, overshootClamping: true,
+    });
+  }, []);
+
   useEffect(() => {
     if (!currentTrack?.id) return;
-
-    if (currentTrack.artist) {
-      if (!artistCache[currentTrack.artist]) {
-        fetchArtistInfo(currentTrack.artist);
-      }
+    if (currentTrack.artist && !artistCache[currentTrack.artist]) {
+      fetchArtistInfo(currentTrack.artist);
     }
-
     if (currentTrack.title && currentTrack.artist) {
       fetchLyrics(currentTrack.id, currentTrack.title, currentTrack.artist, currentTrack.duration);
     }
-
     if (currentTrack.artwork) {
       const timer = setTimeout(() => {
         extractColors(currentTrack.id, currentTrack.artwork as string);
@@ -316,23 +337,12 @@ export default function FullScreenPlayer({
     }
   }, [currentTrack?.id]);
 
-  // ─── Animate Gradient on Color Change ───
-  const hasAnimatedInitial = useRef(false);
-
   useEffect(() => {
     if (trackColors.gradient) {
       if (gradientAnimationRef.current) clearTimeout(gradientAnimationRef.current);
-
       if (!hasAnimatedInitial.current) {
         hasAnimatedInitial.current = true;
-        if (initialColors?.gradient) {
-          gradientOpacity.value = withTiming(1, { duration: 400 });
-        } else {
-          gradientOpacity.value = 0;
-          gradientAnimationRef.current = setTimeout(() => {
-            gradientOpacity.value = withTiming(1, { duration: 600 });
-          }, 100);
-        }
+        gradientOpacity.value = withTiming(1, { duration: initialColors?.gradient ? 400 : 600 });
       } else {
         gradientOpacity.value = 0.6;
         gradientAnimationRef.current = setTimeout(() => {
@@ -340,23 +350,8 @@ export default function FullScreenPlayer({
         }, 50);
       }
     }
-    return () => {
-      if (gradientAnimationRef.current) clearTimeout(gradientAnimationRef.current);
-    };
+    return () => { if (gradientAnimationRef.current) clearTimeout(gradientAnimationRef.current); };
   }, [trackColors.dominant]);
-
-  // ─── Delayed Content Animation ───
-  const currentLyricsState = currentTrack ? getLyrics(currentTrack.id) : null;
-  const currentArtistLoading = currentTrack?.artist
-    ? isArtistLoading(currentTrack.artist)
-    : false;
-
-  const syncedLines = useMemo(() => {
-    if (currentLyricsState?.status === 'synced' && 'lines' in currentLyricsState) {
-      return currentLyricsState.lines;
-    }
-    return [];
-  }, [currentLyricsState]);
 
   useEffect(() => {
     setShowDelayedContent(false);
@@ -366,215 +361,73 @@ export default function FullScreenPlayer({
 
   useEffect(() => {
     if (showDelayedContent) return;
-
-    const isLyricsDoneLoading =
-      currentLyricsState?.status &&
-      currentLyricsState.status !== 'idle' &&
-      currentLyricsState.status !== 'loading';
-    const isArtistDoneLoading = !currentArtistLoading;
-
-    if (isLyricsDoneLoading && isArtistDoneLoading) {
-      const timer = setTimeout(() => {
-        setShowDelayedContent(true);
-        delayedContentOpacity.value = withTiming(1, { duration: 600 });
-        delayedContentTranslateY.value = withSpring(0, {
-          damping: 24,
-          stiffness: 140,
-          mass: 0.8,
-        });
-      }, 150);
-      return () => clearTimeout(timer);
-    } else {
-      const fallbackTimer = setTimeout(() => {
-        setShowDelayedContent(true);
-        delayedContentOpacity.value = withTiming(1, { duration: 600 });
-        delayedContentTranslateY.value = withSpring(0, {
-          damping: 24,
-          stiffness: 140,
-          mass: 0.8,
-        });
-      }, 2000);
-      return () => clearTimeout(fallbackTimer);
-    }
+    const isDone = (currentLyricsState?.status && currentLyricsState.status !== 'idle' && currentLyricsState.status !== 'loading') && !currentArtistLoading;
+    const timer = setTimeout(() => {
+      setShowDelayedContent(true);
+      delayedContentOpacity.value = withTiming(1, { duration: 600 });
+      delayedContentTranslateY.value = withSpring(0, { damping: 24, stiffness: 140, mass: 0.8 });
+    }, isDone ? 150 : 2000);
+    return () => clearTimeout(timer);
   }, [currentLyricsState?.status, currentArtistLoading, showDelayedContent, currentTrack?.id]);
 
-  const { setActiveIndex } = usePlayerUIStore();
-
-  // ─── Hardware Back Button ───
   useEffect(() => {
-    const onBackPress = () => {
-      animateClose();
-      return true;
-    };
-
+    const onBackPress = () => { animateClose(); return true; };
     const backHandler = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => backHandler.remove();
   }, [animateClose]);
 
-  // ─── Callbacks ───
-  const handleIndexChange = useCallback((newIndex: number) => {
-    setActiveIndex(newIndex);
-    activeLineIndex.value = newIndex;
-  }, []);
-
-  const handleDurationChange = useCallback(
-    (dur: number) => {
-      if (dur > 0 && dur !== trackDuration) {
-        setTrackDuration(dur);
-      }
-    },
-    [trackDuration]
-  );
-
-  // ─── Scroll Handler ───
-  const scrollHandler = useCallback((event: any) => {
-    'worklet';
-    scrollY.value = event.nativeEvent.contentOffset.y;
-
-    const THRESHOLD = ARTWORK_SIZE + 160;
-    stickyHeaderOpacity.value = scrollY.value > THRESHOLD ? 1 : 0;
-    stickyHeaderTranslateY.value = scrollY.value > THRESHOLD ? 0 : -60;
-  }, [ARTWORK_SIZE]);
-
-  const scrollToTop = useCallback(() => {
-    if (mainScrollRef.current) {
-      mainScrollRef.current.scrollTo({ y: 0, animated: true });
-    }
-  }, []);
-
-  // ─── Dismiss Gesture ───
-  const dismissGesture = Gesture.Pan()
-    .activeOffsetY(10)
-    .failOffsetY(-10)
-    .onBegin(() => {
-      isAtTopWhenPanStarted.value = scrollY.value <= 10;
-    })
-    .onChange((event) => {
-      if (isAtTopWhenPanStarted.value && event.translationY > 0) {
-        translateY.value = event.translationY;
-      }
-    })
-    .onEnd((event) => {
-      if (!isAtTopWhenPanStarted.value) {
-        translateY.value = withSpring(0, { damping: 25, stiffness: 250 });
-        return;
-      }
-
-      const shouldClose =
-        translateY.value > SCREEN_HEIGHT * 0.2 ||
-        (translateY.value > 50 && event.velocityY > 500);
-
-      if (shouldClose) {
-        runOnJS(animateClose)();
-      } else {
-        translateY.value = withSpring(0, { damping: 25, stiffness: 250 });
-      }
-    })
-    .simultaneousWithExternalGesture(mainScrollRef as any);
-
-  // ─── Reset scroll and sticky header on track change ───
-  const prevTrackIdRef = useRef<string | null>(null);
-
   useEffect(() => {
     if (!currentTrack?.id) return;
-
-    // Skip on first mount
-    if (prevTrackIdRef.current === null) {
-      prevTrackIdRef.current = currentTrack.id;
-      return;
-    }
-
-    // Only reset if track actually changed
     if (prevTrackIdRef.current === currentTrack.id) return;
+    const isFirst = prevTrackIdRef.current === null;
     prevTrackIdRef.current = currentTrack.id;
+    if (isFirst) return;
 
-    // Reset sticky header immediately
     stickyHeaderOpacity.value = 0;
     stickyHeaderTranslateY.value = -60;
     scrollY.value = 0;
     artworkTranslateX.value = 0;
-
-    // Scroll to top
-    setTimeout(() => {
-      if (mainScrollRef.current) {
-        mainScrollRef.current.scrollTo({ y: 0, animated: false });
-      }
-    }, 50);
+    setTimeout(() => { mainScrollRef.current?.scrollTo({ y: 0, animated: false }); }, 50);
   }, [currentTrack?.id]);
 
-  // ─── Animated Styles ───
-  const artworkTranslateX = useSharedValue(0);
+  // Gestures
+  const dismissGesture = Gesture.Pan()
+    .activeOffsetY(10).failOffsetY(-10)
+    .onBegin(() => { isAtTopWhenPanStarted.value = scrollY.value <= 10; })
+    .onChange((event) => { if (isAtTopWhenPanStarted.value && event.translationY > 0) translateY.value = event.translationY; })
+    .onEnd((event) => {
+      if (!isAtTopWhenPanStarted.value) { translateY.value = withTiming(0, { duration: 250 }); return; }
+      if (translateY.value > SCREEN_HEIGHT * 0.2 || (translateY.value > 50 && event.velocityY > 500)) {
+        runOnJS(animateClose)();
+      } else { translateY.value = withTiming(0, { duration: 250 }); }
+    }).simultaneousWithExternalGesture(mainScrollRef as any);
 
   const artworkGesture = Gesture.Pan()
-    .activeOffsetX([-20, 20])
-    .failOffsetY([-20, 20])
-    .onUpdate((event) => {
-      artworkTranslateX.value = event.translationX;
-    })
+    .activeOffsetX([-20, 20]).failOffsetY([-20, 20])
+    .onUpdate((event) => { artworkTranslateX.value = event.translationX; })
     .onEnd((event) => {
       const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.25;
-      const velocity = event.velocityX;
-
-      if (event.translationX < -SWIPE_THRESHOLD || velocity < -500) {
+      if (event.translationX < -SWIPE_THRESHOLD || event.velocityX < -500) {
         if (nextTrack) {
-          // Slide current out to left
-          artworkTranslateX.value = withTiming(-SCREEN_WIDTH, { duration: 250 }, (finished) => {
-            if (finished) {
-              runOnJS(playNext)();
-            }
-          });
-        } else {
-          artworkTranslateX.value = withSpring(0);
-        }
-      } else if (event.translationX > SWIPE_THRESHOLD || velocity > 500) {
+          artworkTranslateX.value = withTiming(-SCREEN_WIDTH, { duration: 250 }, (f) => { if (f) runOnJS(playNext)(); });
+        } else artworkTranslateX.value = withSpring(0);
+      } else if (event.translationX > SWIPE_THRESHOLD || event.velocityX > 500) {
         if (prevTrack) {
-          // Slide current out to right
-          artworkTranslateX.value = withTiming(SCREEN_WIDTH, { duration: 250 }, (finished) => {
-            if (finished) {
-              runOnJS(playPrevious)();
-            }
-          });
-        } else {
-          artworkTranslateX.value = withSpring(0);
-        }
-      } else {
-        artworkTranslateX.value = withSpring(0, { damping: 25, stiffness: 250 });
-      }
+          artworkTranslateX.value = withTiming(SCREEN_WIDTH, { duration: 250 }, (f) => { if (f) runOnJS(playPrevious)(); });
+        } else artworkTranslateX.value = withSpring(0);
+      } else artworkTranslateX.value = withSpring(0);
     });
 
-  const sideArtworkOpacity = useAnimatedStyle(() => ({
-    opacity: 1, // Full opacity as requested
-  }));
+  // Styles
+  const sideArtworkOpacity = useAnimatedStyle(() => ({ opacity: 1 }));
+  const artworkAnimatedStyle = useAnimatedStyle(() => ({ transform: [{ translateX: artworkTranslateX.value }] }));
+  const containerStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));
+  const gradientStyle = useAnimatedStyle(() => ({ opacity: gradientOpacity.value }));
+  const delayedContentStyle = useAnimatedStyle(() => ({ opacity: delayedContentOpacity.value, transform: [{ translateY: delayedContentTranslateY.value }] }));
+  const stickyHeaderStyle = useAnimatedStyle(() => ({ opacity: stickyHeaderOpacity.value, transform: [{ translateY: stickyHeaderTranslateY.value }] }));
 
-  const artworkAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: artworkTranslateX.value }],
-  }));
-
-  const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  const gradientStyle = useAnimatedStyle(() => ({
-    opacity: gradientOpacity.value,
-  }));
-
-  const delayedContentStyle = useAnimatedStyle(() => ({
-    opacity: delayedContentOpacity.value,
-    transform: [{ translateY: delayedContentTranslateY.value }],
-  }));
-
-  const stickyHeaderStyle = useAnimatedStyle(() => ({
-    opacity: stickyHeaderOpacity.value,
-    transform: [{ translateY: stickyHeaderTranslateY.value }],
-  }));
-
-  const handleSeek = useCallback(async (value: number) => {
-    const TrackPlayerObj = require('react-native-track-player').default;
-    await TrackPlayerObj.seekTo(value);
-  }, []);
-
-  const RepeatIcon = repeatMode === 'track' ? Repeat1 : Repeat;
-  const hasLyrics = (syncedLines && syncedLines.length > 0) || (currentLyricsState?.status === 'plain');
+  // 2. Early return (AFTER ALL HOOKS)
+  if (!currentTrack) return null;
 
   return (
     <GestureDetector gesture={dismissGesture}>
@@ -609,13 +462,24 @@ export default function FullScreenPlayer({
             </Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={togglePlay} style={styles.stickyPlayButton} activeOpacity={0.8}>
-            {isPlaying ? (
-              <Pause size={22} color="#fff" fill="#fff" />
-            ) : (
-              <Play size={22} color="#fff" fill="#fff" style={{ marginLeft: 2 }} />
-            )}
-          </TouchableOpacity>
+          <View style={styles.stickyHeaderActions}>
+            <TouchableOpacity>
+              <SaveToPlaylistButton
+                track={currentTrack}
+                size={22}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={togglePlay} style={styles.stickyPlayButton} activeOpacity={0.8}>
+              {isPlaying || playbackState === State.Buffering || playbackState === State.Loading ? (
+                <SharpPause size={22} color="#fff" />
+              ) : (
+                <SharpPlay size={22} color="#fff" style={{ marginLeft: 2 }} />
+              )}
+            </TouchableOpacity>
+          </View>
+
+
         </Animated.View>
 
         {/* Main Scrollable Content */}
@@ -630,7 +494,7 @@ export default function FullScreenPlayer({
           <Animated.View style={[{ position: 'absolute', top: 0, left: 0, right: 0, height: SCREEN_HEIGHT }, gradientStyle]}>
             <LinearGradient
               colors={gradientColors}
-              locations={[0, 0.25, 0.55, 1]}
+              locations={[0, 0.35, 0.65, 1]}
               style={StyleSheet.absoluteFill}
             />
           </Animated.View>
@@ -639,156 +503,202 @@ export default function FullScreenPlayer({
             <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]}>
               <TouchableOpacity
                 onPress={animateClose}
-              style={styles.headerButton}
-              activeOpacity={0.7}
-            >
-              <ChevronDown size={28} color="#fff" strokeWidth={2.5} />
-            </TouchableOpacity>
+                style={styles.headerButton}
+                activeOpacity={0.7}
+              >
+                <ChevronDown size={28} color="#fff" strokeWidth={2.5} />
+              </TouchableOpacity>
 
-            <View style={styles.headerCenter}>
-              <Text style={styles.playingFromLabel}>PLAYING FROM</Text>
-              <Text style={styles.playingFromText} numberOfLines={1}>
-                {(currentTrack as any).album || 'Your Library'}
-              </Text>
+              <View style={styles.headerCenter}>
+                {currentContext?.title || (currentTrack as any).album ? (
+                  <>
+                    <Text style={styles.playingFromLabel}>
+                      {currentContext?.type === 'album' ? 'PLAYING FROM ALBUM' :
+                        currentContext?.type === 'playlist' ? 'PLAYING FROM PLAYLIST' :
+                          currentContext?.type === 'artist' ? 'PLAYING FROM ARTIST' :
+                            currentContext?.type === 'search' ? 'PLAYING FROM SEARCH' :
+                              'PLAYING FROM'}
+                    </Text>
+                    <Text style={styles.playingFromText} numberOfLines={1}>
+                      {currentContext?.title || (currentTrack as any).album}
+                    </Text>
+                  </>
+                ) : (
+                  <Text style={styles.playingFromRecommended}>Recommended for you</Text>
+                )}
+              </View>
+
+
+              <SongOptions
+                song={currentTrack}
+                trigger={
+                  <View style={styles.headerButton}>
+                    <MoreVertical size={24} color="#fff" />
+                  </View>
+                }
+              />
+
             </View>
 
-            <TouchableOpacity style={styles.headerButton} activeOpacity={0.7}>
-              <MoreVertical size={24} color="#fff" />
-            </TouchableOpacity>
-          </View>
+            <View style={[styles.artworkContainer, { marginTop: artworkTopSpacing, marginBottom: artworkBottomSpacing, overflow: 'hidden', width: SCREEN_WIDTH }]}>
+              <GestureDetector gesture={artworkGesture}>
+                <View style={{ width: SCREEN_WIDTH, height: ARTWORK_SIZE, alignItems: 'center', justifyContent: 'center' }}>
+                  <Animated.View style={[styles.pagerContainer, artworkAnimatedStyle]}>
+                    {/* Previous Piece */}
+                    <View style={[styles.sideArtworkContainer, { width: SCREEN_WIDTH }]}>
+                      {prevTrack && (
+                        <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
+                          <Image
+                            source={prevTrack.artwork}
+                            style={styles.artwork}
+                            contentFit="cover"
+                          />
+                        </Animated.View>
+                      )}
+                    </View>
 
-          <View style={[styles.artworkContainer, { marginTop: artworkTopSpacing, marginBottom: artworkBottomSpacing, overflow: 'hidden', width: SCREEN_WIDTH }]}>
-            <GestureDetector gesture={artworkGesture}>
-              <View style={{ width: SCREEN_WIDTH, height: ARTWORK_SIZE, alignItems: 'center', justifyContent: 'center' }}>
-                <Animated.View style={[styles.pagerContainer, artworkAnimatedStyle]}>
-                  {/* Previous Piece */}
-                  <View style={[styles.sideArtworkContainer, { width: SCREEN_WIDTH }]}>
-                    {prevTrack && (
-                      <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
-                        <Image
-                          source={prevTrack.artwork}
-                          style={styles.artwork}
-                          contentFit="cover"
-                        />
-                      </Animated.View>
-                    )}
-                  </View>
-
-                  {/* Current Piece */}
-                  <View style={[styles.centerArtworkContainer, { width: SCREEN_WIDTH }]}>
-                    <Animated.View style={{ 
-                        width: ARTWORK_SIZE, 
+                    {/* Current Piece */}
+                    <View style={[styles.centerArtworkContainer, { width: SCREEN_WIDTH }]}>
+                      <Animated.View style={{
+                        width: ARTWORK_SIZE,
                         height: ARTWORK_SIZE,
                         shadowColor: "#000",
                         shadowOffset: { width: 0, height: 12 },
                         shadowOpacity: 0.58,
                         shadowRadius: 16.00,
                         elevation: 24,
-                    }}>
-                      <Image
-                        source={currentTrack?.artwork}
-                        style={styles.artwork}
-                        contentFit="cover"
-                        cachePolicy="memory-disk"
-                        priority="high"
-                        recyclingKey={currentTrack?.id}
-                      />
-                    </Animated.View>
-                  </View>
-
-                  {/* Next Piece */}
-                  <View style={[styles.sideArtworkContainer, { width: SCREEN_WIDTH }]}>
-                    {nextTrack && (
-                      <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
+                      }}>
                         <Image
-                          source={nextTrack.artwork}
+                          source={currentTrack?.artwork}
                           style={styles.artwork}
                           contentFit="cover"
+                          cachePolicy="memory-disk"
+                          priority="high"
+                          recyclingKey={currentTrack?.id}
                         />
                       </Animated.View>
-                    )}
-                  </View>
-                </Animated.View>
+                    </View>
+
+                    {/* Next Piece */}
+                    <View style={[styles.sideArtworkContainer, { width: SCREEN_WIDTH }]}>
+                      {nextTrack && (
+                        <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
+                          <Image
+                            source={nextTrack.artwork}
+                            style={styles.artwork}
+                            contentFit="cover"
+                          />
+                        </Animated.View>
+                      )}
+                    </View>
+                  </Animated.View>
+                </View>
+              </GestureDetector>
+            </View>
+
+            <View style={[styles.trackInfo, isTinyScreen && { marginBottom: 8 }]}>
+              <View style={styles.trackTextContainer}>
+                <MarqueeText
+                  text={currentTrack?.title || ''}
+                  style={styles.trackTitle}
+                  delay={2000}
+                />
+                <MarqueeText
+                  text={currentTrack?.artist || ''}
+                  style={styles.trackArtist}
+                  delay={3000}
+                />
               </View>
-            </GestureDetector>
-          </View>
-
-          <View style={[styles.trackInfo, isTinyScreen && { marginBottom: 8 }]}>
-            <View style={styles.trackTextContainer}>
-              <MarqueeText 
-                text={currentTrack?.title || ''}
-                style={styles.trackTitle}
-                delay={2000}
-              />
-              <MarqueeText 
-                text={currentTrack?.artist || ''}
-                style={styles.trackArtist}
-                delay={3000}
+              <SaveToPlaylistButton
+                track={currentTrack}
+                size={29}
               />
             </View>
-            <TouchableOpacity style={styles.likeButton} activeOpacity={0.7}>
-              <CirclePlus size={30} color="rgba(218, 214, 214, 1)" />
-            </TouchableOpacity>
-          </View>
 
-          <ProgressBar onSeek={handleSeek} />
-          <TimeDisplay />
+            <ProgressBar onSeek={handleSeek} />
+            <TimeDisplay />
 
-          <View style={[styles.mainControls, isTinyScreen && { marginTop: 8, marginBottom: 16 }]}>
-            <ControlButton onPress={toggleShuffle} size="medium">
-              <Shuffle
-                size={20}
-                color={shuffleMode ? '#8B5CF6' : 'rgba(218, 214, 214, 1)'}
-                strokeWidth={shuffleMode ? 2.5 : 2}
-              />
-            </ControlButton>
+            <View style={[styles.mainControls, isTinyScreen && { marginTop: 8, marginBottom: 16 }]}>
+              <ControlButton onPress={toggleShuffle} size="medium">
+                <View style={{ alignItems: 'center' }}>
+                  <SharpShuffle
+                    size={22}
+                    color={shuffleMode ? '#7B2CF5' : 'rgba(218, 214, 214, 1)'}
+                  />
+                  {shuffleMode && (
+                    <View style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: 2,
+                      backgroundColor: '#7B2CF5',
+                      marginTop: 2,
+                      position: 'absolute',
+                      bottom: -6
+                    }} />
+                  )}
+                </View>
+              </ControlButton>
 
-            <ControlButton onPress={playPrevious} size="large">
-              <SkipBack size={25} color="#fff" fill="#fff" />
-            </ControlButton>
+              <ControlButton onPress={playPrevious} size="large">
+                <SharpSkipBack size={23} color="#fff" />
+              </ControlButton>
 
-            <ControlButton onPress={togglePlay} size="xl" variant="solid">
-              {isPlaying ? (
-                <Pause size={25} color="#000" fill="#000" />
-              ) : (
-                <Play size={25} color="#000" fill="#000" style={{ marginLeft: 3 }} />
-              )}
-            </ControlButton>
+              <ControlButton onPress={togglePlay} size="xl" variant="solid">
+                {isPlaying || playbackState === State.Buffering || playbackState === State.Loading ? (
+                  <SharpPause size={30} color="#000" />
+                ) : (
+                  <SharpPlay size={30} color="#000" style={{ marginLeft: 3 }} />
+                )}
+              </ControlButton>
 
-            <ControlButton onPress={playNext} size="large">
-              <SkipForward size={25} color="#fff" fill="#fff" />
-            </ControlButton>
 
-            <ControlButton onPress={toggleRepeat} size="medium">
-              <RepeatIcon
-                size={22}
-                color={repeatMode !== 'off' ? '#8B5CF6' : 'rgba(218, 214, 214, 1)'}
-                strokeWidth={repeatMode !== 'off' ? 2.5 : 2}
-              />
-            </ControlButton>
-          </View>
 
-          <View style={styles.subActions}>
-            <DeviceSelector compact />
+              <ControlButton onPress={playNext} size="large">
+                <SharpSkipNext size={23} color="#fff" />
+              </ControlButton>
 
-            <View style={styles.subActionsRight}>
-              <TouchableOpacity style={styles.subActionButton} activeOpacity={0.7}>
-                <Share2 size={18} color="rgba(218, 214, 214, 1)" />
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.subActionButton}
-                activeOpacity={0.7}
-                onPress={() => setQueueVisible(true)}
-              >
-                <QueueIcon size={18} color="rgba(218, 214, 214, 1)" />
-              </TouchableOpacity>
+              <ControlButton onPress={toggleRepeat} size="medium">
+                <View style={{ alignItems: 'center' }}>
+                  <SharpRepeat
+                    size={24}
+                    color={repeatMode !== 'off' ? '#7B2CF5' : 'rgba(218, 214, 214, 1)'}
+                  />
+                  {repeatMode !== 'off' && (
+                    <View style={{
+                      width: 4,
+                      height: 4,
+                      borderRadius: 2,
+                      backgroundColor: '#7B2CF5',
+                      marginTop: 2,
+                      position: 'absolute',
+                      bottom: -6
+                    }} />
+                  )}
+                </View>
+              </ControlButton>
             </View>
-          </View>
+
+            <View style={styles.subActions}>
+              <DeviceSelector compact />
+
+              <View style={styles.subActionsRight}>
+                <TouchableOpacity style={styles.subActionButton} activeOpacity={0.7}>
+                  <Share2 size={18} color="rgba(218, 214, 214, 1)" />
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.subActionButton}
+                  activeOpacity={0.7}
+                  onPress={() => setQueueVisible(true)}
+                >
+                  <QueueIcon size={18} color="rgba(218, 214, 214, 1)" />
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
           {showDelayedContent && (
             <Animated.View style={delayedContentStyle}>
-              {hasLyrics && <LyricsPreviewCard />}
+              {!!hasLyrics && <LyricsPreviewCard />}
 
               <ArtistCard
                 artist={currentTrack.artist || 'Unknown'}
@@ -809,9 +719,9 @@ export default function FullScreenPlayer({
         />
         <LyricsModal />
         <ArtistModal />
-        <QueueBottomSheet 
-          visible={queueVisible} 
-          onClose={() => setQueueVisible(false)} 
+        <QueueBottomSheet
+          visible={queueVisible}
+          onClose={() => setQueueVisible(false)}
         />
       </Animated.View>
     </GestureDetector>
@@ -844,16 +754,22 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   playingFromLabel: {
-    color: 'rgba(255,255,255,0.5)',
+    color: 'rgba(255, 255, 255, 0.74)',
     fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.5,
+    fontWeight: '600',
+    letterSpacing: 0,
     marginBottom: 3,
   },
   playingFromText: {
     color: '#fff',
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: '700',
+  },
+  playingFromRecommended: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '500',
+    textTransform: 'uppercase',
   },
   scrollContent: {},
   stickyHeader: {
@@ -862,7 +778,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingBottom: 12,
@@ -877,7 +793,7 @@ const styles = StyleSheet.create({
   stickyHeaderTitle: {
     color: '#fff',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   stickyHeaderArtist: {
     color: 'rgba(255,255,255,0.8)',
@@ -891,6 +807,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  stickyHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   subActionsRight: {
     flexDirection: 'row',
@@ -977,6 +898,7 @@ const styles = StyleSheet.create({
   artworkContainer: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 10,
   },
   pagerContainer: {
     flexDirection: 'row',
@@ -1015,6 +937,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     marginBottom: 2,
+    marginTop: 25,
   },
   trackTextContainer: {
     flex: 1,
@@ -1053,7 +976,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    marginTop: 3,
-    marginBottom: 0,
+    marginTop: 10,
+    marginBottom: 30,
+  },
+  mainView: {
+    paddingBottom: 20,
+    justifyContent: 'space-between',
   },
 });

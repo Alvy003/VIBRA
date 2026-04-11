@@ -33,6 +33,7 @@ import { HomeFooter } from '@/components/home/HomeFooter';
 import { AIPlaylistCard } from '@/components/home/AIPlaylistCard';
 import { OnboardingModal } from '@/components/home/OnboardingModal';
 import { MixSection } from '@/components/home/MixSection';
+import { useOnboardingStore } from '@/stores/useOnboardingStore';
 
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
@@ -42,10 +43,12 @@ export default function HomeScreen() {
 
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [mountLevel, setMountLevel] = useState(0);
-
-  const isLoading = useMusicStore(s => s.isLoading);
-  const featuredSongsLength = useMusicStore(s => s.featuredSongs.length);
   
+  const isLoading = useMusicStore(s => s.isLoading);
+  const featuredSongsLength = useMusicStore(s => Array.isArray(s.featuredSongs) ? s.featuredSongs.length : 0);
+  const isPreferencesLoaded = useOnboardingStore(s => s.isPreferencesLoaded);
+  const completedOnboarding = useOnboardingStore(s => s.preferences.completedOnboarding);
+
   const musicStore = useMusicStore.getState();
   const streamStore = useStreamStore.getState();
 
@@ -65,9 +68,6 @@ export default function HomeScreen() {
     musicStore.fetchFeaturedSongs();
     streamStore.fetchHomepage();
 
-    // Public fetches
-    musicStore.fetchFeaturedSongs();
-    streamStore.fetchHomepage();
   }, [isLoaded]);
 
   // ─── Progressive Mounting ───
@@ -121,7 +121,7 @@ export default function HomeScreen() {
     }],
   }));
 
-  const showSkeletons = isLoading && featuredSongsLength === 0;
+  const showSkeletons = !!((isLoading && featuredSongsLength === 0) || (!isPreferencesLoaded && !completedOnboarding));
 
   return (
     <View style={styles.container}>

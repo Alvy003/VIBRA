@@ -1,17 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  Modal, 
-  TouchableOpacity, 
-  ScrollView, 
-  Dimensions, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  ScrollView,
+  Dimensions,
   Pressable
 } from 'react-native';
-import Animated, { 
-  FadeIn, 
-  FadeOut, 
+import Animated, {
+  FadeIn,
+  FadeOut,
   SlideInRight,
   SlideOutLeft,
   SlideInLeft,
@@ -20,9 +20,9 @@ import Animated, {
   SlideOutDown,
 } from 'react-native-reanimated';
 import { Check, Music, Globe, ChevronRight } from 'lucide-react-native';
-import { 
-  useOnboardingStore, 
-  AVAILABLE_LANGUAGES 
+import {
+  useOnboardingStore,
+  AVAILABLE_LANGUAGES
 } from '../../stores/useOnboardingStore';
 import { useAuth } from '@clerk/clerk-expo';
 import { useStreamStore } from '../../stores/useStreamStore';
@@ -45,13 +45,13 @@ const THEME = {
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const OnboardingModal = () => {
-  const { 
-    preferences, 
+  const {
+    preferences,
     setLanguages,
-    completeOnboarding, 
-    shouldShowOnboarding 
+    completeOnboarding,
+    shouldShowOnboarding
   } = useOnboardingStore();
-  
+
   const fetchHomepage = useStreamStore(state => state.fetchHomepage);
   const fetchPicks = useStreamStore(state => state.fetchDailyMix);
   const insets = useSafeAreaInsets();
@@ -103,11 +103,11 @@ export const OnboardingModal = () => {
       setStep(1);
       return;
     }
-    
+
     setLanguages(localSelection);
     completeOnboarding();
     setVisible(false);
-    
+
     // Refresh content
     useStreamStore.setState({ homepageData: null });
     fetchHomepage(true);
@@ -120,7 +120,7 @@ export const OnboardingModal = () => {
     }
     completeOnboarding();
     setVisible(false);
-    
+
     useStreamStore.setState({ homepageData: null });
     fetchHomepage(true);
     fetchPicks();
@@ -138,13 +138,13 @@ export const OnboardingModal = () => {
       statusBarTranslucent
     >
       <View style={styles.modalOverlay}>
-        <Animated.View 
+        <Animated.View
           entering={FadeIn.duration(300)}
           exiting={FadeOut.duration(300)}
-          style={styles.modalBackdrop} 
+          style={styles.modalBackdrop}
         />
-        
-        <Animated.View 
+
+        <Animated.View
           entering={SlideInDown.duration(250)}
           exiting={SlideOutDown.duration(300)}
           style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
@@ -152,20 +152,20 @@ export const OnboardingModal = () => {
           {/* Step Indicator */}
           <View style={styles.indicatorContainer}>
             {[0, 1].map((s) => (
-              <View 
-                key={s} 
+              <View
+                key={s}
                 style={[
-                  styles.indicator, 
+                  styles.indicator,
                   s <= step ? styles.indicatorActive : styles.indicatorInactive,
                   s <= step && { flex: 2 }
-                ]} 
+                ]}
               />
             ))}
           </View>
 
           <View style={styles.stepContainer}>
             {step === 0 ? (
-              <Animated.View 
+              <Animated.View
                 key="welcome"
                 entering={FadeIn.duration(400)}
                 exiting={FadeOut.duration(200)}
@@ -185,10 +185,10 @@ export const OnboardingModal = () => {
                   Your personal music experience starts here. Let's set things up in just a moment.
                 </Text>
 
-                <TouchableOpacity 
-                   activeOpacity={0.8}
-                   onPress={handleContinue}
-                   style={styles.primaryButton}
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  onPress={handleContinue}
+                  style={styles.primaryButton}
                 >
                   <Text style={styles.primaryButtonText}>Get Started</Text>
                   <ChevronRight size={18} color="#fff" />
@@ -197,7 +197,7 @@ export const OnboardingModal = () => {
                 <Text style={styles.timeTag}>Takes less than 10 seconds</Text>
               </Animated.View>
             ) : (
-              <Animated.View 
+              <Animated.View
                 key="languages"
                 entering={SlideInRight.duration(300)}
                 style={styles.languageStep}
@@ -212,7 +212,7 @@ export const OnboardingModal = () => {
                   </View>
                 </View>
 
-                <ScrollView 
+                <ScrollView
                   style={styles.languageList}
                   contentContainerStyle={styles.languageGrid}
                   showsVerticalScrollIndicator={false}
@@ -247,11 +247,11 @@ export const OnboardingModal = () => {
                 </ScrollView>
 
                 <View style={styles.footer}>
-                  {selectedCount > 0 && (
+                  {localSelection.length > 0 ? (
                     <View style={styles.selectionBadge}>
                       <Text style={styles.selectionText}>{selectedCount} selected</Text>
                     </View>
-                  )}
+                  ) : null}
 
                   <TouchableOpacity
                     activeOpacity={0.8}
@@ -268,10 +268,12 @@ export const OnboardingModal = () => {
                     ]}>
                       {selectedCount > 0 ? "Continue" : "Select at least 1"}
                     </Text>
-                    {selectedCount > 0 && <ChevronRight size={18} color="#fff" />}
+                    {localSelection.length > 0 ? (
+                      <ChevronRight size={18} color="#fff" />
+                    ) : null}
                   </TouchableOpacity>
 
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={handleSkip}
                     style={styles.skipButton}
                   >

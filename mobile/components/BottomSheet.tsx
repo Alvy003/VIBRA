@@ -6,6 +6,7 @@ import {
   Dimensions,
   Pressable,
   BackHandler,
+  Modal,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -57,7 +58,7 @@ const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
       header,
       dismissThreshold = 100,
       dismissVelocity = 500,
-      backgroundColor = '#1a1a1a',
+      backgroundColor = '#09090b',
     },
     ref
   ) => {
@@ -255,45 +256,53 @@ const BottomSheet = forwardRef<BottomSheetRef, BottomSheetProps>(
     if (!isOpen) return null;
 
     return (
-      <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-        {/* Backdrop */}
-        <Animated.View style={[styles.backdrop, backdropStyle]}>
-          <Pressable 
-            style={StyleSheet.absoluteFill} 
-            onPress={closeSheet} 
-          />
-        </Animated.View>
-
-        {/* Sheet */}
-        <GestureDetector gesture={panGesture}>
-          <Animated.View
-            style={[
-              styles.sheet,
-              { backgroundColor },
-              sheetStyle,
-            ]}
-          >
-            {/* Handle */}
-            {showHandle && (
-              <View style={styles.handleContainer}>
-                <Animated.View style={[styles.handle, handleIndicatorStyle]} />
-              </View>
-            )}
-
-            {/* Header */}
-            {header && (
-              <View style={styles.headerContainer}>
-                {header}
-              </View>
-            )}
-
-            {/* Content */}
-            <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
-              {children}
-            </View>
+      <Modal
+        visible={isOpen}
+        transparent
+        animationType="none"
+        onRequestClose={closeSheet}
+        statusBarTranslucent
+      >
+        <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          {/* Backdrop */}
+          <Animated.View style={[styles.backdrop, backdropStyle]}>
+            <Pressable 
+              style={StyleSheet.absoluteFill} 
+              onPress={closeSheet} 
+            />
           </Animated.View>
-        </GestureDetector>
-      </View>
+  
+          {/* Sheet */}
+          <GestureDetector gesture={panGesture}>
+            <Animated.View
+              style={[
+                styles.sheet,
+                { backgroundColor },
+                sheetStyle,
+              ]}
+            >
+              {/* Handle */}
+              {showHandle && (
+                <View style={styles.handleContainer}>
+                  <Animated.View style={[styles.handle, handleIndicatorStyle]} />
+                </View>
+              )}
+  
+              {/* Header */}
+              {header && (
+                <View style={styles.headerContainer}>
+                  {header}
+                </View>
+              )}
+  
+              {/* Content */}
+              <View style={[styles.content, { paddingBottom: insets.bottom + 16 }]}>
+                {children}
+              </View>
+            </Animated.View>
+          </GestureDetector>
+        </View>
+      </Modal>
     );
   }
 );

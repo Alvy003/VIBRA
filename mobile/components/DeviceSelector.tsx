@@ -19,9 +19,9 @@ import Animated, {
   withDelay,
   Easing,
 } from 'react-native-reanimated';
-import { 
-  Smartphone, 
-  Bluetooth, 
+import {
+  Smartphone,
+  Bluetooth,
   Speaker,
   Headphones,
   Tv,
@@ -32,6 +32,7 @@ import {
   ChevronRight,
   Check,
 } from 'lucide-react-native';
+import { SharpDevice } from './SharpIcons';
 import * as Haptics from 'expo-haptics';
 import BottomSheet, { BottomSheetRef } from './BottomSheet';
 import { useNativeAudioDevices, AudioDevice } from '@/hooks/useNativeAudioDevices';
@@ -39,9 +40,9 @@ import { useNativeAudioDevices, AudioDevice } from '@/hooks/useNativeAudioDevice
 let IntentLauncher: any = null;
 try {
   IntentLauncher = require('expo-intent-launcher');
-} catch (e) {}
+} catch (e) { }
 
-const ACCENT_COLOR = '#8B5CF6';
+const ACCENT_COLOR = '#7B2CF5';
 
 // ─── Sound Wave Animation ───
 const SoundWave = React.memo(() => {
@@ -106,9 +107,9 @@ const waveStyles = StyleSheet.create({
 });
 
 // ─── Device Icon ───
-const DeviceIcon = ({ type, size = 24, color = '#fff' }: { 
-  type: string; 
-  size?: number; 
+const DeviceIcon = ({ type, size = 24, color = '#fff' }: {
+  type: string;
+  size?: number;
   color?: string;
 }) => {
   switch (type) {
@@ -125,7 +126,7 @@ const DeviceIcon = ({ type, size = 24, color = '#fff' }: {
     case 'airplay':
       return <Volume2 size={size} color={color} />;
     case 'local':
-      return <Smartphone size={size} color={color} />;
+      return <SharpDevice size={size} color={color} />;
     default:
       return <Speaker size={size} color={color} />;
   }
@@ -155,12 +156,12 @@ const ScanningIndicator = React.memo(() => {
 });
 
 // ─── Device Row ───
-const DeviceRow = React.memo(({ 
-  device, 
+const DeviceRow = React.memo(({
+  device,
   isActive,
   onPress,
-}: { 
-  device: AudioDevice; 
+}: {
+  device: AudioDevice;
   isActive: boolean;
   onPress?: () => void;
 }) => (
@@ -171,10 +172,10 @@ const DeviceRow = React.memo(({
     disabled={isActive}
   >
     <View style={[styles.deviceIconSmall, isActive && styles.deviceIconSmallActive]}>
-      <DeviceIcon 
-        type={device.type} 
-        size={20} 
-        color={isActive ? ACCENT_COLOR : '#fff'} 
+      <DeviceIcon
+        type={device.type}
+        size={20}
+        color={isActive ? ACCENT_COLOR : '#fff'}
       />
     </View>
     <View style={styles.deviceRowInfo}>
@@ -192,219 +193,239 @@ const DeviceRow = React.memo(({
 // ─── Main Component ───
 interface DeviceSelectorProps {
   compact?: boolean; // For FullScreenPlayer integration
+  showPill?: boolean;
 }
 
-export default function DeviceSelector({ compact = false }: DeviceSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const bottomSheetRef = useRef<BottomSheetRef>(null);
-  
-  const { 
-    currentDevice, 
-    allDevices, 
-    isScanning, 
-    isNativeAvailable,
-    showAudioPicker,
-    refresh 
-  } = useNativeAudioDevices();
+export interface DeviceSelectorRef {
+  open: () => void;
+  close: () => void;
+}
 
-  const handleDeviceTap = async (device: AudioDevice) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    
-    if (device.isActive) return;
-    
-    const hasNativePicker = await showAudioPicker();
-    
-    if (!hasNativePicker) {
+const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
+  ({ compact = false, showPill = true }, ref) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const bottomSheetRef = useRef<BottomSheetRef>(null);
+
+    const {
+      currentDevice,
+      allDevices,
+      isScanning,
+      isNativeAvailable,
+      showAudioPicker,
+      refresh
+    } = useNativeAudioDevices();
+
+    // Expose methods to parent
+    React.useImperativeHandle(ref, () => ({
+      open: handleOpenModal,
+      close: handleCloseModal,
+    }));
+
+    const handleDeviceTap = async (device: AudioDevice) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+      if (device.isActive) return;
+
+      const hasNativePicker = await showAudioPicker();
+
+      if (!hasNativePicker) {
+        Alert.alert(
+          'Switch Audio Output',
+          `To switch to ${device.name}, please use your device's audio settings or Control Center.`,
+          [
+            { text: 'Open Settings', onPress: handleOpenBluetoothSettings },
+            { text: 'OK', style: 'cancel' },
+          ]
+        );
+      }
+    };
+
+    const handleOpenModal = () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setIsOpen(true);
+      refresh();
+    };
+
+    const handleCloseModal = () => setIsOpen(false);
+
+    const handleRefresh = () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      refresh();
+    };
+
+    const handleOpenBluetoothSettings = async () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      try {
+        if (Platform.OS === 'android' && IntentLauncher) {
+          await IntentLauncher.startActivityAsync(
+            IntentLauncher.ActivityAction.BLUETOOTH_SETTINGS
+          );
+        } else if (Platform.OS === 'ios') {
+          await Linking.openURL('App-Prefs:Bluetooth');
+        } else {
+          await Linking.openSettings();
+        }
+      } catch {
+        Linking.openSettings();
+      }
+    };
+
+    const handleHelpPress = () => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       Alert.alert(
-        'Switch Audio Output',
-        `To switch to ${device.name}, please use your device's audio settings or Control Center.`,
+        'Connect a Device',
+        'To play music on a Bluetooth device:\n\n' +
+        '1. Open Bluetooth settings\n' +
+        '2. Turn on your Bluetooth device\n' +
+        '3. Pair it with your phone\n\n' +
+        'Audio will automatically route to connected devices.',
         [
           { text: 'Open Settings', onPress: handleOpenBluetoothSettings },
           { text: 'OK', style: 'cancel' },
         ]
       );
-    }
-  };
+    };
 
-  const handleOpenModal = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setIsOpen(true);
-    refresh();
-  };
-
-  const handleCloseModal = () => setIsOpen(false);
-
-  const handleRefresh = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    refresh();
-  };
-
-  const handleOpenBluetoothSettings = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    try {
-      if (Platform.OS === 'android' && IntentLauncher) {
-        await IntentLauncher.startActivityAsync(
-          IntentLauncher.ActivityAction.BLUETOOTH_SETTINGS
-        );
-      } else if (Platform.OS === 'ios') {
-        await Linking.openURL('App-Prefs:Bluetooth');
-      } else {
-        await Linking.openSettings();
-      }
-    } catch {
-      Linking.openSettings();
-    }
-  };
-
-  const handleHelpPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Alert.alert(
-      'Connect a Device',
-      'To play music on a Bluetooth device:\n\n' +
-      '1. Open Bluetooth settings\n' +
-      '2. Turn on your Bluetooth device\n' +
-      '3. Pair it with your phone\n\n' +
-      'Audio will automatically route to connected devices.',
-      [
-        { text: 'Open Settings', onPress: handleOpenBluetoothSettings },
-        { text: 'OK', style: 'cancel' },
-      ]
+    const otherDevices = allDevices.filter(
+      d => d.id !== currentDevice?.id && d.isBluetooth
     );
-  };
 
-  const otherDevices = allDevices.filter(
-    d => d.id !== currentDevice?.id && d.isBluetooth
-  );
-
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <Text style={styles.headerTitle}>Current device</Text>
-      <View style={styles.headerActions}>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={handleRefresh}
-          activeOpacity={0.7}
-          disabled={isScanning}
-        >
-          {isScanning ? <ScanningIndicator /> : (
-            <RefreshCw size={20} color="rgba(255,255,255,0.6)" />
-          )}
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.headerButton}
-          onPress={handleCloseModal}
-          activeOpacity={0.7}
-        >
-          <X size={24} color="rgba(255,255,255,0.6)" />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  return (
-    <>
-      {/* Trigger Pill */}
-      <TouchableOpacity
-        style={[styles.pill, compact && styles.pillCompact]}
-        onPress={handleOpenModal}
-        activeOpacity={0.7}
-      >
-        <DeviceIcon 
-          type={currentDevice?.type || 'local'} 
-          size={compact ? 18 : 16} 
-          color={ACCENT_COLOR}
-        />
-        <Text 
-          style={[styles.pillText, compact && styles.pillTextCompact]} 
-          numberOfLines={1}
-        >
-          {currentDevice?.type === 'local' ? 'This Phone' : (currentDevice?.name || 'This Phone')}
-        </Text>
-      </TouchableOpacity>
-
-      {/* Bottom Sheet */}
-      <BottomSheet
-        ref={bottomSheetRef}
-        isOpen={isOpen}
-        onClose={handleCloseModal}
-        snapPoints={[otherDevices.length > 0 ? 0.55 : 0.45]}
-        header={renderHeader()}
-      >
-        {/* Current Device */}
-        <View style={styles.currentDevice}>
-          <View style={styles.currentDeviceIcon}>
-            <DeviceIcon 
-              type={currentDevice?.type || 'local'} 
-              size={28} 
-              color={ACCENT_COLOR} 
-            />
-          </View>
-          <View style={styles.currentDeviceInfo}>
-            <View style={styles.currentDeviceNameRow}>
-              <Text style={styles.currentDeviceName}>
-                {currentDevice?.type === 'local' ? 'This Phone' : (currentDevice?.name || 'This Phone')}
-              </Text>
-              <SoundWave />
-            </View>
-            <Text style={styles.currentDeviceStatus}>
-              {currentDevice?.isBluetooth ? 'Connected via Bluetooth' : 'Listening on this device'}
-            </Text>
-          </View>
+    const renderHeader = () => (
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Current device</Text>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={handleRefresh}
+            activeOpacity={0.7}
+            disabled={isScanning}
+          >
+            {isScanning ? <ScanningIndicator /> : (
+              <RefreshCw size={20} color="rgba(255,255,255,0.6)" />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.headerButton}
+            onPress={handleCloseModal}
+            activeOpacity={0.7}
+          >
+            <X size={24} color="rgba(255,255,255,0.6)" />
+          </TouchableOpacity>
         </View>
+      </View>
+    );
 
-        {/* Scanning */}
-        {isScanning && (
-          <View style={styles.scanningRow}>
-            <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" />
-            <Text style={styles.scanningText}>Looking for devices...</Text>
-          </View>
+    return (
+      <>
+        {/* Trigger Pill */}
+        {showPill && (
+          <TouchableOpacity
+            style={[styles.pill, compact && styles.pillCompact]}
+            onPress={handleOpenModal}
+            activeOpacity={0.7}
+          >
+            <DeviceIcon
+              type={currentDevice?.type || 'local'}
+              size={compact ? 20 : 16}
+              color={currentDevice?.type === 'local' || !currentDevice ? 'rgba(218, 214, 214, 1)' : ACCENT_COLOR}
+            />
+            {currentDevice?.type !== 'local' && currentDevice && (
+              <Text
+                style={[styles.pillText, compact && styles.pillTextCompact]}
+                numberOfLines={1}
+              >
+                {currentDevice?.name}
+              </Text>
+            )}
+          </TouchableOpacity>
         )}
 
-        {/* Other Bluetooth Devices */}
-        {otherDevices.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Other devices</Text>
-            {otherDevices.map(device => (
-              <DeviceRow
-                key={device.id}
-                device={device}
-                isActive={false}
-                onPress={() => handleDeviceTap(device)}
+        {/* Bottom Sheet */}
+        <BottomSheet
+          ref={bottomSheetRef}
+          isOpen={isOpen}
+          onClose={handleCloseModal}
+          snapPoints={[otherDevices.length > 0 ? 0.55 : 0.45]}
+          header={renderHeader()}
+        >
+          {/* Current Device */}
+          <View style={styles.currentDevice}>
+            <View style={styles.currentDeviceIcon}>
+              <DeviceIcon
+                type={currentDevice?.type || 'local'}
+                size={28}
+                color={ACCENT_COLOR}
               />
-            ))}
-          </>
-        )}
-
-        <View style={styles.divider} />
-
-        {/* Bluetooth Settings */}
-        <TouchableOpacity 
-          style={styles.settingsRow}
-          onPress={handleOpenBluetoothSettings}
-          activeOpacity={0.6}
-        >
-          <View style={styles.settingsIcon}>
-            <Bluetooth size={22} color="#fff" />
+            </View>
+            <View style={styles.currentDeviceInfo}>
+              <View style={styles.currentDeviceNameRow}>
+                <Text style={styles.currentDeviceName}>
+                  {currentDevice?.type === 'local' ? 'This Phone' : (currentDevice?.name || 'This Phone')}
+                </Text>
+                <SoundWave />
+              </View>
+              <Text style={styles.currentDeviceStatus}>
+                {currentDevice?.isBluetooth ? 'Connected via Bluetooth' : 'Listening on this device'}
+              </Text>
+            </View>
           </View>
-          <View style={styles.settingsInfo}>
-            <Text style={styles.settingsTitle}>Connect to a device</Text>
-            <Text style={styles.settingsSubtitle}>Open Bluetooth settings</Text>
-          </View>
-          <ChevronRight size={20} color="rgba(255,255,255,0.4)" />
-        </TouchableOpacity>
 
-        {/* Help */}
-        <TouchableOpacity 
-          style={styles.helpLink}
-          onPress={handleHelpPress}
-          activeOpacity={0.6}
-        >
-          <Text style={styles.helpLinkText}>Don't see your device?</Text>
-        </TouchableOpacity>
-      </BottomSheet>
-    </>
-  );
-}
+          {/* Scanning */}
+          {isScanning && (
+            <View style={styles.scanningRow}>
+              <ActivityIndicator size="small" color="rgba(255,255,255,0.5)" />
+              <Text style={styles.scanningText}>Looking for devices...</Text>
+            </View>
+          )}
+
+          {/* Other Bluetooth Devices */}
+          {otherDevices.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Other devices</Text>
+              {otherDevices.map(device => (
+                <DeviceRow
+                  key={device.id}
+                  device={device}
+                  isActive={false}
+                  onPress={() => handleDeviceTap(device)}
+                />
+              ))}
+            </>
+          ) : null}
+
+          <View style={styles.divider} />
+
+          {/* Bluetooth Settings */}
+          <TouchableOpacity
+            style={styles.settingsRow}
+            onPress={handleOpenBluetoothSettings}
+            activeOpacity={0.6}
+          >
+            <View style={styles.settingsIcon}>
+              <Bluetooth size={22} color="#fff" />
+            </View>
+            <View style={styles.settingsInfo}>
+              <Text style={styles.settingsTitle}>Connect to a device</Text>
+              <Text style={styles.settingsSubtitle}>Open Bluetooth settings</Text>
+            </View>
+            <ChevronRight size={20} color="rgba(255,255,255,0.4)" />
+          </TouchableOpacity>
+
+          {/* Help */}
+          <TouchableOpacity
+            style={styles.helpLink}
+            onPress={handleHelpPress}
+            activeOpacity={0.6}
+          >
+            <Text style={styles.helpLinkText}>Don't see your device?</Text>
+          </TouchableOpacity>
+        </BottomSheet>
+      </>
+    );
+  }
+);
+
+export default DeviceSelector;
 
 const styles = StyleSheet.create({
   pill: {
@@ -523,7 +544,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   deviceIconSmallActive: {
-    backgroundColor: 'rgba(29, 185, 84, 0.15)',
+    backgroundColor: 'rgba(139, 92, 246, 0.15)',
   },
   deviceRowInfo: {
     flex: 1,

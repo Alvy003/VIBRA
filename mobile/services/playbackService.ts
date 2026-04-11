@@ -2,7 +2,7 @@ import TrackPlayer, { Event, State, Capability, AppKilledPlaybackBehavior } from
 
 // Minimalistic PlaybackService to isolate event bridge issues
 export async function PlaybackService() {
-    console.warn('[PlaybackService] Service is booting (Headless Context)...');
+    // console.warn('[PlaybackService] Service is booting (Headless Context)...');
 
     // Heartbeat for verification
     setInterval(async () => {
@@ -45,71 +45,71 @@ export async function PlaybackService() {
                 Capability.Stop,
             ],
         });
-        console.warn('[PlaybackService] updateOptions applied from background.');
+        // console.warn('[PlaybackService] updateOptions applied from background.');
     } catch (e) {
-        console.error('[PlaybackService] Failed to updateOptions:', e);
+        // console.error('[PlaybackService] Failed to updateOptions:', e);
     }
 
     // --- Remote Event Listeners (using direct strings to be safe) ---
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-play', async () => {
-        console.warn('[PlaybackService] EVENT: remote-play');
+        // console.warn('[PlaybackService] EVENT: remote-play');
         await TrackPlayer.play();
     });
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-pause', async () => {
-        console.warn('[PlaybackService] EVENT: remote-pause');
+        // console.warn('[PlaybackService] EVENT: remote-pause');
         await TrackPlayer.pause();
     });
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-next', async () => {
-        console.warn('[PlaybackService] EVENT: remote-next');
+        // console.warn('[PlaybackService] EVENT: remote-next');
         await TrackPlayer.skipToNext();
     });
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-previous', async () => {
-        console.warn('[PlaybackService] EVENT: remote-previous');
+        // console.warn('[PlaybackService] EVENT: remote-previous');
         await TrackPlayer.skipToPrevious();
     });
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-stop', async () => {
-        console.warn('[PlaybackService] EVENT: remote-stop');
+        // console.warn('[PlaybackService] EVENT: remote-stop');
         await TrackPlayer.stop();
     });
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-seek', async (event: any) => {
-        console.warn('[PlaybackService] EVENT: remote-seek ->', event.position);
+        // console.warn('[PlaybackService] EVENT: remote-seek ->', event.position);
         await TrackPlayer.seekTo(event.position);
     });
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-jump-forward', async (event: any) => {
-        console.warn('[PlaybackService] EVENT: remote-jump-forward');
+        // console.warn('[PlaybackService] EVENT: remote-jump-forward');
         const pos = await TrackPlayer.getPosition();
         await TrackPlayer.seekTo(pos + (event.interval || 15));
     });
 
     // @ts-ignore
     TrackPlayer.addEventListener('remote-jump-backward', async (event: any) => {
-        console.warn('[PlaybackService] EVENT: remote-jump-backward');
+        // console.warn('[PlaybackService] EVENT: remote-jump-backward');
         const pos = await TrackPlayer.getPosition();
         await TrackPlayer.seekTo(Math.max(0, pos - (event.interval || 15)));
     });
 
     // --- Observer Listeners ---
     TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
-        console.log('[PlaybackService] Native State Change:', event.state);
+        // console.log('[PlaybackService] Native State Change:', event.state);
     });
 
     TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event) => {
-        console.log('[PlaybackService] Native Track Change:', event.track?.title || 'None');
+        // console.log('[PlaybackService] Native Track Change:', event.track?.title || 'None');
     });
 
-    console.warn('[PlaybackService] Listeners registered successfully.');
+    // console.warn('[PlaybackService] Listeners registered successfully.');
 }

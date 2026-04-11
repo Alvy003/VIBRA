@@ -21,8 +21,8 @@ export const AnimatedHeader = React.memo(({ scrollY, userImageUrl }: AnimatedHea
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
-  // Fade out header as user scrolls
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
+  // Fade content (avatar) as user scrolls
+  const contentAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       scrollY.value,
       [0, 30, 60],
@@ -33,46 +33,70 @@ export const AnimatedHeader = React.memo(({ scrollY, userImageUrl }: AnimatedHea
       translateY: interpolate(
         scrollY.value,
         [0, 100],
-        [0, -20],
+        [0, -15],
         Extrapolation.CLAMP
       ),
     }],
   }));
 
+  // Background fades in as user scrolls
+  const bgAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(
+      scrollY.value,
+      [20, 80],
+      [0, 1],
+      Extrapolation.CLAMP
+    ),
+  }));
+
   return (
-    <Animated.View 
-      style={[
-        styles.wrapper, 
-        { paddingTop: insets.top },
-        headerAnimatedStyle,
-      ]}
+    <View
+      style={styles.wrapper}
       pointerEvents="box-none"
     >
-      <View style={styles.content} pointerEvents="box-none">
-        {/* Left side - empty or logo */}
-        <View style={styles.left} />
+      {/* Translucent Background */}
+      <Animated.View
+        style={[
+          styles.background,
+          bgAnimatedStyle,
+          { height: insets.top }
+        ]}
+      />
 
-        {/* Right side - avatar */}
-        <View style={styles.right}>
-          <TouchableOpacity
-            onPress={() => router.push('/profile' as any)}
-            style={styles.avatarButton}
-            activeOpacity={0.7}
-          >
-            <Image
-              source={{ 
-                uri: userImageUrl || 'https://avatar.iran.liara.run/public/boy', 
-                width: 100, 
-                height: 100 
-              }}
-              style={styles.avatar}
-              cachePolicy="memory-disk"
-              transition={200}
-            />
-          </TouchableOpacity>
+      <Animated.View
+        style={[
+          styles.contentWrapper,
+          { paddingTop: insets.top },
+          contentAnimatedStyle,
+        ]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.content} pointerEvents="box-none">
+          {/* Left side - empty or logo */}
+          <View style={styles.left} />
+
+          {/* Right side - avatar */}
+          <View style={styles.right}>
+            <TouchableOpacity
+              onPress={() => router.push('/profile' as any)}
+              style={styles.avatarButton}
+              activeOpacity={0.7}
+            >
+              <Image
+                source={{
+                  uri: userImageUrl || 'https://avatar.iran.liara.run/public/boy',
+                  width: 100,
+                  height: 100
+                }}
+                style={styles.avatar}
+                cachePolicy="memory-disk"
+                transition={200}
+              />
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </View>
   );
 });
 
@@ -84,7 +108,14 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 50,
+    zIndex: 100,
+  },
+  background: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(9, 9, 11, 0.85)', // Same as COLORS.background but translucent
+  },
+  contentWrapper: {
+    flex: 1,
   },
   content: {
     flexDirection: 'row',

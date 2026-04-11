@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { useProgress } from 'react-native-track-player';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -21,10 +23,16 @@ const HIT_SLOP = 5;
 
 const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
   const { position, duration } = useProgress(200);
+  const { currentTrack } = usePlayerStore();
 
   const sliderWidth = useSharedValue(0);
   const isSliding = useSharedValue(false);
   const progress = useSharedValue(0);
+
+  useEffect(() => {
+    // Reset progress immediately on track change to prevent flicker
+    progress.value = 0;
+  }, [currentTrack?.id]);
 
   useEffect(() => {
     if (!isSliding.value && duration > 0) {

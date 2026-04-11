@@ -1,11 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { 
-    View, 
-    Text, 
-    StyleSheet, 
-    TextInput, 
-    FlatList, 
-    TouchableOpacity, 
+import {
+    View,
+    Text,
+    StyleSheet,
+    TextInput,
+    FlatList,
+    TouchableOpacity,
     Dimensions,
     KeyboardAvoidingView,
     Platform
@@ -25,14 +25,14 @@ const { width } = Dimensions.get('window');
 export default function LibrarySearchScreen() {
     const router = useRouter();
     const [query, setQuery] = useState('');
-    
+
     const { playlists } = usePlaylistStore();
     const { albums, likedSongs } = useMusicStore();
     const { savedItems } = useSavedItemsStore();
 
     const allItems = useMemo(() => {
         const items: any[] = [];
-        
+
         // Add Liked Songs
         items.push({
             id: 'liked-songs',
@@ -58,7 +58,7 @@ export default function LibrarySearchScreen() {
 
         // Add Playlists
         playlists.forEach(p => items.push({ ...p, type: 'playlist', title: p.name }));
-        
+
         // Add Saved Items (Albums, Artists, external Playlists)
         savedItems.forEach(i => items.push({ ...i }));
 
@@ -71,7 +71,7 @@ export default function LibrarySearchScreen() {
     const filteredItems = useMemo(() => {
         if (!query.trim()) return [];
         const lowQuery = query.toLowerCase();
-        return allItems.filter(item => 
+        return allItems.filter(item =>
             (item.title || item.name || '').toLowerCase().includes(lowQuery) ||
             (item.artist || '').toLowerCase().includes(lowQuery)
         );
@@ -86,12 +86,12 @@ export default function LibrarySearchScreen() {
         const resolvedUri = resolveAssetUrl(coverUrl);
 
         return (
-            <TouchableOpacity 
+            <TouchableOpacity
                 style={styles.itemContainer}
                 onPress={() => {
                     // Routing logic similar to LibraryScreen
                     const isAlbum = item.type === 'album';
-                    
+
                     if (item.id === 'liked-songs') {
                         router.push('/favorites' as any);
                         return;
@@ -103,7 +103,7 @@ export default function LibrarySearchScreen() {
 
                     const rawId = item.externalId || item._id || item.id;
                     const id = rawId.replace(/jiosaavn_(album|playlist|artist)_/, '');
-                    
+
                     let route = '';
                     if (isAlbum) {
                         route = item.externalId ? `/(tabs)/album/external/jiosaavn/${id}` : `/(tabs)/album/${id}`;
@@ -112,7 +112,7 @@ export default function LibrarySearchScreen() {
                     } else if (isArtist) {
                         route = item.externalId ? `/(tabs)/artist/external/jiosaavn/${id}` : `/(tabs)/artist/${id}`;
                     }
-                    
+
                     if (route) router.push(route as any);
                 }}
             >
@@ -129,7 +129,7 @@ export default function LibrarySearchScreen() {
                         </View>
                     ) : (
                         resolvedUri ? (
-                            <Image 
+                            <Image
                                 source={{ uri: resolvedUri }}
                                 style={styles.image}
                                 contentFit="cover"
@@ -165,7 +165,7 @@ export default function LibrarySearchScreen() {
                         placeholder="Search Your Library"
                         placeholderTextColor="#a1a1aa"
                         autoFocus
-                        selectionColor="#8B5CF6"
+                        selectionColor="#7B2CF5"
                     />
                     {query.length > 0 && (
                         <TouchableOpacity onPress={() => setQuery('')}>

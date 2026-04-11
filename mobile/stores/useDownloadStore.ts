@@ -74,13 +74,13 @@ export const useDownloadStore = create<DownloadStore>()(
                 const songId = song.id || song.externalId || song._id;
                 if (!songId || (get().downloadedSongs[songId] && !context) || get().isDownloading[songId]) return;
 
-                set((state) => ({ 
-                    isDownloading: { ...state.isDownloading, [songId]: true } 
+                set((state) => ({
+                    isDownloading: { ...state.isDownloading, [songId]: true }
                 }));
 
                 try {
                     await ensureDir();
-                    
+
                     const url = song.url || song.audioUrl || song.streamUrl;
                     if (!url) throw new Error("No URL to download");
 
@@ -140,8 +140,8 @@ export const useDownloadStore = create<DownloadStore>()(
                     }));
                 } catch (error) {
                     console.error("[DownloadStore] Download error", error);
-                    set((state) => ({ 
-                        isDownloading: { ...state.isDownloading, [songId]: false } 
+                    set((state) => ({
+                        isDownloading: { ...state.isDownloading, [songId]: false }
                     }));
                 }
             },

@@ -34,13 +34,14 @@ import { resolveAssetUrl } from '@/lib/url';
 import { useDynamicColors } from '@/hooks/useDynamicColors';
 import { useDownloadStore } from '@/stores/useDownloadStore';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
+import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
 import { FlashList as OriginalFlashList } from '@shopify/flash-list';
-const FlashList = OriginalFlashList as any;
+const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#9333EA';
+const ACCENT_COLOR = '#7B2CF5';
 
 interface ExternalAlbumHeaderProps {
     album: any;
@@ -66,74 +67,81 @@ const ExternalAlbumHeader = React.memo<ExternalAlbumHeaderProps>(({
     width,
 }) => (
     <View style={{ backgroundColor: colors.primary }}>
-        <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.8)', '#000000']}
-            locations={[0, 0.4, 0.7, 1]}
-            style={{ paddingTop: 100, paddingBottom: 24 }}
-        >
+            <LinearGradient
+                colors={[
+                    'transparent',
+                    'rgba(0,0,0,0.05)',
+                    'rgba(0,0,0,0.15)',
+                    'rgba(0,0,0,0.3)',
+                    'rgba(0,0,0,0.5)',
+                    'rgba(0,0,0,0.7)',
+                    'rgba(0,0,0,0.85)',
+                    '#000000',
+                    '#000000',
+                ]}
+                locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
+                style={{ paddingTop: 60, paddingBottom: 10 }}
+            >
             <View className="items-center px-6">
                 <View style={{
-                    shadowColor: '#000',
+                    shadowColor: colors.primary,
                     shadowOffset: { width: 0, height: 12 },
                     shadowOpacity: 0.6,
                     shadowRadius: 24,
-                    elevation: 20
+                    elevation: 20,
                 }}>
                     <Image
                         source={{ uri: artworkUrl ?? undefined }}
-                        style={{ width: width * 0.65, height: width * 0.65, borderRadius: 4 }}
+                        style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2 }}
                         contentFit="cover"
                         transition={0}
                         cachePolicy="memory-disk"
                     />
                 </View>
 
-                <View className="w-full mt-10">
-                    <Text className="text-white text-3xl font-extrabold mb-2 leading-tight tracking-tight">
+                <View className="w-full mt-5">
+                    <Text className="text-white text-[24px] font-bold mb-3 leading-tight tracking-tight" numberOfLines={1}>
                         {album.title}
                     </Text>
-                    <Text className="text-zinc-300 text-sm font-medium mb-4">{album.artist}</Text>
+                    <Text className="text-white text-sm font-bold mb-4" numberOfLines={1}>{album.artist}</Text>
                     <View className="flex-row items-center">
-                        <View className="w-6 h-6 rounded-full bg-purple-600 items-center justify-center mr-2 ring-1 ring-white/20">
-                            <Text className="text-white text-[10px] font-black">V</Text>
-                        </View>
-                        <Text className="text-white text-xs font-bold uppercase tracking-wider">
-                            VIBRA • ALBUM <Text className="text-zinc-400 font-medium lowercase italic">• {album.year || '2024'}</Text>
+                        <Text className="text-zinc-400 text-[12px] font-medium tracking-wider">
+                            Album <Text className="text-zinc-400 font-medium lowercase">• {album.year || '2024'}</Text>
                         </Text>
                     </View>
                 </View>
             </View>
 
-            <View className="px-6 pt-8 pb-4 flex-row items-center justify-between">
+            <View className="px-6 pt-4 pb-0 flex-row items-center justify-between">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
                     <TouchableOpacity activeOpacity={0.7}>
-                        <Heart size={26} color="#b3b3b3" />
+                        <Heart size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
                         {isAlbumDownloaded ? (
-                            <DownloadedIcon size={26} />
+                            <DownloadedIcon size={22} />
                         ) : (
-                            <CircleArrowDown size={28} color="#b3b3b3" />
+                            <CircleArrowDown size={24} color="#b3b3b3" />
                         )}
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7}>
-                        <Share2 size={24} color="#b3b3b3" />
+                        <Share2 size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7}>
-                        <MoreVertical size={24} color="#b3b3b3" />
+                        <MoreVertical size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
                     onPress={isCurrentAlbumPlaying ? onPause : onPlay}
                     style={{ backgroundColor: ACCENT_COLOR }}
-                    className="w-16 h-16 rounded-full items-center justify-center shadow-2xl"
+                    className="w-[52px] h-[52px] rounded-full items-center justify-center shadow-2xl"
                     activeOpacity={0.8}
                 >
                     {isCurrentAlbumPlaying ? (
-                        <Pause size={32} color="black" fill="black" />
+                        <SharpPause size={26} color="black" />
                     ) : (
-                        <Play size={32} color="black" fill="black" className="ml-1" />
+                        <SharpPlay size={26} color="black" style={{ marginLeft: 3 }} />
                     )}
                 </TouchableOpacity>
             </View>
@@ -327,15 +335,22 @@ export default function ExternalAlbumScreen() {
         />
     ), [displayAlbum, artworkUrl, colors, isAlbumDownloaded, isCurrentAlbumPlaying, handleDownloadAlbum, handlePlayAll, pauseTrack]);
 
+    const displaySongs = useMemo(() => {
+        return (album?.songs || []).map((s: any) => ({
+            ...s,
+            imageUrl: s.imageUrl || album?.imageUrl
+        }));
+    }, [album?.songs, album?.imageUrl]);
+
     const renderTrackItem = useCallback(({ item: song, index }: { item: any, index: number }) => (
         <TrackListItem
             track={song}
             index={index}
             isCurrent={currentTrack?.id === song.externalId}
             onPress={() => handlePlayTrack(song, index)}
-            playlistImageUrl={displayAlbum?.imageUrl}
+            playlistImageUrl={album?.imageUrl}
         />
-    ), [currentTrack?.id, displayAlbum?.imageUrl, handlePlayTrack]);
+    ), [currentTrack?.id, album?.imageUrl, handlePlayTrack]);
 
     if ((isLoadingDetail || !album) && !downloadedAlbums[id as string]) {
         return <MediaListSkeleton />;
@@ -347,48 +362,37 @@ export default function ExternalAlbumScreen() {
 
     return (
         <View className="flex-1 bg-black">
-            {/* 1. Floating Back Button - Fades Out Early */}
-            <Animated.View
-                style={[floatingHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }]}
+            <View
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
             >
                 <SafeAreaView edges={['top']} className="px-4 py-2">
                     <TouchableOpacity
                         onPress={handleBack}
-                        className="w-10 h-10 rounded-full bg-black/40 items-center justify-center"
+                        className="w-10 h-10 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" style={{ marginLeft: -2 }} />
+                        <ArrowLeft size={24} color="#ffffff" />
                     </TouchableOpacity>
                 </SafeAreaView>
-            </Animated.View>
+            </View>
 
-            {/* 2. Sticky Navigation Header - Fades In */}
             <Animated.View
                 style={[stickyHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }]}
                 pointerEvents="box-none"
             >
-                {/* Opaque Background Layer */}
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: '#121212' }]} />
 
-                {/* Gradient Layer for depth */}
                 <LinearGradient
                     colors={[headerBaseColor, '#000000']}
                     style={StyleSheet.absoluteFill}
                 />
 
                 <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
-                    <TouchableOpacity
-                        onPress={handleBack}
-                        className="w-10 h-10 items-center justify-center mr-2"
-                        activeOpacity={0.7}
-                    >
-                        <ArrowLeft size={24} color="#ffffff" style={{ marginLeft: -2 }} />
-                    </TouchableOpacity>
-
+                    <View className="w-10 mr-2" />
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
-                        <Text className="text-white text-base font-bold" numberOfLines={1}>
-                            {album.title}
+                        <Text className="text-white text-sm font-bold" numberOfLines={1}>
+                            {album?.title}
                         </Text>
                     </Animated.View>
 
@@ -409,16 +413,16 @@ export default function ExternalAlbumScreen() {
                 </SafeAreaView>
             </Animated.View>
 
-            <Animated.FlatList
-                data={displayAlbum.songs || []}
-                renderItem={renderTrackItem}
-                keyExtractor={(item: any) => item.externalId}
-                onScroll={scrollHandler}
-                scrollEventThrottle={16}
-                ListHeaderComponent={renderHeader}
-                contentContainerStyle={{ paddingBottom: 110 }}
-                showsVerticalScrollIndicator={false}
-            />
+                <AnimatedFlashList
+                    data={displaySongs}
+                    renderItem={renderTrackItem}
+                    keyExtractor={(item: any) => item.externalId || item.id}
+                    onScroll={scrollHandler}
+                    scrollEventThrottle={16}
+                    ListHeaderComponent={renderHeader}
+                    estimatedItemSize={80}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                />
         </View>
     );
 }

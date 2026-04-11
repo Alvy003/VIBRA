@@ -30,10 +30,15 @@ axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            console.error("[Axios] 401 Unauthorized error - Token might be expired or invalid", {
-                url: error.config?.url,
-                hasToken: !!authToken
-            });
+            if (authToken) {
+                console.warn("[Axios] 401 Unauthorized error - Token might be expired or invalid", {
+                    url: error.config?.url,
+                    hasToken: true
+                });
+            } else {
+                // Expected during early startup before ClerkAuthHandler syncs
+                // console.debug("[Axios] 401 (Expected) - No token synced yet for:", error.config?.url);
+            }
         }
         return Promise.reject(error);
     }

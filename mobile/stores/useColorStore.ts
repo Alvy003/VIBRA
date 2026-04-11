@@ -117,34 +117,34 @@ function normalizeColor(hex: string): string {
 function blendColors(hex1: string, hex2: string, ratio: number): string {
   const c1 = hex1.replace('#', '');
   const c2 = hex2.replace('#', '');
-  
+
   const r1 = parseInt(c1.substring(0, 2), 16);
   const g1 = parseInt(c1.substring(2, 4), 16);
   const b1 = parseInt(c1.substring(4, 6), 16);
-  
+
   const r2 = parseInt(c2.substring(0, 2), 16);
   const g2 = parseInt(c2.substring(2, 4), 16);
   const b2 = parseInt(c2.substring(4, 6), 16);
-  
+
   const r = Math.round(r1 * (1 - ratio) + r2 * ratio);
   const g = Math.round(g1 * (1 - ratio) + g2 * ratio);
   const b = Math.round(b1 * (1 - ratio) + b2 * ratio);
-  
+
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 // Darken a hex color by a percentage
 function darkenColor(hex: string, amount: number): string {
   const color = hex.replace('#', '');
-  
+
   let r = parseInt(color.substring(0, 2), 16);
   let g = parseInt(color.substring(2, 4), 16);
   let b = parseInt(color.substring(4, 6), 16);
-  
+
   r = Math.max(0, Math.floor(r * (1 - amount)));
   g = Math.max(0, Math.floor(g * (1 - amount)));
   b = Math.max(0, Math.floor(b * (1 - amount)));
-  
+
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
@@ -154,27 +154,28 @@ function adjustSaturation(hex: string, amount: number): string {
   let r = parseInt(color.substring(0, 2), 16);
   let g = parseInt(color.substring(2, 4), 16);
   let b = parseInt(color.substring(4, 6), 16);
-  
+
   const gray = 0.2989 * r + 0.587 * g + 0.114 * b;
-  
+
   r = Math.round(r * amount + gray * (1 - amount));
   g = Math.round(g * amount + gray * (1 - amount));
   b = Math.round(b * amount + gray * (1 - amount));
-  
+
   r = Math.min(255, Math.max(0, r));
   g = Math.min(255, Math.max(0, g));
   b = Math.min(255, Math.max(0, b));
-  
+
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 function generateGradient(dominantColor: string): GradientColors {
-  const baseColor = adjustSaturation(dominantColor, 0.9);
+  // Use slightly more vibrant base for the top stop
+  const baseColor = adjustSaturation(dominantColor, 1.05);
 
   return [
-    darkenColor(baseColor, 0.05),
+    baseColor,
     darkenColor(baseColor, 0.25),
-    darkenColor(baseColor, 0.45),
+    darkenColor(baseColor, 0.5),
     // darkenColor(baseColor, 0.95),
     '#000000',
   ] as const;
@@ -254,58 +255,58 @@ export const useColorStore = create<ColorState>((set, get) => ({
           lightMuted?: string;
           average?: string;
         };
-// Replace the Android color selection logic:
-const candidates = [
-  { color: androidResult.vibrant, weight: 1.0 },
-  { color: androidResult.lightVibrant, weight: 0.85 },
-  { color: androidResult.darkVibrant, weight: 0.9 },
-  { color: androidResult.dominant, weight: 0.7 },
-  { color: androidResult.muted, weight: 0.4 },
-  { color: androidResult.average, weight: 0.3 },
-].filter(c => c.color);
+        // Replace the Android color selection logic:
+        const candidates = [
+          { color: androidResult.vibrant, weight: 1.0 },
+          { color: androidResult.lightVibrant, weight: 0.85 },
+          { color: androidResult.darkVibrant, weight: 0.9 },
+          { color: androidResult.dominant, weight: 0.7 },
+          { color: androidResult.muted, weight: 0.4 },
+          { color: androidResult.average, weight: 0.3 },
+        ].filter(c => c.color);
 
-let bestColor = '#1a1a2e';
-let bestScore = 0;
+        let bestColor = '#1a1a2e';
+        let bestScore = 0;
 
-for (const { color, weight } of candidates) {
-  const sanitized = sanitizeColor(color, '#1a1a2e');
-  const saturation = getSaturationScore(sanitized);
-  const luminance = getLuminance(sanitized);
+        for (const { color, weight } of candidates) {
+          const sanitized = sanitizeColor(color, '#1a1a2e');
+          const saturation = getSaturationScore(sanitized);
+          const luminance = getLuminance(sanitized);
 
-  // Reject very dark colors (< 8% luminance)
-  if (luminance < 0.08) continue;
+          // Reject very dark colors (< 8% luminance)
+          if (luminance < 0.08) continue;
 
-  // Reject very bright/washed out colors (> 92% luminance)
-  if (luminance > 0.92) continue;
+          // Reject very bright/washed out colors (> 92% luminance)
+          if (luminance > 0.92) continue;
 
-  // Reject grays (saturation < 12%)
-  if (saturation < 0.12) continue;
+          // Reject grays (saturation < 12%)
+          if (saturation < 0.12) continue;
 
-  // Spotify-style scoring:
-  // 1. Prioritize saturation (vivid colors)
-  // 2. Prefer mid-range luminance (not too dark/bright)
-  // 3. Apply candidate weight (vibrant > dominant > muted)
-  const saturationScore = saturation; // 0-1
-  const luminanceScore = 1 - Math.abs(luminance - 0.45); // peak at 45% luminance
-  
-  const score = (saturationScore * 0.65 + luminanceScore * 0.35) * weight;
+          // Spotify-style scoring:
+          // 1. Prioritize saturation (vivid colors)
+          // 2. Prefer mid-range luminance (not too dark/bright)
+          // 3. Apply candidate weight (vibrant > dominant > muted)
+          const saturationScore = saturation; // 0-1
+          const luminanceScore = 1 - Math.abs(luminance - 0.45); // peak at 45% luminance
 
-  if (score > bestScore) {
-    bestScore = score;
-    bestColor = sanitized;
-  }
-}
+          const score = (saturationScore * 0.65 + luminanceScore * 0.35) * weight;
 
-// Fallback: if no good color found (all rejected), use dominant with normalization
-if (bestScore === 0 && androidResult.dominant) {
-  bestColor = sanitizeColor(androidResult.dominant, '#1a1a2e');
-}
+          if (score > bestScore) {
+            bestScore = score;
+            bestColor = sanitized;
+          }
+        }
 
-dominant = bestColor;
+        // Fallback: if no good color found (all rejected), use dominant with normalization
+        if (bestScore === 0 && androidResult.dominant) {
+          bestColor = sanitizeColor(androidResult.dominant, '#1a1a2e');
+        }
+
+        dominant = bestColor;
       }
 
-const normalized = normalizeColor(dominant);
-const gradient = generateGradient(normalized);
+      const normalized = normalizeColor(dominant);
+      const gradient = generateGradient(normalized);
 
       set((state) => ({
         trackColors: {

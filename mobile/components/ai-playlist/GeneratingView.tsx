@@ -173,7 +173,7 @@ export const GeneratingView = React.memo(({ params, progressMessage }: Generatin
               <Text style={styles.tagText}>{languageLabel}</Text>
             </View>
           ) : null}
-          {params.size ? (
+          {!!params.size ? (
             <View style={styles.tag}>
               <Text style={styles.tagText}>{params.size} songs</Text>
             </View>

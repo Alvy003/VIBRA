@@ -6,17 +6,20 @@ import { usePlayerStore } from '@/stores/usePlayerStore';
 
 interface SongResultCardProps {
     song: any;
+    searchQuery?: string;
 }
 
 const areEqual = (prev: SongResultCardProps, next: SongResultCardProps) =>
     prev.song.videoId === next.song.videoId &&
     prev.song._id === next.song._id &&
-    prev.song.externalId === next.song.externalId;
+    prev.song.externalId === next.song.externalId &&
+    prev.searchQuery === next.searchQuery;
 
-export const SongResultCard = React.memo(({ song }: SongResultCardProps) => {
+export const SongResultCard = React.memo(({ song, searchQuery }: SongResultCardProps) => {
     const playTrack = usePlayerStore((s) => s.playTrack);
 
     const handlePlay = () => {
+        // console.log(`[SongResultCard] Playing track from search. Context:`, searchQuery);
         playTrack({
             id: song.videoId || song._id || song.externalId,
             url: song.streamUrl || song.audioUrl || '',
@@ -25,7 +28,7 @@ export const SongResultCard = React.memo(({ song }: SongResultCardProps) => {
             artwork: song.imageUrl,
             duration: song.duration,
             source: song.source || (song.videoId ? 'youtube' : 'jiosaavn'),
-        } as any);
+        } as any, searchQuery ? { type: 'search', id: 'search', title: searchQuery } : undefined);
     };
 
     return (

@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-    View, 
-    Text, 
-    StyleSheet, 
-    Modal, 
-    TextInput, 
-    TouchableOpacity, 
-    KeyboardAvoidingView, 
+import {
+    View,
+    Text,
+    StyleSheet,
+    Modal,
+    TextInput,
+    TouchableOpacity,
+    KeyboardAvoidingView,
     Platform,
     TouchableWithoutFeedback,
     Keyboard
@@ -47,14 +47,14 @@ export const CreatePlaylistModal = ({ visible, onClose, onCreate }: CreatePlayli
             <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
                 <View style={styles.overlay}>
                     <BlurView intensity={20} tint="dark" style={StyleSheet.absoluteFill} />
-                    
-                    <KeyboardAvoidingView 
+
+                    <KeyboardAvoidingView
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         style={styles.container}
                     >
                         <View style={styles.content}>
                             <Text style={styles.title}>Give your playlist a name</Text>
-                            
+
                             <View style={styles.inputContainer}>
                                 <TextInput
                                     style={styles.input}
@@ -63,20 +63,20 @@ export const CreatePlaylistModal = ({ visible, onClose, onCreate }: CreatePlayli
                                     placeholder="My playlist"
                                     placeholderTextColor="#71717a"
                                     autoFocus
-                                    selectionColor="#8B5CF6"
+                                    selectionColor="#7B2CF5"
                                 />
                                 <View style={styles.underline} />
                             </View>
 
                             <View style={styles.buttonContainer}>
-                                <TouchableOpacity 
+                                <TouchableOpacity
                                     onPress={handleCancel}
                                     style={styles.button}
                                 >
                                     <Text style={styles.buttonText}>Cancel</Text>
                                 </TouchableOpacity>
-                                
-                                <TouchableOpacity 
+
+                                <TouchableOpacity
                                     onPress={handleCreate}
                                     disabled={!name.trim()}
                                     style={[
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 40,
         paddingVertical: 12,
         borderRadius: 25,
-        backgroundColor: '#8B5CF6', // Spotify Green
+        backgroundColor: '#7B2CF5', // Spotify Green
     },
     buttonDisabled: {
         backgroundColor: '#27272a',

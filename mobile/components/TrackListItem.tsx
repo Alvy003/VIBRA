@@ -17,11 +17,11 @@ interface TrackListItemProps {
   accentColor?: string;
 }
 
-export const TrackListItem = React.memo(({ 
-  track, 
-  index, 
-  isCurrent, 
-  onPress, 
+export const TrackListItem = React.memo(({
+  track,
+  index,
+  isCurrent,
+  onPress,
   playlistImageUrl,
   accentColor = '#27272a'
 }: TrackListItemProps) => {
@@ -29,7 +29,7 @@ export const TrackListItem = React.memo(({
 
   useEffect(() => {
     // Small delay to allow the list to stabilize during fast scrolling
-    const timer = setTimeout(() => setIsReady(true), 32); 
+    const timer = setTimeout(() => setIsReady(true), 32);
     return () => clearTimeout(timer);
   }, []);
 
@@ -64,9 +64,9 @@ export const TrackListItem = React.memo(({
         )}
       </View>
       <View style={styles.infoContainer}>
-        <Text 
+        <Text
           className="font-medium text-base"
-          style={[styles.title, isCurrent && styles.activeText]} 
+          style={[styles.title, isCurrent && styles.activeText]}
           numberOfLines={1}
         >
           {track.title}
@@ -77,9 +77,9 @@ export const TrackListItem = React.memo(({
               <DownloadedIcon size={12} />
             </View>
           )}
-          <Text 
+          <Text
             className="text-zinc-400 text-sm"
-            style={styles.artist} 
+            style={styles.artist}
             numberOfLines={1}
           >
             {track.artist}
@@ -95,14 +95,14 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   imageContainer: {
-    width: 48,
-    height: 48,
+    width: 46,
+    height: 46,
     borderRadius: 4,
-    marginRight: 16,
+    marginRight: 12,
     overflow: 'hidden',
     backgroundColor: '#18181b',
     alignItems: 'center',
@@ -120,22 +120,29 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     flex: 1,
+    marginRight: 12,
   },
   title: {
     color: '#fff',
+    fontSize: 15,
+    fontWeight: '500',
+    letterSpacing: -0.2,
   },
   activeText: {
-    color: '#8B5CF6',
+    color: '#7B2CF5',
   },
   artist: {
-    color: '#71717a',
+    color: '#b0b0b0ff',
+    fontSize: 12,
+    fontWeight: '400',
   },
   artistRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 2,
+    marginTop: 1,
   },
   moreBtn: {
-    padding: 4,
+    padding: 8,
+    marginRight: -8,
   }
 });

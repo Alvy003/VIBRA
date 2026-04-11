@@ -33,16 +33,17 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { resolveAssetUrl } from '@/lib/url';
 import { useDynamicColors } from '@/hooks/useDynamicColors';
 import { FlashList as OriginalFlashList } from '@shopify/flash-list';
-const FlashList = OriginalFlashList as any;
+const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { useDownloadStore } from '@/stores/useDownloadStore';
 import PlaylistOptions from '@/components/PlaylistOptions';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
+import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#9333EA';
+const ACCENT_COLOR = '#7B2CF5';
 
 interface ExternalPlaylistHeaderProps {
     displayPlaylist: any;
@@ -76,23 +77,33 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
     width,
 }) => (
     <View style={{ backgroundColor: colors.primary }}>
-        <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.8)', '#000000']}
-            locations={[0, 0.4, 0.7, 1]}
-            style={{ paddingTop: 100, paddingBottom: 20 }}
-        >
+            <LinearGradient
+                colors={[
+                    'transparent',
+                    'rgba(0,0,0,0.05)',
+                    'rgba(0,0,0,0.15)',
+                    'rgba(0,0,0,0.3)',
+                    'rgba(0,0,0,0.5)',
+                    'rgba(0,0,0,0.7)',
+                    'rgba(0,0,0,0.85)',
+                    '#000000',
+                    '#000000',
+                ]}
+                locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
+                style={{ paddingTop: 60, paddingBottom: 10 }}
+            >
             <View className="items-center px-6">
                 {/* Artwork */}
                 <View style={{
-                    shadowColor: '#000',
+                    shadowColor: colors.primary,
                     shadowOffset: { width: 0, height: 12 },
                     shadowOpacity: 0.6,
                     shadowRadius: 24,
-                    elevation: 20
+                    elevation: 20,
                 }}>
                     <Image
                         source={{ uri: artworkUrl ?? undefined }}
-                        style={{ width: width * 0.65, height: width * 0.65, borderRadius: 4 }}
+                        style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2 }}
                         contentFit="cover"
                         transition={0}
                         cachePolicy="memory-disk"
@@ -100,44 +111,46 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
                 </View>
 
                 {/* Title & Info */}
-                <View className="w-full mt-10">
-                    <Text className="text-white text-3xl font-extrabold mb-2 leading-tight tracking-tight">
+                <View className="w-full mt-5">
+                    <Text className="text-white text-[24px] font-bold mb-2 leading-tight tracking-tight" numberOfLines={1}>
                         {displayPlaylist.title}
                     </Text>
-                    <Text className="text-zinc-300 text-sm font-medium mb-4 leading-5" numberOfLines={2}>
+                    <Text className="text-zinc-300 text-sm font-medium mb-4 leading-5" numberOfLines={1}>
                         {displayPlaylist.description || 'Curated for you by Vibra'}
                     </Text>
 
                     {/* Metadata Row */}
                     <View className="flex-row items-center">
-                        <View className="w-6 h-6 rounded-full bg-purple-600 items-center justify-center mr-2 ring-1 ring-white/20">
-                            <Text className="text-white text-[10px] font-black">V</Text>
-                        </View>
-                        <Text className="text-white text-xs font-bold uppercase tracking-wider">
-                            Vibra <Text className="text-zinc-400 font-medium lowercase italic">• {displayPlaylist.songs?.length || 0} tracks</Text>
+                        <Image
+                            source={require('@/assets/images/vibra-white.png')}
+                            style={{ width: 18, height: 18 }}
+                            contentFit="contain"
+                        />
+                        <Text className="text-white text-[11px] font-bold tracking-wider">
+                            Vibra <Text className="text-zinc-400 font-medium lowercase">• {displayPlaylist.songs?.length || 0} tracks</Text>
                         </Text>
                     </View>
                 </View>
             </View>
 
             {/* Action Bar */}
-            <View className="px-6 pt-8 pb-2 flex-row items-center justify-between">
+            <View className="px-6 pt-4 pb-0 flex-row items-center justify-between">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
                     <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
                         {isSaved ? (
-                            <View style={{ width: 26, height: 26, backgroundColor: ACCENT_COLOR, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
-                                <Check size={18} color="black" strokeWidth={4} />
+                            <View style={{ width: 22, height: 22, backgroundColor: ACCENT_COLOR, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
+                                <Check size={14} color="black" strokeWidth={4} />
                             </View>
                         ) : (
-                            <CirclePlus size={26} color="#b3b3b3" />
+                            <CirclePlus size={22} color="#b3b3b3" />
                         )}
                     </TouchableOpacity>
 
                     <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
                         {isPlaylistDownloaded ? (
-                            <DownloadedIcon size={26} />
+                            <DownloadedIcon size={22} />
                         ) : (
-                            <CircleArrowDown size={28} color="#b3b3b3" />
+                            <CircleArrowDown size={24} color="#b3b3b3" />
                         )}
                     </TouchableOpacity>
 
@@ -147,8 +160,8 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
                         isDownloaded={isPlaylistDownloaded}
                         onDownload={onDownload}
                         trigger={
-                            <View style={{ height: 40, width: 40, alignItems: 'center', justifyContent: 'center' }}>
-                                <MoreVertical size={24} color="#b3b3b3" />
+                            <View style={{ height: 40, width: 32, alignItems: 'center', justifyContent: 'center' }}>
+                                <MoreVertical size={22} color="#b3b3b3" />
                             </View>
                         }
                     />
@@ -156,19 +169,32 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
                     <TouchableOpacity onPress={onToggleShuffle} activeOpacity={0.7}>
-                        <Shuffle size={26} color={shuffleMode ? ACCENT_COLOR : "#b3b3b3"} />
+                        <View style={{ alignItems: 'center' }}>
+                            <SharpShuffle size={24} color={shuffleMode ? ACCENT_COLOR : "#b3b3b3"} />
+                            {shuffleMode && (
+                                <View style={{
+                                width: 4,
+                                height: 4,
+                                borderRadius: 2,
+                                backgroundColor: '#7B2CF5',
+                                marginTop: 2,
+                                position: 'absolute',
+                                bottom: -6
+                                }} />
+                            )}
+                        </View>
                     </TouchableOpacity>
 
                     <TouchableOpacity
                         onPress={isCurrentPlaylistPlaying ? onPause : onPlayAll}
                         style={{ backgroundColor: ACCENT_COLOR }}
-                        className="w-16 h-16 rounded-full items-center justify-center shadow-2xl"
+                        className="w-[52px] h-[52px] rounded-full items-center justify-center shadow-2xl"
                         activeOpacity={0.8}
                     >
                         {isCurrentPlaylistPlaying ? (
-                            <Pause size={32} color="black" fill="black" />
+                            <SharpPause size={26} color="black" />
                         ) : (
-                            <Play size={32} color="black" fill="black" className="ml-1" />
+                            <SharpPlay size={26} color="black" style={{ marginLeft: 3 }} />
                         )}
                     </TouchableOpacity>
                 </View>
@@ -377,12 +403,20 @@ export default function ExternalPlaylistScreen() {
         />
     ), [displayPlaylist, artworkUrl, colors, isSaved, isPlaylistDownloaded, isCurrentPlaylistPlaying, shuffleMode, handleDownloadPlaylist, handlePlayAll]);
 
-    const renderTrackItem = useCallback(({ item, index }: { item: any, index: number }) => (
+    const displaySongs = useMemo(() => {
+        const allSongs = displayPlaylist?.songs || [];
+        return allSongs.map((s: any) => ({
+            ...s,
+            imageUrl: s.imageUrl || displayPlaylist?.imageUrl
+        }));
+    }, [displayPlaylist?.songs, displayPlaylist?.imageUrl]);
+
+    const renderTrackItem = useCallback(({ item: song, index }: { item: any, index: number }) => (
         <TrackListItem
-            track={item}
+            track={song}
             index={index}
-            isCurrent={currentTrack?.id === item.externalId}
-            onPress={() => handlePlayTrack(item, index)}
+            isCurrent={currentTrack?.id === (song._id || song.id || song.externalId)}
+            onPress={() => handlePlayTrack(song, index)}
             playlistImageUrl={displayPlaylist?.imageUrl}
         />
     ), [currentTrack?.id, displayPlaylist?.imageUrl, handlePlayTrack]);
@@ -402,52 +436,39 @@ export default function ExternalPlaylistScreen() {
         );
     }
 
-    const filteredSongs = displayPlaylist.songs || [];
-
     return (
         <View className="flex-1 bg-black">
-            {/* 1. Floating Back Button - Fades Out Early */}
-            <Animated.View
-                style={[floatingHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }]}
+            <View
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
             >
                 <SafeAreaView edges={['top']} className="px-4 py-2">
                     <TouchableOpacity
                         onPress={handleBack}
-                        className="w-10 h-10 rounded-full bg-black/40 items-center justify-center"
+                        className="w-10 h-10 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" style={{ marginLeft: -2 }} />
+                        <ArrowLeft size={24} color="#ffffff" />
                     </TouchableOpacity>
                 </SafeAreaView>
-            </Animated.View>
+            </View>
 
-            {/* 2. Sticky Navigation Header - Fades In */}
             <Animated.View
                 style={[stickyHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }]}
                 pointerEvents="box-none"
             >
-                {/* Opaque Background Layer */}
                 <View style={[StyleSheet.absoluteFill, { backgroundColor: '#121212' }]} />
 
-                {/* Gradient Layer for depth */}
                 <LinearGradient
                     colors={[headerBaseColor, '#000000']}
                     style={StyleSheet.absoluteFill}
                 />
 
                 <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
-                    <TouchableOpacity
-                        onPress={handleBack}
-                        className="w-10 h-10 items-center justify-center mr-2"
-                        activeOpacity={0.7}
-                    >
-                        <ArrowLeft size={24} color="#ffffff" style={{ marginLeft: -2 }} />
-                    </TouchableOpacity>
-
+                    <View className="w-10 mr-2" />
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
                         <Text className="text-white text-base font-bold" numberOfLines={1}>
-                            {displayPlaylist.title}
+                            {displayPlaylist?.title}
                         </Text>
                     </Animated.View>
 
@@ -459,25 +480,24 @@ export default function ExternalPlaylistScreen() {
                             activeOpacity={0.8}
                         >
                             {isCurrentPlaylistPlaying ? (
-                                <Pause size={20} color="black" fill="black" />
+                                <SharpPause size={22} color="black" />
                             ) : (
-                                <Play size={20} color="black" fill="black" className="ml-0.5" />
+                                <SharpPlay size={22} color="black" style={{ marginLeft: 3 }} />
                             )}
                         </TouchableOpacity>
                     </Animated.View>
                 </SafeAreaView>
             </Animated.View>
 
-            <Animated.FlatList
-                data={filteredSongs}
+            <AnimatedFlashList
+                data={displaySongs}
                 renderItem={renderTrackItem}
-                keyExtractor={(item: any) => item.externalId || item.id}
+                keyExtractor={(item: any) => item._id || item.id || item.externalId}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
                 ListHeaderComponent={renderHeader}
-                contentContainerStyle={{ paddingBottom: 110 }}
-                showsVerticalScrollIndicator={false}
-            // Use FlatList optimized for dynamic headers
+                estimatedItemSize={80}
+                contentContainerStyle={{ paddingBottom: 100 }}
             />
         </View>
     );

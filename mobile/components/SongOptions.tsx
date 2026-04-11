@@ -1,29 +1,29 @@
 // components/SongOptions.tsx
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, Image, StyleSheet, Dimensions, Alert } from 'react-native';
-import { 
-    BottomSheetModal, 
-    BottomSheetView, 
+import {
+    BottomSheetModal,
+    BottomSheetView,
     BottomSheetBackdrop,
     BottomSheetFooter
 } from '@gorhom/bottom-sheet';
-import { 
-    MoreVertical, 
-    ListPlus, 
-    Heart, 
-    Share2, 
-    ListStart, 
-    ListEnd, 
-    Download, 
-    CheckCircle2, 
-    Loader2, 
+import {
+    MoreVertical,
+    ListPlus,
+    Heart,
+    Share2,
+    ListStart,
+    ListEnd,
+    Download,
+    CheckCircle2,
+    Loader2,
     Music,
     X
 } from 'lucide-react-native';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import { useDownloadStore } from '@/stores/useDownloadStore';
-import PlaylistPicker from './PlaylistPicker';
+import AddTrackBottomSheet, { AddTrackBottomSheetRef } from './AddTrackBottomSheet';
 import * as Haptics from 'expo-haptics';
 
 interface SongOptionsProps {
@@ -33,8 +33,9 @@ interface SongOptionsProps {
 
 export default function SongOptions({ song, trigger }: SongOptionsProps) {
     const bottomSheetModalRef = useRef<BottomSheetModal>(null);
+    const addTrackSheetRef = useRef<AddTrackBottomSheetRef>(null);
     const [pickerVisible, setPickerVisible] = useState(false);
-    
+
     const { addToQueue, setPlayNext } = usePlayerStore();
     const { addTrackToPlaylist } = usePlaylistStore();
     const { downloadTrack, isDownloaded, isDownloading, removeDownload } = useDownloadStore();
@@ -102,10 +103,12 @@ export default function SongOptions({ song, trigger }: SongOptionsProps) {
                 "Are you sure you want to delete this track from your device?",
                 [
                     { text: "Cancel", style: "cancel" },
-                    { text: "Remove", style: "destructive", onPress: () => {
-                        removeDownload(songId);
-                        handleCloseModal();
-                    } }
+                    {
+                        text: "Remove", style: "destructive", onPress: () => {
+                            removeDownload(songId);
+                            handleCloseModal();
+                        }
+                    }
                 ]
             );
         } else {
@@ -130,23 +133,26 @@ export default function SongOptions({ song, trigger }: SongOptionsProps) {
     const menuItems = [
         { icon: ListStart, label: 'Play Next', onPress: handlePlayNext },
         { icon: ListEnd, label: 'Add to Queue', onPress: handleAddToQueue },
-        { 
-            icon: downloaded ? CheckCircle2 : (downloading ? Loader2 : Download), 
-            label: downloaded ? 'Downloaded' : (downloading ? 'Downloading...' : 'Download'), 
+        {
+            icon: downloaded ? CheckCircle2 : (downloading ? Loader2 : Download),
+            label: downloaded ? 'Downloaded' : (downloading ? 'Downloading...' : 'Download'),
             onPress: handleDownload,
             active: downloaded,
             loading: downloading,
-            color: downloaded ? '#8B5CF6' : '#d1cdcdff'
+            color: downloaded ? '#7B2CF5' : '#d1cdcdff'
         },
-        { icon: ListPlus, label: 'Add to Playlist', onPress: () => {
-            setPickerVisible(true);
-        } },
+        {
+            icon: ListPlus, label: 'Add to Playlist', onPress: () => {
+                handleCloseModal();
+                addTrackSheetRef.current?.open(song);
+            }
+        },
         { icon: Share2, label: 'Share', onPress: () => { } },
     ];
 
     return (
         <>
-            <TouchableOpacity onPress={handlePresentModalPress}>
+            <TouchableOpacity onPress={handlePresentModalPress} style={styles.triggerBtn}>
                 {trigger || <MoreVertical size={20} color="#b3b3b3" />}
             </TouchableOpacity>
 
@@ -190,9 +196,9 @@ export default function SongOptions({ song, trigger }: SongOptionsProps) {
                                 activeOpacity={0.6}
                             >
                                 <View style={styles.iconWrapper}>
-                                    <item.icon 
-                                        size={22} 
-                                        color={item.color || "#d1cdcdff"} 
+                                    <item.icon
+                                        size={22}
+                                        color={item.color || "#d1cdcdff"}
                                     />
                                 </View>
                                 <Text style={[
@@ -207,10 +213,8 @@ export default function SongOptions({ song, trigger }: SongOptionsProps) {
                 </BottomSheetView>
             </BottomSheetModal>
 
-            <PlaylistPicker 
-                visible={pickerVisible}
-                onClose={() => setPickerVisible(false)}
-                onSelect={handleAddToPlaylist}
+            <AddTrackBottomSheet
+                ref={addTrackSheetRef}
             />
         </>
     );
@@ -278,5 +282,11 @@ const styles = StyleSheet.create({
         fontSize: 15,
         fontWeight: '500',
         marginLeft: 12,
+    },
+    triggerBtn: {
+        padding: 8,
+        marginRight: -8,
+        alignItems: 'center',
+        justifyContent: 'center',
     },
 });

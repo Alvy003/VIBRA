@@ -7,7 +7,7 @@ import { useStreamStore } from '@/stores/useStreamStore';
 import { SectionHeader } from './SectionHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.38;
+const CARD_WIDTH = SCREEN_WIDTH * 0.45;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 

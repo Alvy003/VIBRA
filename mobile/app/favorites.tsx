@@ -97,7 +97,7 @@ export default function FavoritesScreen() {
                                 const isCurrent = currentTrack?.id === song._id;
                                 return (
                                     <SongListItem 
-                                        key={song._id} 
+                                        key={(song as any)._id || (song as any).id || (song as any).externalId || index} 
                                         song={song} 
                                         index={index} 
                                         isCurrent={isCurrent} 

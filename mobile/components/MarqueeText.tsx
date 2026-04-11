@@ -32,10 +32,21 @@ const MarqueeText = React.memo(({
   // Consider it overflowing only if it exceeds the animation threshold securely
   const isOverflowing = containerWidth > 0 && textWidth > containerWidth + 2;
 
+  // Calculate dynamic duration based on text width to maintain constant speed
+  const dynamicDuration = React.useMemo(() => {
+    // Speed: ~40 pixels per second (Standard for music apps like Spotify)
+    const speed = 30;
+    if (textWidth > 0) {
+      return (textWidth / speed) * 1000;
+    }
+    // Fallback if measurement hasn't happened yet
+    return (text.length * 10 / speed) * 1000;
+  }, [textWidth, text, duration]);
+
   const ticker = (
     <TextTicker
       style={style}
-      duration={duration}
+      duration={dynamicDuration}
       loop
       bounce={false}
       repeatSpacer={50}

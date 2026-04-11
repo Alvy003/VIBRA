@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-    View, 
-    Text, 
-    Modal, 
-    TextInput, 
-    TouchableOpacity, 
-    StyleSheet, 
-    KeyboardAvoidingView, 
+import {
+    View,
+    Text,
+    Modal,
+    TextInput,
+    TouchableOpacity,
+    StyleSheet,
+    KeyboardAvoidingView,
     Platform,
     TouchableWithoutFeedback,
     Keyboard
@@ -14,7 +14,7 @@ import {
 import { BlurView } from 'expo-blur';
 import { X } from 'lucide-react-native';
 
-const ACCENT_COLOR = '#8B5CF6';
+const ACCENT_COLOR = '#7B2CF5';
 
 interface EditPlaylistModalProps {
     visible: boolean;
@@ -24,12 +24,12 @@ interface EditPlaylistModalProps {
     initialDescription: string;
 }
 
-export default function EditPlaylistModal({ 
-    visible, 
-    onClose, 
-    onSave, 
-    initialName, 
-    initialDescription 
+export default function EditPlaylistModal({
+    visible,
+    onClose,
+    onSave,
+    initialName,
+    initialDescription
 }: EditPlaylistModalProps) {
     const [name, setName] = useState(initialName);
     const [description, setDescription] = useState(initialDescription);
@@ -51,8 +51,8 @@ export default function EditPlaylistModal({
             <TouchableWithoutFeedback onPress={onClose}>
                 <View style={styles.overlay}>
                     <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
-                    
-                    <KeyboardAvoidingView 
+
+                    <KeyboardAvoidingView
                         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                         style={styles.container}
                     >
@@ -96,14 +96,14 @@ export default function EditPlaylistModal({
                                 </View>
 
                                 <View className="mt-8 flex-row space-x-3">
-                                    <TouchableOpacity 
+                                    <TouchableOpacity
                                         onPress={onClose}
                                         className="flex-1 py-4 items-center justify-center rounded-xl bg-zinc-800"
                                     >
                                         <Text className="text-white font-bold text-base">Cancel</Text>
                                     </TouchableOpacity>
-                                    
-                                    <TouchableOpacity 
+
+                                    <TouchableOpacity
                                         onPress={handleSave}
                                         disabled={!name.trim()}
                                         style={{ backgroundColor: name.trim() ? ACCENT_COLOR : '#4c1d95' }}

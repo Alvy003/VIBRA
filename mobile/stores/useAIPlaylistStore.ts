@@ -65,7 +65,7 @@ interface AIPlaylistStore {
   currentStep: number;
   generationStage: GenerationStage;
   isGenerating: boolean;
-  
+
   // Data
   messages: Message[];
   params: GenerationParams;
@@ -73,15 +73,15 @@ interface AIPlaylistStore {
   chatQuery: string;
   analysisResult: any | null;
   generatedPlaylist: AIPlaylist | null;
-  
+
   // Error handling
   error: string | null;
-  
+
   // Progress tracking
   progressMessage: string;
   playlistMode: boolean;
   directMode: boolean;
-  
+
   // Actions - UI
   setInputMode: (mode: InputMode) => void;
   setStep: (step: number) => void;
@@ -91,7 +91,7 @@ interface AIPlaylistStore {
   addMessage: (message: Message) => void;
   togglePlaylistMode: () => void;
   toggleDirectMode: () => void;
-  
+
   // Actions - API
   analyzeNaturalLanguage: (token?: string) => Promise<void>;
   analyzeAndGenerate: (query?: string, token?: string) => Promise<void>;
@@ -101,7 +101,7 @@ interface AIPlaylistStore {
   toggleSave: (id: string, save: boolean, token?: string) => Promise<void>;
   importSpotifyPlaylist: (url: string, token?: string) => Promise<void>;
   importYouTubePlaylist: (url: string, token?: string) => Promise<void>;
-  
+
   // Utilities
   reset: () => void;
   resetParams: () => void;
@@ -150,16 +150,16 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
   togglePlaylistMode: () => {
     const newMode = !get().playlistMode;
     // Bug Fix: If switching to Chat Mode (newMode: false), reset directMode to false
-    set({ 
+    set({
       playlistMode: newMode,
       directMode: newMode ? get().directMode : false
     });
-    
+
     // Add welcome message for the mode
     const msg: Message = {
       id: Date.now().toString(),
       type: 'ai',
-      text: newMode 
+      text: newMode
         ? "Switched to Playlist Mode. Tell me what kind of music you're looking for, and I'll build it! 🎵"
         : "Switched to Chat Mode. Let's talk about music! 🎧"
     };
@@ -180,13 +180,13 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
     if (token) setAuthToken(token);
     const { chatQuery, naturalQuery, playlistMode } = get();
     const query = chatQuery || naturalQuery;
-    
+
     if (!query || query.trim().length < 2) {
       set({ error: 'Please say something...' });
       return;
     }
 
-    set({ 
+    set({
       generationStage: 'analyzing',
       isGenerating: true,
       error: null,
@@ -201,7 +201,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
 
       const { analysis } = response.data;
 
-      set({ 
+      set({
         analysisResult: analysis,
         generationStage: 'idle',
         isGenerating: false,
@@ -219,7 +219,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
             moodKeywords: analysis.mood_keywords,
           },
         });
-        
+
         // Auto-generate
         get().generatePlaylist();
       } else if (analysis.confidence >= 60) {
@@ -259,14 +259,14 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
   generatePlaylist: async (directParams, token, isExpansion = false, existingTracks = []) => {
     if (token) setAuthToken(token);
     const params = directParams || get().params;
-    
+
     // Validation
     if (!params.vibe || !params.language || !params.era || !params.size) {
       set({ error: 'Please complete all selections' });
       return;
     }
 
-    set({ 
+    set({
       generationStage: 'generating',
       isGenerating: true,
       error: null,
@@ -300,25 +300,40 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
 
       clearInterval(progressInterval);
 
-        const playlist = response.data.playlist;
-        const cardMsg: Message = {
-          id: (Date.now() + 2).toString(),
-          type: 'playlist_card',
-          text: `I've curated "${playlist.name}" for you!`,
-          playlist
-        };
+      const playlist = response.data.playlist;
+      const cardMsg: Message = {
+        id: (Date.now() + 2).toString(),
+        type: 'playlist_card',
+        text: `I've curated "${playlist.name}" for you!`,
+        playlist
+      };
 
-        set((s) => ({
-          generatedPlaylist: playlist,
-          messages: [...s.messages, cardMsg],
-          generationStage: 'complete',
-          isGenerating: false,
-          progressMessage: 'Playlist ready!',
-        }));
+      set((s) => ({
+        generatedPlaylist: playlist,
+        messages: [...s.messages, cardMsg],
+        generationStage: 'complete',
+        isGenerating: false,
+        progressMessage: 'Playlist ready!',
+      }));
+
+      // Auto-save to library and refresh
+      if (playlist._id) {
+        try {
+          await get().toggleSave(playlist._id, true);
+          const [{ usePlaylistStore }, { useSavedItemsStore }] = await Promise.all([
+            import('./usePlaylistStore'),
+            import('./useSavedItemsStore')
+          ]);
+          usePlaylistStore.getState().fetchUserPlaylists();
+          useSavedItemsStore.getState().fetchSavedItems();
+        } catch (e) {
+          console.error('[AI] Auto-save failed:', e);
+        }
+      }
     } catch (error: any) {
       clearInterval(progressInterval);
       console.error('[AI] Generation error:', error);
-      
+
       set({
         error: error.response?.data?.message || 'Failed to generate playlist. Please try again.',
         generationStage: 'error',
@@ -335,7 +350,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
 
     try {
       const response = await axiosInstance.get(`/ai-playlists/${id}`);
-      
+
       set({
         generatedPlaylist: response.data.playlist,
         generationStage: 'complete',
@@ -369,7 +384,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
     if (token) setAuthToken(token);
     try {
       await axiosInstance.post(`/ai-playlists/${id}/save`, { save });
-      
+
       // Update local state
       set((state) => {
         if (state.generatedPlaylist?._id === id) {
@@ -405,9 +420,9 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
 
     // 1. Add User Message to UI
     const userMsg: Message = { id: Date.now().toString(), type: 'user', text: finalQuery };
-    set((s) => ({ 
+    set((s) => ({
       messages: [...s.messages, userMsg],
-      chatQuery: '', 
+      chatQuery: '',
       naturalQuery: '',
       generationStage: 'analyzing',
       isGenerating: true,
@@ -428,7 +443,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         isPlaylistMode: get().playlistMode,
         directMode: get().directMode,
       });
-      
+
       const { intent, message, params, is_expansion } = response.data;
 
       if (intent === 'playlist' && params) {
@@ -442,10 +457,10 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         await get().generatePlaylist(undefined, undefined, is_expansion, existing);
       } else {
         // Chat or Clarify response
-        const aiMsg: Message = { 
-          id: (Date.now() + 1).toString(), 
-          type: 'ai', 
-          text: message || "I'm not sure how to help with that yet." 
+        const aiMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          type: 'ai',
+          text: message || "I'm not sure how to help with that yet."
         };
         set((s) => ({
           messages: [...s.messages, aiMsg],
@@ -468,8 +483,8 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
   // ─────────────────────────────────────────────────────────
   importSpotifyPlaylist: async (url, token) => {
     if (token) setAuthToken(token);
-    
-    set({ 
+
+    set({
       generationStage: 'generating',
       isGenerating: true,
       error: null,
@@ -497,24 +512,24 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
       });
 
       const { playlist, status } = response.data;
-      
+
       // If already ready (duplicate), finish immediately
       if (status === 'ready') {
-          clearInterval(progressInterval);
-          const cardMsg: Message = {
-            id: Date.now().toString(),
-            type: 'playlist_card',
-            text: `Re-imported "${playlist.name}" for you!`,
-            playlist
-          };
-          set((s) => ({
-            generatedPlaylist: playlist,
-            messages: [...s.messages, cardMsg],
-            generationStage: 'complete',
-            isGenerating: false,
-            progressMessage: 'Ready!',
-          }));
-          return;
+        clearInterval(progressInterval);
+        const cardMsg: Message = {
+          id: Date.now().toString(),
+          type: 'playlist_card',
+          text: `Re-imported "${playlist.name}" for you!`,
+          playlist
+        };
+        set((s) => ({
+          generatedPlaylist: playlist,
+          messages: [...s.messages, cardMsg],
+          generationStage: 'complete',
+          isGenerating: false,
+          progressMessage: 'Ready!',
+        }));
+        return;
       }
 
       // If importing, start polling
@@ -523,24 +538,24 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
       const maxAttempts = 30; // Poll for ~2 minutes (4s intervals)
 
       const poll = async () => {
-        if (attempts >= maxAttempts) return true; 
+        if (attempts >= maxAttempts) return true;
         attempts++;
-        
+
         try {
           const res = await axiosInstance.get(`/playlists/${playlist._id}`);
           currentPlaylist = res.data;
           // Map songs to tracks for UI card
           currentPlaylist.tracks = currentPlaylist.songs || [];
-          
+
           // Update the message in chat so user sees progress
           set((s) => {
-             const newMessages = s.messages.map(m => {
-                 if (m.type === 'playlist_card' && m.playlist?._id === currentPlaylist._id) {
-                     return { ...m, playlist: currentPlaylist };
-                 }
-                 return m;
-             });
-             return { ...s, messages: newMessages, generatedPlaylist: currentPlaylist };
+            const newMessages = s.messages.map(m => {
+              if (m.type === 'playlist_card' && m.playlist?._id === currentPlaylist._id) {
+                return { ...m, playlist: currentPlaylist };
+              }
+              return m;
+            });
+            return { ...s, messages: newMessages, generatedPlaylist: currentPlaylist };
           });
 
           // Sync library periodically
@@ -548,9 +563,9 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
             const { usePlaylistStore } = await import('./usePlaylistStore');
             usePlaylistStore.getState().fetchUserPlaylists();
           }
-          
+
           if (currentPlaylist.metadata?.importStatus === 'completed') {
-            return true; 
+            return true;
           }
         } catch (e) {
           console.error('[SpotifyImport] Poll error:', e);
@@ -560,19 +575,19 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
 
       // Initial wait then poll
       await new Promise(r => setTimeout(r, 4000));
-      
+
       let isReady = false;
       while (attempts < maxAttempts && !isReady) {
-          isReady = await poll();
-          if (!isReady) await new Promise(r => setTimeout(r, 4000));
+        isReady = await poll();
+        if (!isReady) await new Promise(r => setTimeout(r, 4000));
       }
 
       clearInterval(progressInterval);
 
-      const userMsg: Message = { 
-        id: Date.now().toString(), 
-        type: 'user', 
-        text: `Import playlist: ${url}` 
+      const userMsg: Message = {
+        id: Date.now().toString(),
+        type: 'user',
+        text: `Import playlist: ${url}`
       };
 
       const cardMsg: Message = {
@@ -589,7 +604,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         isGenerating: false,
         progressMessage: 'Import complete!',
       }));
-      
+
       // Force refresh library store
       const { usePlaylistStore } = await import('./usePlaylistStore');
       usePlaylistStore.getState().fetchUserPlaylists();
@@ -611,7 +626,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
     if (token) setAuthToken(token);
     let progressInterval: any;
 
-    set({ 
+    set({
       generationStage: 'generating',
       isGenerating: true,
       error: null,
@@ -639,55 +654,55 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
       });
 
       const { playlist, status } = response.data;
-      
+
       if (status === 'ready') {
-          clearInterval(progressInterval);
-          const cardMsg: Message = {
-            id: Date.now().toString(),
-            type: 'playlist_card',
-            text: `Re-imported "${playlist.name}" for you!`,
-            playlist
-          };
-          set((s) => ({
-            generatedPlaylist: playlist,
-            messages: [...s.messages, cardMsg],
-            generationStage: 'complete',
-            isGenerating: false,
-            progressMessage: 'Ready!',
-          }));
-          return;
+        clearInterval(progressInterval);
+        const cardMsg: Message = {
+          id: Date.now().toString(),
+          type: 'playlist_card',
+          text: `Re-imported "${playlist.name}" for you!`,
+          playlist
+        };
+        set((s) => ({
+          generatedPlaylist: playlist,
+          messages: [...s.messages, cardMsg],
+          generationStage: 'complete',
+          isGenerating: false,
+          progressMessage: 'Ready!',
+        }));
+        return;
       }
 
       let currentPlaylist = playlist;
       let attempts = 0;
-      const maxAttempts = 30; 
+      const maxAttempts = 30;
 
       const poll = async () => {
-        if (attempts >= maxAttempts) return true; 
+        if (attempts >= maxAttempts) return true;
         attempts++;
-        
+
         try {
           const res = await axiosInstance.get(`/playlists/${playlist._id}`);
           currentPlaylist = res.data;
           currentPlaylist.tracks = currentPlaylist.songs || [];
-          
+
           set((s) => {
-             const newMessages = s.messages.map(m => {
-                 if (m.type === 'playlist_card' && m.playlist?._id === currentPlaylist._id) {
-                     return { ...m, playlist: currentPlaylist };
-                 }
-                 return m;
-             });
-             return { ...s, messages: newMessages, generatedPlaylist: currentPlaylist };
+            const newMessages = s.messages.map(m => {
+              if (m.type === 'playlist_card' && m.playlist?._id === currentPlaylist._id) {
+                return { ...m, playlist: currentPlaylist };
+              }
+              return m;
+            });
+            return { ...s, messages: newMessages, generatedPlaylist: currentPlaylist };
           });
 
           if (attempts % 3 === 0) {
             const { usePlaylistStore } = await import('./usePlaylistStore');
             usePlaylistStore.getState().fetchUserPlaylists();
           }
-          
+
           if (currentPlaylist.metadata?.importStatus === 'completed') {
-            return true; 
+            return true;
           }
         } catch (e) {
           console.error('[YoutubeImport] Poll error:', e);
@@ -696,19 +711,19 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
       };
 
       await new Promise(r => setTimeout(r, 4000));
-      
+
       let isReady = false;
       while (attempts < maxAttempts && !isReady) {
-          isReady = await poll();
-          if (!isReady) await new Promise(r => setTimeout(r, 4000));
+        isReady = await poll();
+        if (!isReady) await new Promise(r => setTimeout(r, 4000));
       }
 
       clearInterval(progressInterval);
 
-      const userMsg: Message = { 
-        id: Date.now().toString(), 
-        type: 'user', 
-        text: `Import YouTube playlist: ${url}` 
+      const userMsg: Message = {
+        id: Date.now().toString(),
+        type: 'user',
+        text: `Import YouTube playlist: ${url}`
       };
 
       const cardMsg: Message = {
@@ -725,7 +740,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         isGenerating: false,
         progressMessage: 'Import complete!',
       }));
-      
+
       const { usePlaylistStore } = await import('./usePlaylistStore');
       usePlaylistStore.getState().fetchUserPlaylists();
 
@@ -748,21 +763,21 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
     ...INITIAL_STATE,
     messages: [] // Allow full clear if explicitly called
   })),
-  
+
   resetParams: () => set(INITIAL_STATE),
-  
+
   clearError: () => set({ error: null, generationStage: 'idle' }),
-  
+
   clearPlaylist: () => set({ generatedPlaylist: null }),
-  
+
   goBack: () => {
     const { inputMode, currentStep, generationStage } = get();
-    
+
     if (generationStage === 'error') {
       set({ error: null, generationStage: 'idle' });
       return;
     }
-    
+
     if (inputMode === 'manual' && currentStep > 1) {
       set({ currentStep: currentStep - 1 });
     } else if (inputMode === 'manual' && currentStep === 1) {

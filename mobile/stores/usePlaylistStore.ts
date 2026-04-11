@@ -65,6 +65,20 @@ export const usePlaylistStore = create<PlaylistStore>()(
             },
 
             addTrackToPlaylist: async (playlistId: string, track: any) => {
+                const songId = track.id || track.externalId;
+                
+                // Optimistic update
+                set(state => ({
+                    playlists: state.playlists.map(p => {
+                        if (p._id === playlistId) {
+                            if (!p.songs.some(s => (s._id || s.id || s.externalId) === songId)) {
+                                return { ...p, songs: [...p.songs, track] };
+                            }
+                        }
+                        return p;
+                    })
+                }));
+
                 try {
                     const songData = {
                         title: track.title,
@@ -73,33 +87,50 @@ export const usePlaylistStore = create<PlaylistStore>()(
                         audioUrl: track.url || track.audioUrl,
                         duration: track.duration,
                         source: track.source || 'jiosaavn',
-                        externalId: track.id || track.externalId
+                        externalId: songId
                     };
 
-                    await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
+                    const response = await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
                         op: "add",
-                        songId: track.id || track.externalId,
+                        songId: songId,
                         songData
                     });
 
-                    // Refresh playlist data
-                    await get().fetchPlaylistById(playlistId);
+                    // Update with actual server data (has _id etc)
+                    set(state => ({
+                        playlists: state.playlists.map(p => p._id === playlistId ? response.data : p)
+                    }));
                 } catch (error: any) {
                     console.error("[PlaylistStore] addTrackToPlaylist failed:", error);
+                    // Revert on error
+                    get().fetchPlaylistById(playlistId);
                     throw error;
                 }
             },
 
             removeTrackFromPlaylist: async (playlistId: string, songId: string) => {
+                // Optimistic update
+                set(state => ({
+                    playlists: state.playlists.map(p => {
+                        if (p._id === playlistId) {
+                            return { ...p, songs: p.songs.filter(s => (s._id || s.id || s.externalId) !== songId) };
+                        }
+                        return p;
+                    })
+                }));
+
                 try {
-                    await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
+                    const response = await axiosInstance.patch(`/playlists/${playlistId}/songs`, {
                         op: "remove",
                         songId
                     });
-                    await get().fetchPlaylistById(playlistId);
+                    set((state) => ({
+                        playlists: state.playlists.map(p => p._id === playlistId ? response.data : p)
+                    }));
                 } catch (error: any) {
-                    console.error("[PlaylistStore] removeTrackFromPlaylist failed:", error);
-                    throw error;
+                    console.error("[PlaylistStore] Failed to remove track:", error.message);
+                    // Revert
+                    get().fetchPlaylistById(playlistId);
                 }
             },
 

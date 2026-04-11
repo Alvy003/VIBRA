@@ -29,7 +29,6 @@ export const SectionHeader = React.memo(({
   return (
     <View style={styles.container}>
       <View style={styles.titleContainer}>
-        <View style={[styles.accentLine, { backgroundColor: finalAccentColor }]} />
         <View style={styles.textContainer}>
           <Text style={styles.title}>{title}</Text>
           {!!subtitle && (

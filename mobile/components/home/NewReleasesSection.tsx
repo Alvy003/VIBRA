@@ -8,7 +8,7 @@ import { ExternalItem } from './types';
 import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.38;
+const CARD_WIDTH = SCREEN_WIDTH * 0.45;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 

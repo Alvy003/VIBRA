@@ -62,7 +62,7 @@ const SPOTIFY = {
   textPrimary: '#ffffff',
   textSecondary: '#b3b3b3',
   textMuted: '#727272',
-  green: '#8B5CF6',
+  green: '#7B2CF5',
   row: 'transparent',
 };
 
@@ -120,7 +120,7 @@ export default function ProfileScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor={SPOTIFY.background} />
-      
+
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         {/* ─── Header ─── */}
         <View style={styles.header}>
@@ -172,7 +172,7 @@ export default function ProfileScreen() {
           <SettingsRow
             icon={Settings}
             title="Manage account"
-            onPress={() => {}}
+            onPress={() => { }}
           />
 
           {/* ─── Content and Display ─── */}
@@ -205,37 +205,20 @@ export default function ProfileScreen() {
             }
           />
 
-          {/* ─── Data Saving and Offline ─── */}
-          <SectionTitle title="Data saving and offline" />
-          <SettingsRow
-            icon={Wifi}
-            title="Data Saver"
-            subtitle="Sets audio quality to Low and disables Canvas"
-            rightElement={
-              <Switch
-                value={dataSaver}
-                onValueChange={(val) => {
-                  setDataSaver(val);
-                }}
-                trackColor={{ false: '#404040', true: SPOTIFY.green }}
-                thumbColor="#fff"
-              />
-            }
-          />
-          <SettingsRow
-            icon={Download}
-            title="Downloads"
-            subtitle="0 songs"
-            onPress={() => {}}
-          />
-
           {/* ─── Storage ─── */}
           <SectionTitle title="Storage" />
           <SettingsRow
             icon={HardDrive}
             title="Clear cache"
             subtitle="Free up storage on your device"
-            onPress={() => {}}
+            onPress={() => { }}
+          />
+
+          <SettingsRow
+            icon={Download}
+            title="Downloads"
+            subtitle="0 songs"
+            onPress={() => { }}
           />
 
           {/* ─── About ─── */}
@@ -244,18 +227,6 @@ export default function ProfileScreen() {
             icon={Info}
             title="Version"
             subtitle="1.0.0 (build 1)"
-          />
-          <SettingsRow
-            icon={FileText}
-            title="Privacy Policy"
-            rightElement={<ExternalLink size={18} color={SPOTIFY.textMuted} />}
-            onPress={() => {}}
-          />
-          <SettingsRow
-            icon={FileText}
-            title="Terms of Service"
-            rightElement={<ExternalLink size={18} color={SPOTIFY.textMuted} />}
-            onPress={() => {}}
           />
 
           {/* ─── Log Out Button ─── */}
@@ -328,7 +299,7 @@ const SettingsRow = React.memo(({
       </View>
       <View style={styles.rowContent}>
         <Text style={styles.rowTitle}>{title}</Text>
-        {subtitle && (
+        {!!subtitle && (
           <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>
         )}
       </View>
@@ -391,7 +362,7 @@ const LanguageModal = React.memo(({
   };
 
   const hasChanges = JSON.stringify([...localSelection].sort()) !==
-                     JSON.stringify([...selectedLanguages].sort());
+    JSON.stringify([...selectedLanguages].sort());
 
   return (
     <Modal
@@ -410,7 +381,7 @@ const LanguageModal = React.memo(({
         </Pressable>
 
         <Animated.View
-        //   entering={SlideInDown.springify().damping(20).stiffness(200)}
+          //   entering={SlideInDown.springify().damping(20).stiffness(200)}
           exiting={SlideOutDown.springify().damping(20).stiffness(200)}
           style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
         >
@@ -606,23 +577,26 @@ const styles = StyleSheet.create({
   // Logout
   logoutContainer: {
     paddingHorizontal: 16,
-    paddingTop: 40,
+    paddingTop: 20,
     paddingBottom: 16,
+    alignItems: 'center',
   },
+
   logoutButton: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: SPOTIFY.textMuted,
-    borderRadius: 24,
-    paddingVertical: 14,
+    backgroundColor: '#fff',
+    borderWidth: 0,
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
+
   logoutText: {
-    color: SPOTIFY.textPrimary,
-    fontSize: 16,
+    color: '#000',
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
 
   // Footer

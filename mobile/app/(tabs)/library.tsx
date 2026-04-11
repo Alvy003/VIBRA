@@ -68,7 +68,7 @@ export default function LibraryScreen() {
                     title: 'Downloads',
                     subtitle: `${downloadCount} tracks available offline`,
                     icon: Download,
-                    gradient: ['#8B5CF6', '#7c3aed'],
+                    gradient: ['#7B2CF5', '#7c3aed'],
                     onPress: () => router.push('/(tabs)/downloads' as any)
                 });
             } else {
@@ -89,7 +89,7 @@ export default function LibraryScreen() {
                         title: 'Downloads',
                         subtitle: `${downloadCount} tracks available offline`,
                         icon: Download,
-                        gradient: ['#8B5CF6', '#7c3aed'],
+                        gradient: ['#7B2CF5', '#7c3aed'],
                         onPress: () => router.push('/(tabs)/downloads' as any)
                     });
                 }
@@ -131,9 +131,9 @@ export default function LibraryScreen() {
 
         if (filter === 'all' || filter === 'artists') {
             let artistsList = savedItems.filter(i => i.type === 'artist').map(i => ({ ...i, type: 'artist', createdAt: i.createdAt || 0 }));
-            
+
             if (isDownloadedFilterActive) {
-                artistsList = []; 
+                artistsList = [];
             }
 
             items.push(...artistsList);
@@ -175,12 +175,14 @@ export default function LibraryScreen() {
         const id = rawId.replace(/jiosaavn_(album|playlist|artist)_/, '');
 
         let route = '';
+        const isExternal = !!item.externalId && item.source !== 'ai';
+
         if (isAlbum) {
-            route = item.externalId ? `/(tabs)/album/external/jiosaavn/${id}` : `/(tabs)/album/${id}`;
+            route = isExternal ? `/(tabs)/album/external/jiosaavn/${id}` : `/(tabs)/album/${id}`;
         } else if (isPlaylist) {
-            route = item.externalId ? `/(tabs)/playlist/external/jiosaavn/${id}` : `/(tabs)/playlist/${id}`;
+            route = isExternal ? `/(tabs)/playlist/external/jiosaavn/${id}` : `/(tabs)/playlist/${id}`;
         } else if (isArtist) {
-            route = item.externalId ? `/(tabs)/artist/external/jiosaavn/${id}` : `/(tabs)/artist/${id}`;
+            route = isExternal ? `/(tabs)/artist/external/jiosaavn/${id}` : `/(tabs)/artist/${id}`;
         }
 
         router.push(route as any);
@@ -496,7 +498,7 @@ const styles = StyleSheet.create({
         marginHorizontal: 4,
     },
     filterChipActive: {
-        backgroundColor: '#8B5CF6',
+        backgroundColor: '#7B2CF5',
     },
     filterChipText: {
         color: '#e4e4e7',

@@ -11,9 +11,10 @@ import { useSearchStore } from '@/stores/useSearchStore';
 interface TopResultCardProps {
   result: any;
   type: 'song' | 'artist' | 'album' | 'playlist';
+  searchQuery?: string;
 }
 
-export const TopResultCard = React.memo(({ result, type }: TopResultCardProps) => {
+export const TopResultCard = React.memo(({ result, type, searchQuery }: TopResultCardProps) => {
   const router = useRouter();
   const playTrack = usePlayerStore((s) => s.playTrack);
   const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
@@ -22,6 +23,7 @@ export const TopResultCard = React.memo(({ result, type }: TopResultCardProps) =
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     if (type === 'song') {
+      // console.log('[TopResultCard] Playing song from top result. Context:', searchQuery);
       const songId = result.videoId || result._id || result.externalId || `${result.title}-${result.artist}`;
 
       addRecentSearch({
@@ -41,7 +43,7 @@ export const TopResultCard = React.memo(({ result, type }: TopResultCardProps) =
         artwork: result.imageUrl,
         duration: result.duration,
         source: result.source || 'jiosaavn',
-      } as any);
+      } as any, searchQuery ? { type: 'search', id: 'search', title: searchQuery } : undefined);
     } 
     else if (type === 'artist') {
       // All search results are external (JioSaavn)

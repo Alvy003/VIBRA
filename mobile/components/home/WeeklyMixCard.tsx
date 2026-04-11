@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
-  Easing,
-  FadeInDown,
+    useSharedValue,
+    useAnimatedStyle,
+    withRepeat,
+    withTiming,
+    withSequence,
+    Easing,
+    FadeInDown,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Sparkles, Play, Trophy, ArrowRight } from 'lucide-react-native';
@@ -21,14 +21,14 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
     const { weeklyMix, fetchWeeklyMix, isLoadingWeeklyMix } = useStreamStore();
     const initializeQueue = usePlayerStore(state => state.initializeQueue);
-    
+
     const glowValue = useSharedValue(0);
 
     useEffect(() => {
         if (!weeklyMix && !isLoadingWeeklyMix) {
             fetchWeeklyMix();
         }
-        
+
         glowValue.value = withRepeat(
             withSequence(
                 withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
@@ -60,7 +60,7 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
     const isEligible = weeklyMix.eligible;
 
     return (
-        <Animated.View 
+        <Animated.View
             entering={FadeInDown.delay(index * 100).duration(800)}
             style={styles.container}
         >
@@ -94,9 +94,9 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
                                     {isEligible ? (
                                         <Sparkles size={12} color="#fff" />
                                     ) : (
-                                        <Trophy size={12} color="#8b5cf6" />
+                                        <Trophy size={12} color="#7B2CF5" />
                                     )}
-                                    <Text style={[styles.badgeText, { color: isEligible ? '#fff' : '#8b5cf6' }]}>
+                                    <Text style={[styles.badgeText, { color: isEligible ? '#fff' : '#7B2CF5' }]}>
                                         {isEligible ? 'WEEKEND VIBE' : 'RECAP PROGRESS'}
                                     </Text>
                                 </View>
@@ -106,8 +106,8 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
                                 {isEligible ? (weeklyMix.metadata?.name || 'The Weekly Recap') : 'Unlock Your Week'}
                             </Text>
                             <Text style={styles.subtitle}>
-                                {isEligible 
-                                    ? (weeklyMix.metadata?.description || 'Your personalized weekly discovery mix.') 
+                                {isEligible
+                                    ? (weeklyMix.metadata?.description || 'Your personalized weekly discovery mix.')
                                     : `Listen to ${20 - (weeklyMix.progress?.count || 0)} more songs to unlock your weekend vibe.`
                                 }
                             </Text>
@@ -115,11 +115,11 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
                             {!isEligible && (
                                 <View style={styles.progressContainer}>
                                     <View style={styles.progressBar}>
-                                        <View 
+                                        <View
                                             style={[
-                                                styles.progressFill, 
+                                                styles.progressFill,
                                                 { width: `${Math.min(((weeklyMix.progress?.count || 0) / 20) * 100, 100)}%` }
-                                            ]} 
+                                            ]}
                                         />
                                     </View>
                                     <Text style={styles.progressPercent}>
@@ -227,11 +227,11 @@ const styles = StyleSheet.create({
     },
     progressFill: {
         height: '100%',
-        backgroundColor: '#8b5cf6',
+        backgroundColor: '#7B2CF5',
         borderRadius: 2,
     },
     progressPercent: {
-        color: '#8b5cf6',
+        color: '#7B2CF5',
         fontSize: 11,
         fontWeight: '600',
     },

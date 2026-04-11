@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, SafeAreaView, StyleSheet, StatusBar, Dimensions } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, StatusBar, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { ArrowLeft, Play, Shuffle, Download, Music, User, Disc } from 'lucide-react-native';
 import { useDownloadStore, DownloadedSong, DownloadedCollection } from '@/stores/useDownloadStore';
@@ -34,9 +35,9 @@ export default function DownloadsScreen() {
 
     const handlePlayAll = async (shuffle = false) => {
         if (songs.length === 0) return;
-        
+
         const queueSongs = shuffle ? [...songs].sort(() => Math.random() - 0.5) : songs;
-        
+
         // Map downloaded songs to Player tracks
         const playerTracks = queueSongs.map(s => ({
             id: s.id,
@@ -63,7 +64,7 @@ export default function DownloadsScreen() {
             <SafeAreaView className="flex-1 pt-6">
                 {/* Header */}
                 <View className="flex-row items-center px-4 py-4">
-                    <TouchableOpacity 
+                    <TouchableOpacity
                         onPress={() => router.back()}
                         className="w-10 h-10 items-center justify-center"
                     >
@@ -85,15 +86,15 @@ export default function DownloadsScreen() {
                     </Text>
 
                     <View className="flex-row items-center space-x-4">
-                        <TouchableOpacity 
+                        <TouchableOpacity
                             onPress={() => handlePlayAll(false)}
-                            className="flex-1 flex-row items-center justify-center bg-[#8B5CF6] py-3.5 rounded-full"
+                            className="flex-1 flex-row items-center justify-center bg-[#7B2CF5] py-3.5 rounded-full"
                         >
                             <Play size={20} color="white" fill="white" />
                             <Text className="text-white font-bold ml-2 text-lg">Play All</Text>
                         </TouchableOpacity>
-                        
-                        <TouchableOpacity 
+
+                        <TouchableOpacity
                             onPress={() => handlePlayAll(true)}
                             className="w-14 h-14 items-center justify-center bg-zinc-800/80 rounded-full"
                         >
@@ -108,7 +109,7 @@ export default function DownloadsScreen() {
                         <TouchableOpacity
                             key={tab}
                             onPress={() => setActiveTab(tab)}
-                            className={`pb-3 px-4 mr-2 ${activeTab === tab ? 'border-b-2 border-[#8B5CF6]' : ''}`}
+                            className={`pb-3 px-4 mr-2 ${activeTab === tab ? 'border-b-2 border-[#7B2CF5]' : ''}`}
                         >
                             <Text className={`text-sm font-bold capitalize ${activeTab === tab ? 'text-white' : 'text-zinc-500'}`}>
                                 {tab}

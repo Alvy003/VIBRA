@@ -135,11 +135,10 @@ export default function TabLayout() {
           tabBarActiveTintColor: COLORS.activeTab,
           tabBarInactiveTintColor: COLORS.inactiveTab,
           tabBarHideOnKeyboard: false,
-          freezeOnBlur: false,
           tabBarStyle: [
             styles.tabBar,
             {
-              height: 56 + insets.bottom,
+              height: 52 + insets.bottom,
               paddingBottom: Math.max(insets.bottom, 8),
               paddingHorizontal: Math.max(insets.left, insets.right, 4),
             },
@@ -218,24 +217,12 @@ export default function TabLayout() {
                 </TabIcon>
               );
             },
-            tabBarLabel: ({ focused, children }) => {
-              const isMediaDetail = ['playlist', 'album', 'artist', 'downloads'].includes(segments[1] ?? '');
-              const active = focused || isMediaDetail;
-              const { Text: RNText } = require('react-native');
-              return (
-                <RNText style={[styles.tabBarLabel, { color: active ? COLORS.activeTab : COLORS.inactiveTab }]}>
-                  {children}
-                </RNText>
-              );
-            },
           }}
         />
         <Tabs.Screen
           name="chat"
           options={{
             title: 'AI Chat',
-            freezeOnBlur: false,
-            lazy: false,
             tabBarIcon: ({ color, focused }) => (
               <TabIcon>
                 <Sparkles size={23} color={color} fill={focused ? color : 'none'} strokeWidth={focused ? 2.5 : 1.8} />
@@ -253,12 +240,12 @@ export default function TabLayout() {
         <Tabs.Screen name="downloads" options={{ href: null }} />
       </Tabs>
 
-      {!isPlayerExpanded && segments[1] !== 'chat' && (
+      {!isPlayerExpanded && (
         <Animated.View
           pointerEvents="box-none"
           style={[
             styles.miniPlayerContainer,
-            { bottom: 56 + insets.bottom, opacity: miniPlayerOpacity },
+            { bottom: 52 + insets.bottom, opacity: miniPlayerOpacity },
           ]}
         >
           <View style={styles.miniPlayerShadow}>

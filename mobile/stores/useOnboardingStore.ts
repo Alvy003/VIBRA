@@ -39,6 +39,7 @@ export const AVAILABLE_GENRES = [
 interface OnboardingStore {
   preferences: UserMusicPreferences;
   showOnboarding: boolean;
+  isPreferencesLoaded: boolean;
 
   setLanguages: (languages: string[]) => void;
   toggleLanguage: (language: string) => void;
@@ -62,6 +63,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
         completedOnboarding: false,
       },
       showOnboarding: false,
+      isPreferencesLoaded: false,
 
       setLanguages: (languages) => {
         set((state) => ({
@@ -105,36 +107,45 @@ export const useOnboardingStore = create<OnboardingStore>()(
         set({
           preferences: { languages: [], genres: [], artists: [], completedOnboarding: false },
           showOnboarding: true,
+          isPreferencesLoaded: false,
         }),
 
       reset: () =>
         set({
           preferences: { languages: [], genres: [], artists: [], completedOnboarding: false },
           showOnboarding: false,
+          isPreferencesLoaded: false,
         }),
 
       fetchPreferences: async () => {
         try {
           const res = await axiosInstance.get("/users/me/preferences");
-          const data = res.data;
+          const data = res.data || {};
           set({
             preferences: {
-              languages: data.languages || [],
-              genres: data.genres || [],
-              artists: data.artists || [],
-              completedOnboarding: data.completedOnboarding || false,
-            }
+              languages: Array.isArray(data.languages) ? data.languages : [],
+              genres: Array.isArray(data.genres) ? data.genres : [],
+              artists: Array.isArray(data.artists) ? data.artists : [],
+              completedOnboarding: !!data.completedOnboarding,
+            },
+            isPreferencesLoaded: true,
           });
-        } catch (error) {
-          console.error("[OnboardingStore] Failed to fetch preferences:", error);
+        } catch (error: any) {
+          if (error.response?.status === 401) {
+            return;
+          }
+          console.error(`[OnboardingStore] Failed to fetch preferences (404/Error) from: ${axiosInstance.defaults.baseURL}/users/me/preferences`, 
+            error.response?.status || error.message);
+          set({ isPreferencesLoaded: true });
         }
       },
 
       syncPreferences: async (prefs) => {
         try {
           await axiosInstance.post("/users/me/preferences", prefs);
-        } catch (error) {
-          console.error("[OnboardingStore] Failed to sync preferences:", error);
+        } catch (error: any) {
+          console.error(`[OnboardingStore] Failed to sync preferences to: ${axiosInstance.defaults.baseURL}/users/me/preferences`, 
+            error.response?.status || error.message);
         }
       },
 

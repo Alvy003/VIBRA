@@ -86,8 +86,8 @@ export default function SearchResultsScreen() {
     const hasContent = uniqueSongs.length > 0 || albums.length > 0 || artists.length > 0;
 
     const renderSong = useCallback(
-        ({ item }: { item: any }) => <SongResultCard song={item} />,
-        []
+        ({ item }: { item: any }) => <SongResultCard song={item} searchQuery={q as string} />,
+        [q]
     );
 
     const renderAlbum = useCallback(
@@ -123,30 +123,30 @@ export default function SearchResultsScreen() {
                         keyboardShouldPersistTaps="handled"
                     >
                         {/* Top Result */}
-                        {topSong && (
+                        {topSong ? (
                             <View style={styles.section}>
-                                <TopResultCard result={topSong} type="song" />
+                                <TopResultCard result={topSong} type="song" searchQuery={q as string} />
                             </View>
-                        )}
+                        ) : null}
 
                         {/* Songs — FlashList */}
-                        {remainingSongs.length > 0 && (
+                        {remainingSongs.length > 0 ? (
                             <View style={styles.section}>
                                 <SectionHeader title="Songs" />
                                 <View style={{ minHeight: remainingSongs.length * 66 }}>
                                     <FlashList
                                         data={remainingSongs}
                                         renderItem={renderSong}
-                                        keyExtractor={(item) => item.videoId || item._id || item.externalId || Math.random().toString()}
+                                        keyExtractor={(item, index) => `${item.videoId || item._id || item.externalId}-${index}`}
                                         scrollEnabled={false}
                                         overrideProps={{ estimatedItemSize: 66 }}
                                     />
                                 </View>
                             </View>
-                        )}
+                        ) : null}
 
                         {/* Albums — horizontal rail */}
-                        {albums.length > 0 && (
+                        {albums.length > 0 ? (
                             <View style={styles.section}>
                                 <SectionHeader title="Albums" />
                                 <FlatList
@@ -159,10 +159,10 @@ export default function SearchResultsScreen() {
                                     removeClippedSubviews
                                 />
                             </View>
-                        )}
+                        ) : null}
 
                         {/* Artists — horizontal rail */}
-                        {artists.length > 0 && (
+                        {artists.length > 0 ? (
                             <View style={styles.section}>
                                 <SectionHeader title="Artists" />
                                 <FlatList
@@ -175,7 +175,7 @@ export default function SearchResultsScreen() {
                                     removeClippedSubviews
                                 />
                             </View>
-                        )}
+                        ) : null}
 
                         <View style={styles.bottomPad} />
                     </ScrollView>

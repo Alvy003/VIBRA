@@ -21,7 +21,7 @@ import { useDynamicColors } from '@/hooks/useDynamicColors';
 import { ArtistSkeleton } from '@/components/Skeleton';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#9333EA';
+const ACCENT_COLOR = '#7B2CF5';
 
 export default function ExternalArtistScreen() {
     const { id } = useLocalSearchParams();

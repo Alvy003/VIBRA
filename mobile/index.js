@@ -1,6 +1,11 @@
+import 'react-native-url-polyfill/auto';
+import { Buffer } from 'buffer';
+global.Buffer = Buffer;
+import 'fastestsmallesttextencoderdecoder';
+
 import { registerRootComponent } from 'expo';
 import { ExpoRoot } from 'expo-router';
-console.warn('[Index] Entry point evaluated');
+// console.warn('[Index] Entry point evaluated');
 import TrackPlayer from 'react-native-track-player';
 
 import { PlaybackService } from './services/playbackService';

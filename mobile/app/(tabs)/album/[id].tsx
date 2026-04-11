@@ -30,17 +30,18 @@ import {
 } from 'lucide-react-native';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
 import { useDownloadStore } from '@/stores/useDownloadStore';
+import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { resolveAssetUrl } from '@/lib/url';
 import { useDynamicColors } from '@/hooks/useDynamicColors';
 import { FlashList as OriginalFlashList } from '@shopify/flash-list';
-const FlashList = OriginalFlashList as any;
+const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#8B5CF6';
+const ACCENT_COLOR = '#7B2CF5';
 
 // ─── AlbumHeader MUST be defined outside the screen function ─────────────────
 // Defining it inside would cause React to create a new component type every render
@@ -69,22 +70,32 @@ const AlbumHeader = memo<AlbumHeaderProps>(({
     width,
 }) => (
     <View style={{ backgroundColor: colors.primary }}>
-        <LinearGradient
-            colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.4)', 'rgba(0,0,0,0.8)', '#000000']}
-            locations={[0, 0.4, 0.7, 1]}
-            style={{ paddingTop: 100, paddingBottom: 24 }}
-        >
+            <LinearGradient
+                colors={[
+                    'transparent',
+                    'rgba(0,0,0,0.05)',
+                    'rgba(0,0,0,0.15)',
+                    'rgba(0,0,0,0.3)',
+                    'rgba(0,0,0,0.5)',
+                    'rgba(0,0,0,0.7)',
+                    'rgba(0,0,0,0.85)',
+                    '#000000',
+                    '#000000',
+                ]}
+                locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
+                style={{ paddingTop: 60, paddingBottom: 10 }}
+            >
             <View className="items-center px-6">
-                <View style={{
-                    shadowColor: '#000',
+            <View style={{
+                    shadowColor: colors.primary,
                     shadowOffset: { width: 0, height: 12 },
                     shadowOpacity: 0.6,
                     shadowRadius: 24,
-                    elevation: 20
+                    elevation: 20,
                 }}>
                     <Image
                         source={{ uri: artworkUrl ?? undefined }}
-                        style={{ width: width * 0.65, height: width * 0.65, borderRadius: 4 }}
+                        style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2 }}
                         contentFit="cover"
                         transition={0}
                         cachePolicy="memory-disk"
@@ -92,16 +103,13 @@ const AlbumHeader = memo<AlbumHeaderProps>(({
                 </View>
 
                 <View className="w-full mt-10">
-                    <Text className="text-white text-3xl font-extrabold mb-2 leading-tight tracking-tight">
+                    <Text className="text-white text-[26px] font-bold mb-2 leading-tight tracking-tight" numberOfLines={1}>
                         {currentAlbum?.title}
                     </Text>
-                    <Text className="text-zinc-300 text-sm font-medium mb-4">{currentAlbum?.artist}</Text>
+                    <Text className="text-zinc-300 text-sm font-medium mb-4" numberOfLines={1}>{currentAlbum?.artist}</Text>
                     <View className="flex-row items-center">
-                        <View className="w-6 h-6 rounded-full bg-purple-600 items-center justify-center mr-2 ring-1 ring-white/20">
-                            <Text className="text-white text-[10px] font-black">V</Text>
-                        </View>
-                        <Text className="text-white text-xs font-bold uppercase tracking-wider">
-                            VIBRA • ALBUM <Text className="text-zinc-400 font-medium lowercase italic">• 2024</Text>
+                        <Text className="text-white text-[11px] font-bold tracking-wider">
+                            ALBUM <Text className="text-zinc-400 font-medium lowercase">• 2024</Text>
                         </Text>
                     </View>
                 </View>
@@ -110,33 +118,33 @@ const AlbumHeader = memo<AlbumHeaderProps>(({
             <View className="px-6 pt-8 pb-4 flex-row items-center justify-between">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
                     <TouchableOpacity activeOpacity={0.7}>
-                        <Heart size={26} color="#b3b3b3" />
+                        <Heart size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
                         {isAlbumDownloaded ? (
-                            <DownloadedIcon size={26} />
+                            <DownloadedIcon size={22} />
                         ) : (
-                            <CircleArrowDown size={28} color="#b3b3b3" />
+                            <CircleArrowDown size={24} color="#b3b3b3" />
                         )}
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7}>
-                        <Share2 size={24} color="#b3b3b3" />
+                        <Share2 size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                     <TouchableOpacity activeOpacity={0.7}>
-                        <MoreVertical size={24} color="#b3b3b3" />
+                        <MoreVertical size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                 </View>
 
                 <TouchableOpacity
                     onPress={isCurrentAlbumPlaying ? onPause : onPlay}
                     style={{ backgroundColor: ACCENT_COLOR }}
-                    className="w-16 h-16 rounded-full items-center justify-center shadow-2xl"
+                    className="w-[52px] h-[52px] rounded-full items-center justify-center shadow-2xl"
                     activeOpacity={0.8}
                 >
                     {isCurrentAlbumPlaying ? (
-                        <Pause size={32} color="black" fill="black" />
+                        <SharpPause size={26} color="black" />
                     ) : (
-                        <Play size={32} color="black" fill="black" className="ml-1" />
+                        <SharpPlay size={26} color="black" style={{ marginLeft: 3 }} />
                     )}
                 </TouchableOpacity>
             </View>
@@ -312,6 +320,13 @@ export default function AlbumScreen() {
         />
     ), [currentAlbum, artworkUrl, colors, isAlbumDownloaded, isCurrentAlbumPlaying, handleDownloadAlbum, handlePlayAlbum, pauseTrack]);
 
+    const displaySongs = useMemo(() => {
+        return (currentAlbum?.songs || []).map((s: any) => ({
+            ...s,
+            imageUrl: s.imageUrl || currentAlbum?.imageUrl
+        }));
+    }, [currentAlbum?.songs, currentAlbum?.imageUrl]);
+
     const renderTrackItem = useCallback(({ item: song, index }: { item: any, index: number }) => (
         <TrackListItem
             track={song}
@@ -339,21 +354,21 @@ export default function AlbumScreen() {
 
     return (
         <View className="flex-1 bg-black">
-            {/* 1. Floating Back Button - Fades Out Early */}
-            <Animated.View
-                style={[floatingHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }]}
+            {/* 1. Sticky Back Button */}
+            <View
+                style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
             >
                 <SafeAreaView edges={['top']} className="px-4 py-2">
                     <TouchableOpacity
                         onPress={handleBack}
-                        className="w-10 h-10 rounded-full bg-black/40 items-center justify-center"
+                        className="w-10 h-10 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" style={{ marginLeft: -2 }} />
+                        <ArrowLeft size={24} color="#ffffff" />
                     </TouchableOpacity>
                 </SafeAreaView>
-            </Animated.View>
+            </View>
 
             {/* 2. Sticky Navigation Header - Fades In */}
             <Animated.View
@@ -370,16 +385,9 @@ export default function AlbumScreen() {
                 />
 
                 <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
-                    <TouchableOpacity
-                        onPress={handleBack}
-                        className="w-10 h-10 items-center justify-center mr-2"
-                        activeOpacity={0.7}
-                    >
-                        <ArrowLeft size={24} color="#ffffff" style={{ marginLeft: -2 }} />
-                    </TouchableOpacity>
-
+                    <View className="w-10 mr-2" />
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
-                        <Text className="text-white text-base font-bold" numberOfLines={1}>
+                        <Text className="text-white text-sm font-bold" numberOfLines={1}>
                             {currentAlbum?.title}
                         </Text>
                     </Animated.View>
@@ -392,25 +400,25 @@ export default function AlbumScreen() {
                             activeOpacity={0.8}
                         >
                             {isCurrentAlbumPlaying ? (
-                                <Pause size={20} color="black" fill="black" />
+                                <SharpPause size={22} color="black" />
                             ) : (
-                                <Play size={20} color="black" fill="black" className="ml-0.5" />
+                                <SharpPlay size={22} color="black" style={{ marginLeft: 3 }} />
                             )}
                         </TouchableOpacity>
                     </Animated.View>
                 </SafeAreaView>
             </Animated.View>
 
-            <Animated.FlatList
-                data={songs}
-                renderItem={renderTrackItem}
-                keyExtractor={(item: any) => item._id}
-                onScroll={scrollHandler}
-                scrollEventThrottle={16}
-                ListHeaderComponent={renderHeader}
-                contentContainerStyle={{ paddingBottom: 110 }}
-                showsVerticalScrollIndicator={false}
-            />
+                <AnimatedFlashList
+                    data={displaySongs}
+                    renderItem={renderTrackItem}
+                    keyExtractor={(item: any) => item._id || item.id}
+                    onScroll={scrollHandler}
+                    scrollEventThrottle={16}
+                    ListHeaderComponent={renderHeader}
+                    estimatedItemSize={80}
+                    contentContainerStyle={{ paddingBottom: 100 }}
+                />
         </View>
     );
 }

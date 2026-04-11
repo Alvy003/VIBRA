@@ -18,13 +18,13 @@ interface DiscoveryMixCardProps {
 export const DiscoveryMixCard = React.memo(({ type }: DiscoveryMixCardProps) => {
     const router = useRouter();
     const { dailyMix, weeklyMix } = useStreamStore();
-    
+
     const isWeekly = type === 'weekly';
     const mixData = isWeekly ? weeklyMix?.results : dailyMix;
     const isEligible = isWeekly ? weeklyMix?.eligible : !!(dailyMix && dailyMix.length > 0);
-    
+
     const firstSong = mixData && mixData.length > 0 ? mixData[0] : null;
-    const accentColor = isWeekly ? '#8b5cf6' : '#ec4899';
+    const accentColor = isWeekly ? '#7B2CF5' : '#ec4899';
     const label = isWeekly ? 'Weekly Mix' : 'Daily Mix';
 
     const handlePress = () => {
@@ -43,22 +43,22 @@ export const DiscoveryMixCard = React.memo(({ type }: DiscoveryMixCardProps) => 
         >
             <View style={styles.card}>
                 {/* 1. Base Creative Cover (The "Creative" part) */}
-                <MixCover 
+                <MixCover
                     variant={type}
-                    style={StyleSheet.absoluteFill} 
+                    style={StyleSheet.absoluteFill}
                 />
 
                 {/* Lock/Progress Overlay for Weekly */}
                 {isWeekly && !isEligible && (
                     <View style={styles.lockedOverlay}>
-                         <View style={styles.progressBar}>
-                             <View 
+                        <View style={styles.progressBar}>
+                            <View
                                 style={[
-                                    styles.progressFill, 
+                                    styles.progressFill,
                                     { width: `${Math.min(((weeklyMix?.progress?.count || 0) / 20) * 100, 100)}%`, backgroundColor: accentColor }
-                                ]} 
-                             />
-                         </View>
+                                ]}
+                            />
+                        </View>
                     </View>
                 )}
             </View>

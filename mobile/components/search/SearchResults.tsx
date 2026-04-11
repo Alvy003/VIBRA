@@ -133,7 +133,7 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
         {topResult && activeFilter === 'all' && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Top result</Text>
-            <TopResultCard result={topResult.data} type={topResult.type} />
+            <TopResultCard result={topResult.data} type={topResult.type} searchQuery={query} />
           </View>
         )}
 
@@ -145,6 +145,7 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
               <SongResultRow
                 key={song._id || song.videoId || song.externalId}
                 song={song}
+                searchQuery={query}
               />
             ))}
           </View>

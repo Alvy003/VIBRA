@@ -96,7 +96,7 @@ export const TrendingSection = React.memo(() => {
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={{ paddingHorizontal: 20 }}
                 data={trendingSongs.slice(1, 9)}
-                keyExtractor={(item) => item._id}
+                keyExtractor={(item, index) => `${item._id || item.id}-${index}`}
                 renderItem={renderTrendingSong}
                 snapToInterval={ITEM_SIZE}
                 decelerationRate="fast"

@@ -25,10 +25,10 @@ import Animated, {
   FadeInDown,
   FadeIn,
 } from 'react-native-reanimated';
-import { 
-  Sparkles, 
-  Send, 
-  X, 
+import {
+  Sparkles,
+  Send,
+  X,
   Trash2,
   Music2,
   Link2,
@@ -79,7 +79,7 @@ const SUGGESTIONS = [
 // Playlist Card Component for Chat
 const PlaylistCard = React.memo(({ playlist, onOpen }: { playlist: AIPlaylist, onOpen: (p: AIPlaylist) => void }) => {
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       activeOpacity={0.9}
       onPress={() => onOpen(playlist)}
       style={styles.playlistCard}
@@ -89,7 +89,7 @@ const PlaylistCard = React.memo(({ playlist, onOpen }: { playlist: AIPlaylist, o
           <Image source={{ uri: playlist.coverArt }} style={styles.cardImage} />
         ) : (
           <View style={[styles.cardImage, styles.placeholderCardImage]}>
-             <Music2 size={24} color="#3f3f46" />
+            <Music2 size={24} color="#3f3f46" />
           </View>
         )}
       </View>
@@ -110,9 +110,9 @@ const MessageBubble = React.memo(({ item, onOpenPlaylist }: { item: Message, onO
   const isAI = item.type === 'ai';
   const isCard = item.type === 'playlist_card';
 
-  if (isCard && item.playlist) {
+  if (isCard && !!item.playlist) {
     return (
-      <Animated.View 
+      <Animated.View
         entering={FadeInDown.duration(400)}
         style={[styles.messageWrapper, styles.aiWrapper, { maxWidth: '90%' }]}
       >
@@ -122,7 +122,7 @@ const MessageBubble = React.memo(({ item, onOpenPlaylist }: { item: Message, onO
   }
 
   return (
-    <Animated.View 
+    <Animated.View
       entering={FadeInDown.duration(400)}
       style={[
         styles.messageWrapper,
@@ -149,11 +149,11 @@ export default function ChatScreen() {
   const { query } = useLocalSearchParams();
   const { getToken } = useAuth();
   const { user } = useUser();
-  const { 
-    analyzeAndGenerate, 
-    generationStage, 
-    progressMessage, 
-    error, 
+  const {
+    analyzeAndGenerate,
+    generationStage,
+    progressMessage,
+    error,
     clearError,
     reset,
     messages,
@@ -164,14 +164,14 @@ export default function ChatScreen() {
     importSpotifyPlaylist,
     importYouTubePlaylist,
   } = useAIPlaylistStore();
-  
+
   const [input, setInput] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [selectedPlaylist, setSelectedPlaylist] = useState<AIPlaylist | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importUrl, setImportUrl] = useState('');
   const [activePlatform, setActivePlatform] = useState<'spotify' | 'youtube' | 'ytmusic'>('spotify');
-  
+
   const listRef = useRef<any>(null);
   const inputRef = useRef<TextInput>(null);
   const insets = useSafeAreaInsets();
@@ -207,15 +207,15 @@ export default function ChatScreen() {
     else if (text.includes('youtube.com') || text.includes('music.youtube.com')) target = 'youtube';
 
     if (target === 'spotify' && text.includes('spotify.com/playlist/')) {
-       setShowImportModal(false);
-       await importSpotifyPlaylist(importUrl, token as string);
-       setImportUrl('');
+      setShowImportModal(false);
+      await importSpotifyPlaylist(importUrl, token as string);
+      setImportUrl('');
     } else if ((target === 'youtube' || target === 'ytmusic') && (text.includes('youtube.com/playlist') || text.includes('music.youtube.com/playlist'))) {
-       setShowImportModal(false);
-       await importYouTubePlaylist(importUrl, token as string);
-       setImportUrl('');
+      setShowImportModal(false);
+      await importYouTubePlaylist(importUrl, token as string);
+      setImportUrl('');
     } else {
-       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
 
@@ -247,7 +247,7 @@ export default function ChatScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
         <View style={styles.header}>
@@ -262,7 +262,7 @@ export default function ChatScreen() {
             <TouchableOpacity onPress={handleClear} style={styles.headerBtn}>
               <Text style={styles.clearBtnText}>Clear</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => router.push('/profile')}
               activeOpacity={0.7}
               style={styles.profileBtn}
@@ -290,9 +290,9 @@ export default function ChatScreen() {
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <MessageBubble 
-                item={item} 
-                onOpenPlaylist={(p) => setSelectedPlaylist(p)} 
+              <MessageBubble
+                item={item}
+                onOpenPlaylist={(p) => setSelectedPlaylist(p)}
               />
             )}
             contentContainerStyle={styles.listContent}
@@ -312,7 +312,7 @@ export default function ChatScreen() {
                     </Text>
                   </View>
                 </Animated.View>
-              ) : error ? (
+              ) : !!error ? (
                 <View style={styles.errorBanner}>
                   <Text style={styles.errorText}>{error}</Text>
                   <TouchableOpacity onPress={clearError} style={styles.errorClose}>
@@ -327,7 +327,7 @@ export default function ChatScreen() {
             {/* Mode & Direct Toggles */}
             <View style={styles.modeSwitcherContent}>
               <View style={styles.togglesRow}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   activeOpacity={0.8}
                   onPress={togglePlaylistMode}
                   style={[
@@ -349,10 +349,10 @@ export default function ChatScreen() {
                 </TouchableOpacity>
 
 
-                {playlistMode && (
+                {!!playlistMode && (
                   <>
 
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       activeOpacity={0.8}
                       onPress={() => { setActivePlatform('spotify'); setShowImportModal(true); }}
                       style={[styles.modeChip, styles.platformChip]}
@@ -361,7 +361,7 @@ export default function ChatScreen() {
                       <Text style={styles.platformChipText}>Spotify</Text>
                     </TouchableOpacity>
 
-                    <TouchableOpacity 
+                    <TouchableOpacity
                       activeOpacity={0.8}
                       onPress={() => { setActivePlatform('youtube'); setShowImportModal(true); }}
                       style={[styles.modeChip, styles.platformChip]}
@@ -384,28 +384,28 @@ export default function ChatScreen() {
             </View>
 
             {/* Suggestions */}
-            {!isWorking && (
+            {!!(!isWorking) && (
               <View style={styles.suggestionsContainer}>
-                 <ScrollView 
-                   horizontal 
-                   showsHorizontalScrollIndicator={false}
-                   contentContainerStyle={styles.suggestionsScroll}
-                 >
-                   {SUGGESTIONS.map((s, i) => (
-                      <TouchableOpacity 
-                        key={i} 
-                        style={styles.suggestionChip}
-                        onPress={() => handleSend(s)}
-                      >
-                        <Text style={styles.suggestionText}>{s}</Text>
-                      </TouchableOpacity>
-                   ))}
-                 </ScrollView>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.suggestionsScroll}
+                >
+                  {SUGGESTIONS.map((s, i) => (
+                    <TouchableOpacity
+                      key={i}
+                      style={styles.suggestionChip}
+                      onPress={() => handleSend(s)}
+                    >
+                      <Text style={styles.suggestionText}>{s}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
               </View>
             )}
 
             {/* Input Box */}
-            <View style={[styles.inputArea, { paddingBottom: 8 + insets.bottom }]}>
+            <View style={[styles.inputArea, { paddingBottom: 4 + insets.bottom + 52 + 62 }]}>
               <View style={styles.inputWrapper}>
                 <Animated.View style={[styles.inputGlow, glowAnimatedStyle]} pointerEvents="none" />
                 <Animated.View style={[
@@ -435,7 +435,7 @@ export default function ChatScreen() {
                     autoCorrect={false}
                     autoCapitalize="none"
                   />
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     onPress={() => handleSend()}
                     disabled={!input.trim() || isWorking}
                     style={[
@@ -447,19 +447,20 @@ export default function ChatScreen() {
                   </TouchableOpacity>
                 </Animated.View>
               </View>
-              <Text style={[styles.disclaimer, { paddingBottom: insets.bottom > 0 ? 0 : 8 }]}>
+              <Text style={styles.disclaimer}>
                 Vibra AI can make mistakes.
               </Text>
             </View>
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>      <Modal
+      </SafeAreaView>
+      <Modal
         visible={showImportModal}
         transparent
         animationType="fade"
       >
-        <TouchableOpacity 
-          activeOpacity={1} 
+        <TouchableOpacity
+          activeOpacity={1}
           onPress={() => setShowImportModal(false)}
           style={styles.modalOverlay}
         >
@@ -473,31 +474,31 @@ export default function ChatScreen() {
               </View>
 
               <View style={styles.platformSelector}>
-                <TouchableOpacity 
+                <TouchableOpacity
                   onPress={() => setActivePlatform('spotify')}
                   style={[styles.platformOption, activePlatform === 'spotify' && styles.platformActive]}
                 >
                   <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/174/174872.png' }} style={styles.platformIcon} />
                   <Text style={[styles.platformText, activePlatform === 'spotify' && styles.platformTextActive]}>Spotify</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                   onPress={() => setActivePlatform('youtube')}
-                   style={[styles.platformOption, activePlatform === 'youtube' && styles.platformActive]}
+                <TouchableOpacity
+                  onPress={() => setActivePlatform('youtube')}
+                  style={[styles.platformOption, activePlatform === 'youtube' && styles.platformActive]}
                 >
-                   <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png' }} style={styles.platformIcon} />
-                   <Text style={[styles.platformText, activePlatform === 'youtube' && styles.platformTextActive]}>YouTube</Text>
+                  <Image source={{ uri: 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png' }} style={styles.platformIcon} />
+                  <Text style={[styles.platformText, activePlatform === 'youtube' && styles.platformTextActive]}>YouTube</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                   onPress={() => setActivePlatform('ytmusic')}
-                   style={[styles.platformOption, activePlatform === 'ytmusic' && styles.platformActive]}
+                <TouchableOpacity
+                  onPress={() => setActivePlatform('ytmusic')}
+                  style={[styles.platformOption, activePlatform === 'ytmusic' && styles.platformActive]}
                 >
-                   <Image source={require('../../assets/images/youtube_music.png')} style={styles.platformIcon} />
-                   <Text style={[styles.platformText, activePlatform === 'ytmusic' && styles.platformTextActive]}>YT Music</Text>
+                  <Image source={require('../../assets/images/youtube_music.png')} style={styles.platformIcon} />
+                  <Text style={[styles.platformText, activePlatform === 'ytmusic' && styles.platformTextActive]}>YT Music</Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.importDesc}>
-                {activePlatform === 'spotify' 
-                  ? 'Paste a link to a Spotify playlist to convert it into a playable Vibra playlist.' 
+                {activePlatform === 'spotify'
+                  ? 'Paste a link to a Spotify playlist to convert it into a playable Vibra playlist.'
                   : 'Paste a link to a YouTube or YouTube Music playlist to import it.'}
               </Text>
 
@@ -514,7 +515,7 @@ export default function ChatScreen() {
               {(() => {
                 const isValid = importUrl.includes(activePlatform === 'spotify' ? 'spotify.com/playlist/' : 'youtube.com/playlist') || importUrl.includes('music.youtube.com/playlist');
                 return (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[styles.importBtn, !isValid && styles.importBtnDisabled]}
                     disabled={!isValid}
                     onPress={handleImport}
@@ -535,7 +536,7 @@ export default function ChatScreen() {
         animationType="slide"
         presentationStyle="pageSheet"
       >
-        <PlaylistResult 
+        <PlaylistResult
           playlist={selectedPlaylist as any}
           onClose={() => setSelectedPlaylist(null)}
           onRegenerate={() => {
@@ -751,7 +752,7 @@ const styles = StyleSheet.create({
   },
   platformChipText: {
     fontSize: 12,
-    fontWeight: '600', 
+    fontWeight: '600',
     color: '#a1a1aa',
   },
   chipIcon: {
@@ -850,7 +851,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   errorClose: {
-     padding: 4,
+    padding: 4,
   },
   playlistCard: {
     backgroundColor: '#18181b',

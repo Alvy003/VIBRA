@@ -1,39 +1,56 @@
 // components/ai-playlist/PlaylistResult.tsx
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useMemo } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Dimensions,
-  Platform,
   StatusBar,
   Share,
 } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { 
-  FadeIn, 
-  FadeInDown, 
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, {
+  FadeIn,
+  FadeInDown,
   FadeInUp,
+  useSharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  interpolate,
+  Extrapolate,
+  runOnJS,
 } from 'react-native-reanimated';
-import { 
-  Play, 
-  RotateCcw, 
-  X, 
-  Sparkles, 
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import {
+  Play,
+  RotateCcw,
+  X,
+  Sparkles,
   Clock,
   Share2,
   Heart,
   MoreVertical,
   ChevronDown,
-  Music
+  Music,
+  ArrowLeft,
+  CirclePlus,
+  CircleArrowDown,
+  Check,
 } from 'lucide-react-native';
+import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
+import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
+import { TrackListItem } from '@/components/TrackListItem';
+import { MediaListSkeleton } from '@/components/Skeleton';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
+import { FlashList } from '@shopify/flash-list';
+
+const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as any;
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const COVER_SIZE = SCREEN_WIDTH * 0.65;
@@ -45,76 +62,26 @@ interface PlaylistResultProps {
   onSave?: (save: boolean) => void;
 }
 
-const TrackRow = React.memo(({ 
-  track, 
-  index,
-  onPlay,
-}: { 
-  track: any; 
-  index: number;
-  onPlay: () => void;
-}) => {
-  const formatDuration = (seconds: number) => {
-    if (!seconds) return '--:--';
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
+const ACCENT_COLOR = '#7B2CF5';
 
-  return (
-    <Animated.View entering={FadeInDown.delay(index * 40).duration(300)}>
-      <TouchableOpacity
-        onPress={onPlay}
-        style={styles.trackRow}
-        activeOpacity={0.7}
-      >
-        <Image
-          source={track.imageUrl}
-          style={styles.trackImage}
-          contentFit="cover"
-          transition={200}
-        />
-        <View style={styles.trackInfo}>
-          <Text style={styles.trackTitle} numberOfLines={1}>
-            {track.title}
-          </Text>
-          <Text style={styles.trackArtist} numberOfLines={1}>
-            {track.artist}
-          </Text>
-        </View>
-        <Text style={styles.trackDuration}>
-          {formatDuration(track.duration)}
-        </Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-});
-
-const CoverMosaic = React.memo(({ images }: { images: string[] }) => {
-  const coverImages = [...images];
-  while (coverImages.length < 4) {
-    coverImages.push(images[0] || '');
-  }
-
-  return (
-    <View style={styles.coverMosaic}>
-      {coverImages.slice(0, 4).map((url, i) => (
-        <Image
-          key={i}
-          source={url}
-          style={styles.coverTile}
-          contentFit="cover"
-          transition={300}
-        />
-      ))}
-      <LinearGradient
-        colors={['transparent', 'rgba(0,0,0,0.4)', '#000'] as const}
-        locations={[0, 0.6, 1]}
-        style={styles.coverOverlay}
-      />
-    </View>
-  );
-});
+const CoverArt = React.memo(({ artworkUrl, colors }: { artworkUrl: string; colors: { primary: string } }) => (
+  <View style={{
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.6,
+    shadowRadius: 24,
+    elevation: 20,
+    marginBottom: 20,
+  }}>
+    <Image
+      source={{ uri: artworkUrl }}
+      style={{ width: COVER_SIZE, height: COVER_SIZE, borderRadius: 4 }}
+      contentFit="cover"
+      transition={300}
+      cachePolicy="memory-disk"
+    />
+  </View>
+));
 
 export const PlaylistResult = React.memo(({
   playlist,
@@ -122,15 +89,47 @@ export const PlaylistResult = React.memo(({
   onRegenerate,
   onSave,
 }: PlaylistResultProps) => {
-  const [isSaved, setIsSaved] = useState(false);
-  const [showAllTracks, setShowAllTracks] = useState(false);
-  
+  const isItemSaved = useSavedItemsStore(s => s.isItemSaved);
+  const [isSaved, setIsSaved] = useState(() => isItemSaved(playlist._id));
+  const scrollY = useSharedValue(0);
+  const insets = useSafeAreaInsets();
+  const { setIsPlayerExpanded } = usePlayerUIStore();
+
   const initializeQueue = usePlayerStore((s) => s.initializeQueue);
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const pauseTrack = usePlayerStore((s) => s.pauseTrack);
   const { toggleSave } = useAIPlaylistStore();
+  const colors = { primary: '#121212' }; // Default for AI results, can be dynamic later
+
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+    },
+  });
+
+  const headerTitleStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(scrollY.value, [140, 180], [0, 1], Extrapolate.CLAMP);
+    const translateY = interpolate(scrollY.value, [140, 180], [10, 0], Extrapolate.CLAMP);
+    return { opacity, transform: [{ translateY }] };
+  });
+
+  const headerPlayButtonStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(scrollY.value, [200, 240], [0, 1], Extrapolate.CLAMP);
+    const scale = interpolate(scrollY.value, [200, 240], [0.8, 1], Extrapolate.CLAMP);
+    return { opacity, transform: [{ scale }] };
+  });
+
+  const displaySongs = useMemo(() => {
+    return (playlist.tracks || []).map((t: any) => ({
+      ...t,
+      imageUrl: t.imageUrl || playlist.coverArt
+    }));
+  }, [playlist.tracks, playlist.coverArt]);
 
   const handlePlayAll = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    const tracks = playlist.tracks.map((track: any) => ({
+    const tracks = displaySongs.map((track: any) => ({
       id: track.externalId,
       title: track.title,
       artist: track.artist,
@@ -140,11 +139,11 @@ export const PlaylistResult = React.memo(({
       source: track.source,
     }));
     if (tracks.length > 0) initializeQueue(tracks, 0);
-  }, [playlist, initializeQueue]);
+  }, [displaySongs, initializeQueue]);
 
   const handlePlayTrack = useCallback((track: any, index: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const tracks = playlist.tracks.map((t: any) => ({
+    const tracks = displaySongs.map((t: any) => ({
       id: t.externalId,
       title: t.title,
       artist: t.artist,
@@ -154,16 +153,28 @@ export const PlaylistResult = React.memo(({
       source: t.source,
     }));
     if (tracks.length > 0) initializeQueue(tracks, index);
-  }, [playlist, initializeQueue]);
+  }, [displaySongs, initializeQueue]);
+
+  const renderTrackItem = useCallback(({ item: song, index }: { item: any, index: number }) => (
+    <TrackListItem
+      track={song}
+      index={index}
+      isCurrent={currentTrack?.id === (song._id || song.id || song.externalId)}
+      onPress={() => handlePlayTrack(song, index)}
+      playlistImageUrl={playlist.coverArt}
+    />
+  ), [currentTrack?.id, playlist.coverArt, handlePlayTrack]);
 
   const handleToggleSave = async () => {
     const nextSaved = !isSaved;
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setIsSaved(nextSaved);
-    
+
     try {
       if (playlist._id) {
         await toggleSave(playlist._id, nextSaved);
+        // Refresh library to ensure sync
+        await useSavedItemsStore.getState().fetchSavedItems();
       }
       onSave?.(nextSaved);
     } catch (err) {
@@ -183,107 +194,170 @@ export const PlaylistResult = React.memo(({
     }
   };
 
-  const coverImages = playlist.tracks.slice(0, 4).map((t: any) => t.imageUrl);
-  const displayedTracks = showAllTracks ? playlist.tracks : playlist.tracks.slice(0, 10);
+  const backGesture = Gesture.Pan()
+    .activeOffsetX(10)
+    .onEnd((e) => {
+      if (e.translationX > 100 && Math.abs(e.translationY) < 50) {
+        runOnJS(onClose)();
+      }
+    });
+
+  const renderHeader = useCallback(() => (
+    <View style={{ backgroundColor: colors.primary }}>
+      <LinearGradient
+        colors={[
+          'transparent',
+          'rgba(0,0,0,0.05)',
+          'rgba(0,0,0,0.15)',
+          'rgba(0,0,0,0.3)',
+          'rgba(0,0,0,0.5)',
+          'rgba(0,0,0,0.7)',
+          'rgba(0,0,0,0.85)',
+          '#000000',
+          '#000000',
+        ]}
+        locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
+        style={{ paddingTop: 40, paddingBottom: 10 }}
+      >
+        <View className="items-center px-6">
+          <CoverArt artworkUrl={playlist.coverArt} colors={colors} />
+
+          <View className="w-full mt-5">
+            <Text className="text-white text-[24px] font-bold mb-2 leading-tight tracking-tight" numberOfLines={1}>
+              {playlist.name}
+            </Text>
+            {playlist.description ? (
+              <Text className="text-zinc-400 text-sm font-medium mb-4 leading-5" numberOfLines={2}>
+                {playlist.description}
+              </Text>
+            ) : null}
+
+            <View className="flex-row items-center">
+              <Image
+                source={require('@/assets/images/vibra-white.png')}
+                style={{ width: 18, height: 18 }}
+                contentFit="contain"
+              />
+              <Text className="text-white text-[11px] font-bold tracking-wider">
+                VIBRA <Text className="text-zinc-400 font-medium lowercase">• {displaySongs.length} tracks</Text>
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View className="px-6 pt-4 pb-0 flex-row items-center justify-between">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+            <TouchableOpacity onPress={handleToggleSave} activeOpacity={0.7}>
+              {isSaved ? (
+                <LinearGradient
+                  colors={['#7c3aed', '#9333ea']}
+                  style={{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <Check size={14} color="black" strokeWidth={4} />
+                </LinearGradient>
+              ) : (
+                <CirclePlus size={24} color="#b3b3b3" />
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={handleShare} activeOpacity={0.7}>
+              <Share2 size={24} color="#b3b3b3" />
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={onRegenerate} activeOpacity={0.7}>
+              <RotateCcw size={22} color="#b3b3b3" />
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity
+            onPress={handlePlayAll}
+            style={{ backgroundColor: ACCENT_COLOR }}
+            className="w-14 h-14 rounded-full items-center justify-center shadow-2xl"
+            activeOpacity={0.8}
+          >
+            <SharpPlay size={28} color="black" style={{ marginLeft: 4 }} />
+          </TouchableOpacity>
+        </View>
+      </LinearGradient>
+    </View>
+  ), [playlist, displaySongs, isSaved, handleToggleSave, handleShare, onRegenerate, handlePlayAll]);
 
   return (
-    <View style={styles.container}>
+    <GestureDetector gesture={backGesture}>
+      <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* Header Navigation */}
-        <Animated.View entering={FadeIn.duration(300)} style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.headerBtn}>
-            <X size={24} color="#fff" />
-          </TouchableOpacity>
-          <View style={styles.aiBadge}>
-            <Sparkles size={10} color="#fff" fill="#fff" />
-            <Text style={styles.aiBadgeText}>Pro</Text>
-          </View>
-          <TouchableOpacity style={styles.headerBtn}>
-            <MoreVertical size={22} color="#fff" />
-          </TouchableOpacity>
+
+      {/* Sticky Header Layer */}
+      <Animated.View
+        style={[{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+          height: 100,
+          overflow: 'hidden'
+        }]}
+      >
+        <Animated.View
+          style={[{
+            ...StyleSheet.absoluteFillObject,
+            backgroundColor: colors.primary,
+          }, headerTitleStyle]}
+        >
+          <LinearGradient
+            colors={['#18181b', '#000000']}
+            style={StyleSheet.absoluteFill}
+          />
+
+          <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
+            <View className="w-10 mr-2" />
+            <Animated.View style={[headerTitleStyle]} className="flex-1">
+              <Text className="text-white text-base font-bold" numberOfLines={1}>
+                {playlist.name}
+              </Text>
+            </Animated.View>
+
+            <Animated.View style={[headerPlayButtonStyle]} className="ml-2">
+              <TouchableOpacity
+                onPress={handlePlayAll}
+                style={{ backgroundColor: ACCENT_COLOR }}
+                className="w-11 h-11 rounded-full items-center justify-center shadow-lg"
+                activeOpacity={0.8}
+              >
+                <SharpPlay size={24} color="black" style={{ marginLeft: 2 }} />
+              </TouchableOpacity>
+            </Animated.View>
+          </SafeAreaView>
         </Animated.View>
 
-        <ScrollView
-          style={styles.scrollView}
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          stickyHeaderIndices={[3]}
-        >
-          {/* Cover Art Section */}
-          <Animated.View entering={FadeIn.delay(100).duration(600)} style={styles.coverSection}>
-            <CoverMosaic images={coverImages} />
-          </Animated.View>
+        {/* Persistent Back Button */}
+        <SafeAreaView edges={['top']} className="px-4 py-2 z-[110]">
+          <TouchableOpacity
+            onPress={onClose}
+            className="w-10 h-10 items-center justify-center"
+          >
+            <ArrowLeft size={24} color="#ffffff" />
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Animated.View>
 
-          {/* Title & Info Section */}
-          <Animated.View entering={FadeInUp.delay(200).duration(500)} style={styles.infoSection}>
-            <Text style={styles.playlistName} numberOfLines={2}>{playlist.name}</Text>
-            {playlist.description ? (
-              <Text style={styles.description}>{playlist.description}</Text>
-            ) : null}
-            
-            <View style={styles.metaRow}>
-              <Text style={styles.metaText}>{playlist.tracks.length} tracks</Text>
-              <View style={styles.metaDivider} />
-              <Text style={styles.metaText}>{Math.round(playlist.metadata?.matchRate || 100)}% Match</Text>
-            </View>
-          </Animated.View>
+      <AnimatedFlashList
+        data={displaySongs}
+        renderItem={renderTrackItem}
+        keyExtractor={(item: any) => item.externalId || item.id}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
+        ListHeaderComponent={renderHeader}
+        estimatedItemSize={72}
+        contentContainerStyle={{
+          backgroundColor: '#000',
+          paddingBottom: 100
+        }}
+      />
 
-          {/* Primary Action Row */}
-          <View style={styles.actionRow}>
-            
-            <View style={styles.sideActions}>
-              <TouchableOpacity onPress={handleToggleSave} style={styles.sideBtn}>
-                <Heart size={22} color={isSaved ? "#ef4444" : "#fff"} fill={isSaved ? "#ef4444" : "transparent"} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleShare} style={styles.sideBtn}>
-                <Share2 size={22} color="#fff" />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={onRegenerate} style={styles.sideBtn}>
-                <RotateCcw size={22} color="#fff" />
-              </TouchableOpacity>
-
-              <TouchableOpacity onPress={handlePlayAll} style={styles.mainPlayBtn} activeOpacity={0.8}>
-              <Play size={24} color="#000" fill="#000" />
-              {/* <Text style={styles.playText}>Play All</Text> */}
-            </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Track List Header (Sticky) */}
-          <View style={styles.trackListHeader}>
-            <Text style={styles.trackListTitle}>Tracks</Text>
-            {playlist.vibe && (
-              <View style={styles.vibeTag}>
-                <Text style={styles.vibeText}>{playlist.vibe.toUpperCase()}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Track List Contents */}
-          <View style={styles.trackList}>
-            {displayedTracks.map((track: any, index: number) => (
-              <TrackRow
-                key={track.externalId || index}
-                track={track}
-                index={index}
-                onPlay={() => handlePlayTrack(track, index)}
-              />
-            ))}
-          </View>
-
-          {!showAllTracks && playlist.tracks.length > 10 && (
-            <TouchableOpacity onPress={() => setShowAllTracks(true)} style={styles.showMoreBtn}>
-              <Text style={styles.showMoreText}>View all {playlist.tracks.length} songs</Text>
-              <ChevronDown size={16} color="#71717a" />
-            </TouchableOpacity>
-          )}
-
-          <View style={{ height: 100 }} />
-        </ScrollView>
-      </SafeAreaView>
     </View>
+    </GestureDetector>
   );
 });
 
@@ -291,215 +365,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#000',
-  },
-  safeArea: {
-    flex: 1,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    zIndex: 10,
-  },
-  headerBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#18181b',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  aiBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#27272a',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 5,
-    borderWidth: 1,
-    borderColor: '#3f3f46',
-  },
-  aiBadgeText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingTop: 10,
-  },
-  coverSection: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  coverMosaic: {
-    width: COVER_SIZE,
-    height: COVER_SIZE,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    borderRadius: 4,
-    overflow: 'hidden',
-    backgroundColor: '#18181b',
-  },
-  coverTile: {
-    width: COVER_SIZE / 2,
-    height: COVER_SIZE / 2,
-  },
-  coverOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: COVER_SIZE * 0.5,
-  },
-  infoSection: {
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  playlistName: {
-    color: '#fff',
-    fontSize: 24,
-    fontWeight: '800',
-    textAlign: 'center',
-    letterSpacing: -1,
-    marginBottom: 10,
-  },
-  description: {
-    color: '#a1a1aa',
-    fontSize: 12,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  metaText: {
-    color: '#71717a',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  metaDivider: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#27272a',
-  },
-  actionRow: {
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 32,
-  },
-  mainPlayBtn: {
-    // flex: 1,
-    // flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#8B5CF6',
-    height: 50,
-    width: 50,
-    borderRadius: 28,
-    gap: 10,
-  },
-  playText: {
-    color: '#000',
-    fontSize: 16,
-    fontWeight: '800',
-  },
-  sideActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sideBtn: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#18181b',
-    borderWidth: 1,
-    borderColor: '#27272a',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  trackListHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#000',
-  },
-  trackListTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  vibeTag: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#18181b',
-  },
-  vibeText: {
-    color: '#71717a',
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 1,
-  },
-  trackList: {
-    paddingHorizontal: 12,
-  },
-  trackRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    gap: 14,
-  },
-  trackImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 4,
-    backgroundColor: '#18181b',
-  },
-  trackInfo: {
-    flex: 1,
-  },
-  trackTitle: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  trackArtist: {
-    color: '#71717a',
-    fontSize: 13,
-  },
-  trackDuration: {
-    color: '#3f3f46',
-    fontSize: 12,
-    fontWeight: '500',
-  },
-  showMoreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 12,
-  },
-  showMoreText: {
-    color: '#71717a',
-    fontSize: 13,
-    fontWeight: '600',
   },
 });

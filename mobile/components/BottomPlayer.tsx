@@ -29,10 +29,13 @@ import {
 } from 'react-native-gesture-handler';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useColorStore } from '@/stores/useColorStore';
-import { useProgress } from 'react-native-track-player';
-import { Play, Pause, CirclePlus, MonitorSpeaker } from 'lucide-react-native';
+import { useProgress, State } from 'react-native-track-player';
+import { Play, Pause, Music } from 'lucide-react-native';
+import { resolveAssetUrl } from '@/lib/url';
 import MarqueeText from './MarqueeText';
-import { LinearGradient } from 'expo-linear-gradient';
+import { SharpPlay, SharpPause, SharpDevice } from './SharpIcons';
+import DeviceSelector, { DeviceSelectorRef } from './DeviceSelector';
+import { SaveToPlaylistButton } from './SaveToPlaylistButton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -74,7 +77,15 @@ function ProgressBridge({
   progressSV: SharedValue<number>;
   durationSV: SharedValue<number>;
 }) {
+  const { currentTrack } = usePlayerStore();
   const { position, duration } = useProgress(1000);
+
+
+  useEffect(() => {
+    // Reset immediately on track change to prevent "ghost" progress from previous song
+    progressSV.value = 0;
+    durationSV.value = 0;
+  }, [currentTrack?.id]);
 
   useEffect(() => {
     progressSV.value = position;
@@ -202,14 +213,28 @@ interface BottomPlayerProps {
 }
 
 export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
-  const { currentTrack, isPlaying, togglePlay, playNext, playPrevious } =
+  const { currentTrack, isPlaying, playbackState, togglePlay, playNext, playPrevious } =
     usePlayerStore();
+
+  // Use displayTrack to avoid metadata flash during swipe
+  const [displayTrack, setDisplayTrack] = React.useState(currentTrack);
   const { getTrackColors } = useColorStore();
   const trackColors = usePreloadColors();
 
   // Shared values for progress bridge
   const progressSV = useSharedValue(0);
   const durationSV = useSharedValue(0);
+
+  const deviceSelectorRef = useRef<DeviceSelectorRef>(null);
+
+  // Sync displayTrack with currentTrack
+  useEffect(() => {
+    if (currentTrack) {
+      if (!displayTrack || currentTrack.id !== displayTrack.id) {
+        setDisplayTrack(currentTrack);
+      }
+    }
+  }, [currentTrack?.id]);
 
   // ── Background color - initialize from current colors immediately ───────────
   const getInitialColor = useCallback(() => {
@@ -235,13 +260,13 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
   useEffect(() => {
     const dominant = trackColors.dominant;
     if (!dominant || trackColors.isLoading) return;
-    
+
     // Check if we're already at this color (prevents flash on remount)
     const { r, g, b } = hexToRgb(dominant);
     const currentR = Math.round(bgR.value);
     const currentG = Math.round(bgG.value);
     const currentB = Math.round(bgB.value);
-    
+
     if (currentR === r && currentG === g && currentB === b) return;
     if (dominant === prevDominantRef.current) return;
 
@@ -253,12 +278,12 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
   }, [trackColors.dominant, trackColors.isLoading]);
 
   const backgroundStyle = useAnimatedStyle(() => {
-    // Darken for readability (multiply by ~0.6)
-    const r = Math.max(0, Math.round(bgR.value * 0.6));
-    const g = Math.max(0, Math.round(bgG.value * 0.6));
-    const b = Math.max(0, Math.round(bgB.value * 0.6));
+    // Darken for readability (multiply by ~0.45)
+    const r = Math.max(0, Math.round(bgR.value * 0.45));
+    const g = Math.max(0, Math.round(bgG.value * 0.45));
+    const b = Math.max(0, Math.round(bgB.value * 0.45));
     return {
-      backgroundColor: `rgb(${r},${g},${b})`,
+      backgroundColor: `rgba(${r},${g},${b}, 1)`,
     };
   });
 
@@ -279,7 +304,6 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
   // ── Artwork + text entrance animation ONLY on actual track change ───────
   const prevTrackKeyRef = useRef<string | null>(null);
   const isFirstMount = useRef(true);
-
   useEffect(() => {
     if (!currentTrack) return;
     const key = currentTrack.id ?? currentTrack.url ?? '';
@@ -294,14 +318,25 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
       return;
     }
 
-    // Only animate if track actually changed
-    if (key === prevTrackKeyRef.current) return;
-    prevTrackKeyRef.current = key;
+    // Handle entrance animation (especially after swipe)
+    if (key !== prevTrackKeyRef.current) {
+      prevTrackKeyRef.current = key;
 
-    artworkSlide.value = 40;
-    textFade.value = 0;
-    artworkSlide.value = withSpring(0, SPRING_CONFIG);
-    textFade.value = withTiming(1, { duration: 280 });
+      // If we were in a swipe exit state, animate from side
+      if (Math.abs(translateX.value) > 20 || swipeContentOpacity.value < 0.5) {
+        const fromRight = translateX.value < 0;
+        translateX.value = fromRight ? SCREEN_WIDTH * 0.5 : -SCREEN_WIDTH * 0.5;
+        swipeContentOpacity.value = 0;
+
+        translateX.value = withSpring(0, SPRING_CONFIG);
+        swipeContentOpacity.value = withTiming(1, { duration: 250 });
+      }
+
+      artworkSlide.value = 40;
+      textFade.value = 0;
+      artworkSlide.value = withSpring(0, SPRING_CONFIG);
+      textFade.value = withTiming(1, { duration: 280 });
+    }
   }, [currentTrack?.id, currentTrack?.url]);
 
   // ── Callbacks (for runOnJS) ───────────────────────────────────────────────
@@ -319,75 +354,71 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
     onExpand(colors);
   }, [onExpand, currentTrack?.id, currentTrack?.url, getTrackColors]);
 
-// ── Pan gesture - HORIZONTAL ONLY for track change ─────────────────────────
-const gestureDirection = useSharedValue<'none' | 'horizontal' | 'vertical'>('none');
+  // ── Pan gesture - HORIZONTAL ONLY for track change ─────────────────────────
+  const gestureDirection = useSharedValue<'none' | 'horizontal' | 'vertical'>('none');
 
-const panGesture = Gesture.Pan()
-  .onBegin(() => {
-    gestureDirection.value = 'none';
-  })
-  .onUpdate((e) => {
-    // Lock direction on first significant movement
-    if (gestureDirection.value === 'none') {
-      const absX = Math.abs(e.translationX);
-      const absY = Math.abs(e.translationY);
-      
-      if (absX > absY + 8) {
-        // Clearly horizontal
-        gestureDirection.value = 'horizontal';
-      } else if (e.translationY < -20 && absX < 25) {
-        // Clearly swiping up
-        gestureDirection.value = 'vertical';
-      }
-      return;
-    }
-
-    // Process based on locked direction
-    if (gestureDirection.value === 'horizontal') {
-      translateX.value = e.translationX;
-      swipeContentOpacity.value = interpolate(
-        Math.abs(e.translationX),
-        [0, SCREEN_WIDTH * 0.35],
-        [1, 0.2],
-        Extrapolation.CLAMP
-      );
-    }
-    // No visual feedback for vertical - just track for threshold
-  })
-  .onEnd((e) => {
-    // Vertical: expand
-    if (gestureDirection.value === 'vertical' && e.translationY < SWIPE_UP_THRESHOLD) {
-      runOnJS(onSwipeUp)();
+  const panGesture = Gesture.Pan()
+    .onBegin(() => {
       gestureDirection.value = 'none';
-      return;
-    }
+    })
+    .onUpdate((e) => {
+      // Lock direction on first significant movement
+      if (gestureDirection.value === 'none') {
+        const absX = Math.abs(e.translationX);
+        const absY = Math.abs(e.translationY);
 
-    // Horizontal: track change
-    if (gestureDirection.value === 'horizontal') {
-      if (e.translationX < -SWIPE_THRESHOLD) {
-        translateX.value = withTiming(-SCREEN_WIDTH * 0.6, { duration: 180 }, () => {
-          runOnJS(onSwipeLeft)();
-          translateX.value = SCREEN_WIDTH * 0.35;
-          swipeContentOpacity.value = 0;
-          translateX.value = withSpring(0, SPRING_CONFIG);
-          swipeContentOpacity.value = withTiming(1, { duration: 220 });
-        });
-      } else if (e.translationX > SWIPE_THRESHOLD) {
-        translateX.value = withTiming(SCREEN_WIDTH * 0.6, { duration: 180 }, () => {
-          runOnJS(onSwipeRight)();
-          translateX.value = -SCREEN_WIDTH * 0.35;
-          swipeContentOpacity.value = 0;
-          translateX.value = withSpring(0, SPRING_CONFIG);
-          swipeContentOpacity.value = withTiming(1, { duration: 220 });
-        });
-      } else {
-        translateX.value = withSpring(0, SPRING_CONFIG);
-        swipeContentOpacity.value = withTiming(1, { duration: 150 });
+        if (absX > absY + 8) {
+          // Clearly horizontal
+          gestureDirection.value = 'horizontal';
+        } else if (e.translationY < -20 && absX < 25) {
+          // Clearly swiping up
+          gestureDirection.value = 'vertical';
+        }
+        return;
       }
-    }
 
-    gestureDirection.value = 'none';
-  });
+      // Process based on locked direction
+      if (gestureDirection.value === 'horizontal') {
+        translateX.value = e.translationX;
+        swipeContentOpacity.value = interpolate(
+          Math.abs(e.translationX),
+          [0, SCREEN_WIDTH * 0.35],
+          [1, 0.2],
+          Extrapolation.CLAMP
+        );
+      }
+      // No visual feedback for vertical - just track for threshold
+    })
+    .onEnd((e) => {
+      // Vertical: expand
+      if (gestureDirection.value === 'vertical' && e.translationY < SWIPE_UP_THRESHOLD) {
+        runOnJS(onSwipeUp)();
+        gestureDirection.value = 'none';
+        return;
+      }
+
+      // Horizontal: track change
+      if (gestureDirection.value === 'horizontal') {
+        if (e.translationX < -SWIPE_THRESHOLD) {
+          // Exit left
+          translateX.value = withTiming(-SCREEN_WIDTH * 0.7, { duration: 150 }, () => {
+            runOnJS(onSwipeLeft)();
+            // We wait for currentTrack to change in React to trigger the 'in' animation
+          });
+        } else if (e.translationX > SWIPE_THRESHOLD) {
+          // Exit right
+          translateX.value = withTiming(SCREEN_WIDTH * 0.7, { duration: 150 }, () => {
+            runOnJS(onSwipeRight)();
+            // We wait for currentTrack to change in React to trigger the 'in' animation
+          });
+        } else {
+          translateX.value = withSpring(0, SPRING_CONFIG);
+          swipeContentOpacity.value = withTiming(1, { duration: 150 });
+        }
+      }
+
+      gestureDirection.value = 'none';
+    });
 
   // ── Animated styles ───────────────────────────────────────────────────────
 
@@ -431,12 +462,15 @@ const panGesture = Gesture.Pan()
   }, [playNext]);
 
   const handleExpand = useCallback(() => {
-
     // Pass current dominant color so fullscreen doesn't flash black
     const id = currentTrack?.id ?? currentTrack?.url ?? '';
     const colors = getTrackColors(id);
     onExpand(colors);
   }, [onExpand, currentTrack?.id, currentTrack?.url, getTrackColors]);
+
+  const handleDevicePress = useCallback(() => {
+    deviceSelectorRef.current?.open();
+  }, []);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -467,70 +501,68 @@ const panGesture = Gesture.Pan()
                 {/* ── Swipeable: artwork + track info ── */}
                 <View style={styles.swipeableClip}>
                   <Animated.View style={[styles.swipeableRow, swipeableStyle]}>
-                  {/* Artwork */}
-                  <Animated.View
-                    style={[styles.artworkContainer, artworkAnimStyle]}
-                  >
-                    <Image
-                      source={currentTrack.artwork}
-                      style={styles.artwork}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                      transition={180}
-                    />
-                  </Animated.View>
+                    {/* Artwork */}
+                    <Animated.View
+                      style={[styles.artworkContainer, artworkAnimStyle]}
+                    >
+                      {displayTrack?.artwork ? (
+                        <Image
+                          source={displayTrack.artwork}
+                          style={styles.artwork}
+                          contentFit="cover"
+                          cachePolicy="memory-disk"
+                          transition={180}
+                        />
+                      ) : (
+                        <View style={[styles.artwork, styles.placeholderContainer]}>
+                          <Music size={20} color="rgba(255,255,255,0.4)" />
+                        </View>
+                      )}
+                    </Animated.View>
 
-                  {/* Track Info */}
-                  <Animated.View style={[styles.trackInfo, textAnimStyle]}>
-                    <MarqueeText 
-                      text={currentTrack.title || ''}
-                      style={styles.title}
-                      delay={2000}
-                    />
-                    <Text style={styles.artist} numberOfLines={1}>
-                      {getFirstArtist(currentTrack.artist)}
-                    </Text>
+                    {/* Track Info */}
+                    <Animated.View style={[styles.trackInfo, textAnimStyle]}>
+                      <MarqueeText
+                        text={displayTrack?.title || ''}
+                        style={styles.title}
+                        delay={2000}
+                      />
+                      <Text style={styles.artist} numberOfLines={1}>
+                        {getFirstArtist(displayTrack?.artist)}
+                      </Text>
+                    </Animated.View>
                   </Animated.View>
-                </Animated.View>
                 </View>
 
                 {/* ── Controls: stay fixed ── */}
                 <View style={styles.controls}>
                   <TouchableOpacity
-                    onPress={() => togglePlay()}
+                    onPress={handleDevicePress}
                     style={styles.likeButton}
                     activeOpacity={0.7}
                   >
-                    <MonitorSpeaker size={22} color="#fff" />
+                    <SharpDevice size={24} color="#fff" />
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    onPress={handleNextPress}
-                    style={styles.nextButton}
-                    activeOpacity={1}
-                  >
-                      <CirclePlus
-                        size={22}
-                        color="#fff"
-                        // fill="rgba(255,255,255,0.8)"
-                      />
-                  </TouchableOpacity>
+                  <SaveToPlaylistButton
+                    track={currentTrack}
+                    size={24}
+                  />
 
                   <TouchableOpacity
                     onPress={handlePlayPress}
                     style={styles.playButton}
                     activeOpacity={1}
                   >
-                      {isPlaying ? (
-                        <Pause size={20} color="#fff" fill="#fff" />
-                      ) : (
-                        <Play
-                          size={20}
-                          color="#fff"
-                          fill="#fff"
-                          style={{ marginLeft: 2 }}
-                        />
-                      )}
+                    {isPlaying || playbackState === State.Buffering || playbackState === State.Loading ? (
+                      <SharpPause size={26} color="#fff" />
+                    ) : (
+                      <SharpPlay
+                        size={26}
+                        color="#fff"
+                        style={{ marginLeft: 2 }}
+                      />
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -544,6 +576,8 @@ const panGesture = Gesture.Pan()
           durationSV={durationSV}
         />
       </Animated.View>
+
+      <DeviceSelector ref={deviceSelectorRef} showPill={false} />
     </>
   );
 });
@@ -591,7 +625,7 @@ const styles = StyleSheet.create({
   artworkContainer: {
     width: 43,
     height: 42,
-    borderRadius:5,
+    borderRadius: 5,
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -604,6 +638,11 @@ const styles = StyleSheet.create({
     height: '100%',
     borderRadius: 5,
   },
+  placeholderContainer: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   trackInfo: {
     flex: 1,
     marginLeft: 12,
@@ -612,20 +651,20 @@ const styles = StyleSheet.create({
   title: {
     color: '#fff',
     fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: -0.2,
+    fontWeight: '700',
+    letterSpacing: -0.1,
     marginBottom: 2,
     lineHeight: 20,
   },
   artist: {
     color: 'rgba(255,255,255,0.65)',
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '500',
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 7,
   },
   likeButton: {
     width: 36,
@@ -638,12 +677,8 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  nextButton: {
-    width: 36,
-    height: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 0,
+
   },
   progressContainer: {
     position: 'absolute',
