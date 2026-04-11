@@ -1,5 +1,6 @@
 // controller/playlist.controller.js
 import { Playlist } from "../models/playlist.model.js";
+import AIPlaylist from "../models/AIPlaylist.model.js";
 import { Song } from "../models/song.model.js";
 import { resolveExternalSong } from "../utils/resolveExternalSong.js";
 
@@ -71,7 +72,23 @@ export const getPlaylistById = async (req, res, next) => {
     const { id } = req.params;
     const userId = req.auth?.userId;
 
-    const playlist = await Playlist.findById(id).populate("songs");
+    let playlist = await Playlist.findById(id).populate("songs");
+    
+    if (!playlist) {
+      // Try AIPlaylist as fallback
+      const aiPlaylist = await AIPlaylist.findById(id);
+      if (aiPlaylist) {
+        // Normalize AIPlaylist to match Playlist interface
+        playlist = {
+          ...aiPlaylist.toObject(),
+          songs: aiPlaylist.tracks, // AI uses tracks, Playlist uses songs
+          imageUrl: aiPlaylist.coverArt || null,
+          isPublic: aiPlaylist.isPublic ?? true,
+          userId: aiPlaylist.userId,
+        };
+      }
+    }
+
     if (!playlist) {
       return res.status(404).json({ message: "Playlist not found" });
     }

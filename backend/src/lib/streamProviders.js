@@ -483,18 +483,35 @@ export const jiosaavn = {
           if (Array.isArray(recoData)) {
             songs = recoData.filter((item) => item && item.id);
           } else if (typeof recoData === "object") {
-            // Could be keyed by song ID
             songs = Object.values(recoData).filter(
               (item) => item && typeof item === "object" && item.id && item.title
             );
           }
         }
 
+        // RETRY WITHOUT LANGUAGE FILTER if 0 results (crucial for regional songs not in user preferences)
+        if (songs.length === 0 && languages !== "") {
+          const noLangUrl = `https://www.jiosaavn.com/api.php?__call=reco.getreco&api_version=4&_format=json&_marker=0&ctx=web6dot0&pid=${songId}`;
+          const noLangData = await jiosaavnFetch(noLangUrl);
+          if (noLangData) {
+            const results = Array.isArray(noLangData) ? noLangData : Object.values(noLangData);
+            songs = results.filter((item) => item && typeof item === "object" && item.id);
+            if (songs.length > 0) {
+              console.log(`[JioSaavn] ✅ reco.getreco (No-Lang Retry) returned ${songs.length} songs`);
+            }
+          }
+        }
+
+        if (songs.length > 0 && !songs[0].title && songs.length === 1) {
+           // Sometimes it returns a single dummy object
+           songs = [];
+        }
+
         if (songs.length > 0) {
-          // console.log(`[JioSaavn] ✅ reco.getreco returned ${songs.length} songs`);
+          console.log(`[JioSaavn] ✅ reco.getreco returned ${songs.length} songs`);
         }
       } catch (err) {
-        // console.log("[JioSaavn] reco.getreco failed:", err.message);
+        console.log("[JioSaavn] reco.getreco failed:", err.message);
       }
 
       // ─── Method 2: Station/Radio (if method 1 failed) ───
@@ -527,11 +544,11 @@ export const jiosaavn = {
             }
 
             if (songs.length > 0) {
-              // console.log(`[JioSaavn] ✅ Station returned ${songs.length} songs`);
+              console.log(`[JioSaavn] ✅ Station returned ${songs.length} songs`);
             }
           }
         } catch (err) {
-          // console.log("[JioSaavn] Station method failed:", err.message);
+          console.log("[JioSaavn] Station method failed:", err.message);
         }
       }
 
@@ -555,12 +572,12 @@ export const jiosaavn = {
                 (item) => item && item.id && item.id !== songId
               );
               if (songs.length > 0) {
-                // console.log(`[JioSaavn] ✅ Artist search returned ${songs.length} songs`);
+                console.log(`[JioSaavn] ✅ Artist search fallback returned ${songs.length} songs (Query: ${artistQuery})`);
               }
             }
           }
         } catch (err) {
-          // console.log("[JioSaavn] Artist search fallback failed:", err.message);
+          console.log("[JioSaavn] Artist search fallback failed:", err.message);
         }
       }
 

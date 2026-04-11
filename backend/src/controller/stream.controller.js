@@ -346,6 +346,8 @@ export const getRecommendations = async (req, res) => {
 if (source === "jiosaavn") {
       // Get language preferences from query params
       const languages = req.query.languages || "hindi,english";
+      // console.log(`[Stream] Getting jiosaavn recommendations for ${id} (langs: ${languages})`);
+
       const results = await jiosaavn.getRecommendations(
         id,
         parseInt(limit) * 2,
@@ -354,6 +356,8 @@ if (source === "jiosaavn") {
       
       // *** DEDUPLICATE HERE ***
       const deduplicated = deduplicateSongs(results, 90);
+      
+      console.log(`[Stream] JioSaavn Recs: Found ${results.length} raw, ${deduplicated.length} after dedup`);
       
       return res.json({ 
         results: deduplicated.slice(0, parseInt(limit)) 

@@ -140,8 +140,11 @@ async function directJioSaavnSearch(queries, targetSize) {
       const results = await jiosaavn.search(query, 12);
       for (const result of results || []) {
         if (tracks.length >= targetSize) break;
-        const key = `${result.title?.toLowerCase()}_${result.artist?.toLowerCase()}`;
-        if (!key || seen.has(key)) continue;
+        if (!result.title || !result.artist) continue;
+        
+        const key = `${result.title.toLowerCase()}_${result.artist.toLowerCase()}`;
+        if (seen.has(key)) continue;
+
         tracks.push({
           externalId: result.externalId || result._id,
           title: result.title,
@@ -520,7 +523,11 @@ export const generateAIPlaylist = async (req, res) => {
       language,
       era,
       size,
-      tracks: finalTracks,
+      tracks: finalTracks.map(t => ({
+        ...t,
+        title: t.title || 'Unknown Track',
+        artist: t.artist || 'Various Artists'
+      })),
       coverArt,
       metadata: { aiGenerated: useAI, generatedAt: new Date() },
     });
