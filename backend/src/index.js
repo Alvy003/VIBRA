@@ -173,9 +173,9 @@ app.use('/api/ai-playlists', aiRateLimiter, aiPlaylistRoutes);
 
 // Production static (place AFTER /uploads so SPA doesn’t eat /uploads/voice)
 if (process.env.NODE_ENV === "production") {
-app.use(express.static(path.join(__dirname, "../frontend/dist")));
+app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 app.get("*", (req, res) => {
-res.sendFile(path.resolve(__dirname, "../frontend", "dist", "index.html"));
+res.sendFile(path.resolve(__dirname, "../../frontend", "dist", "index.html"));
 });
 }
 
