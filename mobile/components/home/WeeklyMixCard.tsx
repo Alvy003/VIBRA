@@ -14,6 +14,7 @@ import { Sparkles, Play, Trophy, ArrowRight } from 'lucide-react-native';
 import { useStreamStore } from '@/stores/useStreamStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { COLORS, RADIUS } from '@/constants/design';
+import Colors from '@/constants/Colors';
 import * as Haptics from 'expo-haptics';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -71,7 +72,7 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
             >
                 <View style={styles.card}>
                     <LinearGradient
-                        colors={isEligible ? ['#4c1d95', '#310a5b'] : ['#18181b', '#09090b']}
+                        colors={isEligible ? [Colors.primary, Colors.primaryDark] : [Colors.surfaceLighter, Colors.background]}
                         start={{ x: 0, y: 0 }}
                         end={{ x: 1, y: 1 }}
                         style={StyleSheet.absoluteFill}
@@ -81,7 +82,7 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
                     {isEligible && (
                         <Animated.View style={[styles.glowLayer, glowStyle]}>
                             <LinearGradient
-                                colors={['rgba(139, 92, 246, 0.3)', 'transparent']}
+                                colors={[Colors.primaryLight, 'transparent']}
                                 style={StyleSheet.absoluteFill}
                             />
                         </Animated.View>
@@ -90,13 +91,13 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
                     <View style={styles.content}>
                         <View style={styles.textContent}>
                             <View style={styles.header}>
-                                <View style={[styles.badge, { backgroundColor: isEligible ? 'rgba(255,255,255,0.1)' : 'rgba(139, 92, 246, 0.1)' }]}>
+                                <View style={[styles.badge, { backgroundColor: isEligible ? Colors.whiteAlpha10 : Colors.primaryAlpha10 }]}>
                                     {isEligible ? (
-                                        <Sparkles size={12} color="#fff" />
+                                        <Sparkles size={12} color={Colors.white} />
                                     ) : (
-                                        <Trophy size={12} color="#7B2CF5" />
+                                        <Trophy size={12} color={Colors.accent} />
                                     )}
-                                    <Text style={[styles.badgeText, { color: isEligible ? '#fff' : '#7B2CF5' }]}>
+                                    <Text style={[styles.badgeText, { color: isEligible ? Colors.white : Colors.accent }]}>
                                         {isEligible ? 'WEEKEND VIBE' : 'RECAP PROGRESS'}
                                     </Text>
                                 </View>
@@ -132,11 +133,11 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
                         <View style={styles.actionContainer}>
                             {isEligible ? (
                                 <View style={styles.playButton}>
-                                    <Play size={24} color="#000" fill="#000" style={{ marginLeft: 2 }} />
+                                    <Play size={24} color={Colors.background} fill={Colors.background} style={{ marginLeft: 2 }} />
                                 </View>
                             ) : (
                                 <View style={styles.lockedIcon}>
-                                    <ArrowRight size={20} color="rgba(255,255,255,0.3)" />
+                                    <ArrowRight size={20} color={Colors.whiteAlpha30} />
                                 </View>
                             )}
                         </View>
@@ -158,7 +159,7 @@ const styles = StyleSheet.create({
         borderRadius: 24,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(139, 92, 246, 0.15)',
+        borderColor: Colors.primaryAlpha15,
     },
     card: {
         padding: 24,
@@ -197,17 +198,17 @@ const styles = StyleSheet.create({
     },
     badgeText: {
         fontSize: 10,
-        fontWeight: '700',
+        fontWeight: '600',
         letterSpacing: 0.5,
     },
     title: {
-        color: '#fff',
+        color: Colors.white,
         fontSize: 22,
-        fontWeight: '700',
+        fontWeight: '600',
         marginBottom: 6,
     },
     subtitle: {
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: Colors.whiteAlpha60,
         fontSize: 13,
         lineHeight: 18,
         fontWeight: '400',
@@ -221,17 +222,17 @@ const styles = StyleSheet.create({
     progressBar: {
         flex: 1,
         height: 4,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: Colors.whiteAlpha10,
         borderRadius: 2,
         overflow: 'hidden',
     },
     progressFill: {
         height: '100%',
-        backgroundColor: '#7B2CF5',
+        backgroundColor: Colors.accent,
         borderRadius: 2,
     },
     progressPercent: {
-        color: '#7B2CF5',
+        color: Colors.accent,
         fontSize: 11,
         fontWeight: '600',
     },
@@ -243,7 +244,7 @@ const styles = StyleSheet.create({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: '#fff',
+        backgroundColor: Colors.textPrimary,
         justifyContent: 'center',
         alignItems: 'center',
         shadowColor: '#000',

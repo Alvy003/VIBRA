@@ -54,7 +54,7 @@ const ArtistModal = React.memo(() => {
                         contentFit="cover"
                     />
                     <LinearGradient
-                        colors={['transparent', 'rgba(0,0,0,0.6)', '#121212']}
+                        colors={['transparent', 'rgba(9,9,11,0.6)', '#09090b']}
                         locations={[0.3, 0.7, 1]}
                         style={styles.artistModalImageGradient}
                     />
@@ -104,7 +104,7 @@ export default ArtistModal;
 const styles = StyleSheet.create({
     artistModalContainer: {
         flex: 1,
-        backgroundColor: '#121212',
+    backgroundColor: '#09090b',
     },
     artistModalImageContainer: {
         height: SCREEN_HEIGHT * 0.45,
@@ -150,12 +150,12 @@ const styles = StyleSheet.create({
     artistModalBioTitle: {
         color: '#fff',
         fontSize: 20,
-        fontWeight: '700',
+        fontWeight: '600',
         marginBottom: 12,
     },
     artistModalBioText: {
         color: 'rgba(255,255,255,0.7)',
-        fontSize: 15,
+        fontSize: 14,
         lineHeight: 24,
     },
 });

@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { Music, MoreVertical } from 'lucide-react-native';
-import { TrackSkeleton } from './Skeleton';
 import { resolveAssetUrl } from '@/lib/url';
-import SongOptions from './SongOptions';
 import { useDownloadStore } from '@/stores/useDownloadStore';
+import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
 import { DownloadedIcon } from './DownloadedIcon';
+import Colors from '@/constants/Colors';
 
 interface TrackListItemProps {
   track: any;
@@ -15,6 +15,10 @@ interface TrackListItemProps {
   onPress: () => void;
   playlistImageUrl?: string | null;
   accentColor?: string;
+  hideOptions?: boolean;
+  style?: any;
+  /** Optional override — if not provided, falls back to global openSongOptions */
+  onOptionsPress?: (track: any) => void;
 }
 
 export const TrackListItem = React.memo(({
@@ -23,43 +27,49 @@ export const TrackListItem = React.memo(({
   isCurrent,
   onPress,
   playlistImageUrl,
-  accentColor = '#27272a'
+  accentColor = Colors.border,
+  hideOptions = false,
+  style,
+  onOptionsPress,
 }: TrackListItemProps) => {
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    // Small delay to allow the list to stabilize during fast scrolling
-    const timer = setTimeout(() => setIsReady(true), 32);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (!isReady) {
-    return (
-      <View style={{ paddingHorizontal: 20 }}>
-        <TrackSkeleton />
-      </View>
-    );
-  }
-
   const artwork = track.imageUrl || playlistImageUrl;
+  // Reactive download badge — fine-grained selector keyed to this track's id.
+  const trackId = track.id || track.externalId || track._id;
+  const isDownloaded = useDownloadStore(
+    useCallback(s => !!s.downloadedSongs[trackId], [trackId])
+  );
+
+  // Global options trigger. getState() avoids a hook subscription — the button
+  // only fires on press, it doesn't need to react to store changes.
+  const handleOptionsPress = useCallback(() => {
+    if (onOptionsPress) {
+      onOptionsPress(track);
+    } else {
+      usePlayerUIStore.getState().openSongOptions(track);
+    }
+  }, [track, onOptionsPress]);
 
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={styles.container}
+      style={[styles.container, style]}
       activeOpacity={0.7}
     >
       <View style={styles.imageContainer}>
         {!!artwork ? (
-          <Image
-            source={{ uri: resolveAssetUrl(artwork) }}
-            style={styles.image}
-            contentFit="cover"
-            transition={200}
-          />
+          <>
+            <Image
+              source={{ uri: resolveAssetUrl(artwork) }}
+              style={styles.image}
+              contentFit="cover"
+              transition={200}
+            />
+            {/* Subtle Overlay */}
+            <View style={styles.imageOverlay} />
+          </>
         ) : (
           <View style={[styles.fallbackContainer, { backgroundColor: accentColor + '33' }]}>
-            <Music size={20} color={accentColor} />
+            <Music size={20} color={Colors.textMuted} />
           </View>
         )}
       </View>
@@ -72,7 +82,7 @@ export const TrackListItem = React.memo(({
           {track.title}
         </Text>
         <View style={styles.artistRow}>
-          {useDownloadStore.getState().isDownloaded(track.id || track.externalId || track._id) && (
+          {isDownloaded && (
             <View style={{ marginRight: 6 }}>
               <DownloadedIcon size={12} />
             </View>
@@ -86,7 +96,16 @@ export const TrackListItem = React.memo(({
           </Text>
         </View>
       </View>
-      <SongOptions song={track} />
+      {!hideOptions && (
+        <TouchableOpacity
+          onPress={handleOptionsPress}
+          style={styles.optionsBtn}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <MoreVertical size={20} color="#b3b3b3" />
+        </TouchableOpacity>
+      )}
     </TouchableOpacity>
   );
 });
@@ -104,7 +123,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     marginRight: 12,
     overflow: 'hidden',
-    backgroundColor: '#18181b',
+    backgroundColor: Colors.surfaceLighter,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -120,19 +139,19 @@ const styles = StyleSheet.create({
   },
   infoContainer: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 8,
   },
   title: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 15,
     fontWeight: '500',
     letterSpacing: -0.2,
   },
   activeText: {
-    color: '#7B2CF5',
+    color: Colors.accent,
   },
   artist: {
-    color: '#b0b0b0ff',
+    color: Colors.textSecondary,
     fontSize: 12,
     fontWeight: '400',
   },
@@ -141,8 +160,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 1,
   },
-  moreBtn: {
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: Colors.blackAlpha12,
+    zIndex: 1,
+  },
+  optionsBtn: {
     padding: 8,
     marginRight: -8,
-  }
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });
+
+TrackListItem.displayName = 'TrackListItem';
+
+export default TrackListItem;

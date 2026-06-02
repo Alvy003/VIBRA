@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   recommendedText: {
     color: '#fff',
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   recommendedTextUnselected: {
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   label: {
     color: '#fff',
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 3,
     letterSpacing: 0.2,
   },

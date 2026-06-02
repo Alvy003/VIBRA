@@ -1,3 +1,5 @@
+import Constants from "expo-constants";
+
 /**
  * Resolves a potentially relative asset URL to an absolute one using the API base URL.
  * If the URL is already absolute (starts with http) or is a data URI, it is returned as-is.
@@ -10,8 +12,8 @@ export const resolveAssetUrl = (url: string | null | undefined): string | undefi
         return url;
     }
     
-    // Get the base API URL from environment
-    const baseUrl = process.env.EXPO_PUBLIC_API_URL;
+    // Get the base API URL from constants
+    const baseUrl = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL;
     if (!baseUrl) return url;
     
     // Combine base URL and relative path, ensuring no double slashes

@@ -33,73 +33,16 @@ import {
   Check,
 } from 'lucide-react-native';
 import { SharpDevice } from './SharpIcons';
-import * as Haptics from 'expo-haptics';
 import BottomSheet, { BottomSheetRef } from './BottomSheet';
 import { useNativeAudioDevices, AudioDevice } from '@/hooks/useNativeAudioDevices';
+import Colors from '@/constants/Colors';
 
 let IntentLauncher: any = null;
 try {
   IntentLauncher = require('expo-intent-launcher');
 } catch (e) { }
 
-const ACCENT_COLOR = '#7B2CF5';
-
-// ─── Sound Wave Animation ───
-const SoundWave = React.memo(() => {
-  const bar1 = useSharedValue(0.3);
-  const bar2 = useSharedValue(0.5);
-  const bar3 = useSharedValue(0.4);
-  const bar4 = useSharedValue(0.6);
-
-  React.useEffect(() => {
-    bar1.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 400 }),
-        withTiming(0.3, { duration: 400 })
-      ),
-      -1,
-      true
-    );
-    bar2.value = withDelay(100, withRepeat(
-      withSequence(
-        withTiming(0.8, { duration: 350 }),
-        withTiming(0.4, { duration: 350 })
-      ),
-      -1,
-      true
-    ));
-    bar3.value = withDelay(200, withRepeat(
-      withSequence(
-        withTiming(1, { duration: 300 }),
-        withTiming(0.2, { duration: 300 })
-      ),
-      -1,
-      true
-    ));
-    bar4.value = withDelay(150, withRepeat(
-      withSequence(
-        withTiming(0.7, { duration: 450 }),
-        withTiming(0.5, { duration: 450 })
-      ),
-      -1,
-      true
-    ));
-  }, []);
-
-  const bar1Style = useAnimatedStyle(() => ({ height: 12 * bar1.value }));
-  const bar2Style = useAnimatedStyle(() => ({ height: 12 * bar2.value }));
-  const bar3Style = useAnimatedStyle(() => ({ height: 12 * bar3.value }));
-  const bar4Style = useAnimatedStyle(() => ({ height: 12 * bar4.value }));
-
-  return (
-    <View style={waveStyles.container}>
-      <Animated.View style={[waveStyles.bar, bar1Style]} />
-      <Animated.View style={[waveStyles.bar, bar2Style]} />
-      <Animated.View style={[waveStyles.bar, bar3Style]} />
-      <Animated.View style={[waveStyles.bar, bar4Style]} />
-    </View>
-  );
-});
+const ACCENT_COLOR = Colors.accent;
 
 const waveStyles = StyleSheet.create({
   container: { flexDirection: 'row', alignItems: 'flex-end', gap: 2, height: 12 },
@@ -107,28 +50,29 @@ const waveStyles = StyleSheet.create({
 });
 
 // ─── Device Icon ───
-const DeviceIcon = ({ type, size = 24, color = '#fff' }: {
+export const DeviceIcon = ({ type, size = 24, color = '#fff', strokeWidth = 2 }: {
   type: string;
   size?: number;
   color?: string;
+  strokeWidth?: number;
 }) => {
   switch (type) {
     case 'bluetooth':
-      return <Bluetooth size={size} color={color} />;
+      return <Bluetooth size={size} color={color} strokeWidth={strokeWidth} />;
     case 'speaker':
-      return <Speaker size={size} color={color} />;
+      return <Speaker size={size} color={color} strokeWidth={strokeWidth} />;
     case 'headphones':
-      return <Headphones size={size} color={color} />;
+      return <Headphones size={size} color={color} strokeWidth={strokeWidth} />;
     case 'tv':
-      return <Tv size={size} color={color} />;
+      return <Tv size={size} color={color} strokeWidth={strokeWidth} />;
     case 'cast':
-      return <Radio size={size} color={color} />;
+      return <Radio size={size} color={color} strokeWidth={strokeWidth} />;
     case 'airplay':
-      return <Volume2 size={size} color={color} />;
+      return <Volume2 size={size} color={color} strokeWidth={strokeWidth} />;
     case 'local':
       return <SharpDevice size={size} color={color} />;
     default:
-      return <Speaker size={size} color={color} />;
+      return <Speaker size={size} color={color} strokeWidth={strokeWidth} />;
   }
 };
 
@@ -176,6 +120,7 @@ const DeviceRow = React.memo(({
         type={device.type}
         size={20}
         color={isActive ? ACCENT_COLOR : '#fff'}
+        strokeWidth={2}
       />
     </View>
     <View style={styles.deviceRowInfo}>
@@ -222,26 +167,17 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
     }));
 
     const handleDeviceTap = async (device: AudioDevice) => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
       if (device.isActive) return;
 
       const hasNativePicker = await showAudioPicker();
 
       if (!hasNativePicker) {
-        Alert.alert(
-          'Switch Audio Output',
-          `To switch to ${device.name}, please use your device's audio settings or Control Center.`,
-          [
-            { text: 'Open Settings', onPress: handleOpenBluetoothSettings },
-            { text: 'OK', style: 'cancel' },
-          ]
-        );
+        handleOpenBluetoothSettings();
       }
     };
 
     const handleOpenModal = () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setIsOpen(true);
       refresh();
     };
@@ -249,12 +185,10 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
     const handleCloseModal = () => setIsOpen(false);
 
     const handleRefresh = () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       refresh();
     };
 
     const handleOpenBluetoothSettings = async () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       try {
         if (Platform.OS === 'android' && IntentLauncher) {
           await IntentLauncher.startActivityAsync(
@@ -271,19 +205,7 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
     };
 
     const handleHelpPress = () => {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      Alert.alert(
-        'Connect a Device',
-        'To play music on a Bluetooth device:\n\n' +
-        '1. Open Bluetooth settings\n' +
-        '2. Turn on your Bluetooth device\n' +
-        '3. Pair it with your phone\n\n' +
-        'Audio will automatically route to connected devices.',
-        [
-          { text: 'Open Settings', onPress: handleOpenBluetoothSettings },
-          { text: 'OK', style: 'cancel' },
-        ]
-      );
+      handleOpenBluetoothSettings();
     };
 
     const otherDevices = allDevices.filter(
@@ -292,26 +214,7 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
 
     const renderHeader = () => (
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Current device</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleRefresh}
-            activeOpacity={0.7}
-            disabled={isScanning}
-          >
-            {isScanning ? <ScanningIndicator /> : (
-              <RefreshCw size={20} color="rgba(255,255,255,0.6)" />
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.headerButton}
-            onPress={handleCloseModal}
-            activeOpacity={0.7}
-          >
-            <X size={24} color="rgba(255,255,255,0.6)" />
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.headerTitle}>Connect</Text>
       </View>
     );
 
@@ -345,28 +248,42 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
           ref={bottomSheetRef}
           isOpen={isOpen}
           onClose={handleCloseModal}
-          snapPoints={[otherDevices.length > 0 ? 0.55 : 0.45]}
+          snapPoints={['65%', '96.5%']}
           header={renderHeader()}
+          footer={
+            <TouchableOpacity
+              style={styles.btFooterButton}
+              onPress={handleOpenBluetoothSettings}
+              activeOpacity={0.8}
+            >
+              <Bluetooth size={22} color="#fff" strokeWidth={2} />
+              <Text style={styles.btFooterText}>Find Bluetooth devices</Text>
+            </TouchableOpacity>
+          }
         >
           {/* Current Device */}
-          <View style={styles.currentDevice}>
-            <View style={styles.currentDeviceIcon}>
-              <DeviceIcon
-                type={currentDevice?.type || 'local'}
-                size={28}
-                color={ACCENT_COLOR}
-              />
-            </View>
-            <View style={styles.currentDeviceInfo}>
-              <View style={styles.currentDeviceNameRow}>
-                <Text style={styles.currentDeviceName}>
-                  {currentDevice?.type === 'local' ? 'This Phone' : (currentDevice?.name || 'This Phone')}
-                </Text>
-                <SoundWave />
+          <View style={styles.currentDeviceCard}>
+            <View style={styles.currentDevice}>
+              <View style={styles.currentDeviceIcon}>
+                <DeviceIcon
+                  type={currentDevice?.type || 'local'}
+                  size={24}
+                  color={currentDevice?.type === 'local' || !currentDevice ? Colors.accent : Colors.accent}
+                  strokeWidth={2.5}
+                />
               </View>
-              <Text style={styles.currentDeviceStatus}>
-                {currentDevice?.isBluetooth ? 'Connected via Bluetooth' : 'Listening on this device'}
-              </Text>
+              <View style={styles.currentDeviceInfo}>
+                <View style={styles.currentDeviceNameRow}>
+                  <Text
+                    style={[styles.currentDeviceName, (currentDevice?.type === 'local' || !currentDevice) ? styles.currentDeviceNameNeutral : styles.currentDeviceNameActive]}
+                  >
+                    {currentDevice?.type === 'local' ? 'This Phone' : (currentDevice?.name || 'This Phone')}
+                  </Text>
+                </View>
+                <Text style={styles.currentDeviceStatus}>
+                  {currentDevice?.isBluetooth ? 'Connected via Bluetooth' : 'Listening on this device'}
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -381,7 +298,7 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
           {/* Other Bluetooth Devices */}
           {otherDevices.length > 0 ? (
             <>
-              <Text style={styles.sectionTitle}>Other devices</Text>
+              {/* <Text style={styles.sectionTitle}>Other devices</Text> */}
               {otherDevices.map(device => (
                 <DeviceRow
                   key={device.id}
@@ -392,33 +309,6 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
               ))}
             </>
           ) : null}
-
-          <View style={styles.divider} />
-
-          {/* Bluetooth Settings */}
-          <TouchableOpacity
-            style={styles.settingsRow}
-            onPress={handleOpenBluetoothSettings}
-            activeOpacity={0.6}
-          >
-            <View style={styles.settingsIcon}>
-              <Bluetooth size={22} color="#fff" />
-            </View>
-            <View style={styles.settingsInfo}>
-              <Text style={styles.settingsTitle}>Connect to a device</Text>
-              <Text style={styles.settingsSubtitle}>Open Bluetooth settings</Text>
-            </View>
-            <ChevronRight size={20} color="rgba(255,255,255,0.4)" />
-          </TouchableOpacity>
-
-          {/* Help */}
-          <TouchableOpacity
-            style={styles.helpLink}
-            onPress={handleHelpPress}
-            activeOpacity={0.6}
-          >
-            <Text style={styles.helpLinkText}>Don't see your device?</Text>
-          </TouchableOpacity>
         </BottomSheet>
       </>
     );
@@ -453,11 +343,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingBottom: 16,
+    paddingTop: 5,
   },
   headerTitle: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   headerActions: {
     flexDirection: 'row',
@@ -469,10 +360,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  currentDeviceCard: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 15,
+    marginBottom: 10,
+    marginLeft: 10,
+    marginRight: 10,
+  },
   currentDevice: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
+    gap: 0,
   },
   currentDeviceIcon: {
     width: 52,
@@ -480,7 +379,6 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
   },
   currentDeviceInfo: {
     flex: 1,
@@ -491,14 +389,19 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   currentDeviceName: {
-    color: ACCENT_COLOR,
-    fontSize: 16,
-    fontWeight: '700',
+    fontSize: 15,
+    fontWeight: '600',
     flexShrink: 1,
+  },
+  currentDeviceNameActive: {
+    color: ACCENT_COLOR,
+  },
+  currentDeviceNameNeutral: {
+    color: ACCENT_COLOR,
   },
   currentDeviceStatus: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: '500',
     marginTop: 2,
   },
@@ -527,6 +430,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
+    marginRight: 10,
+    marginLeft: 10,
   },
   deviceRowActive: {
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -538,10 +443,11 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    // backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 7,
+    marginLeft: 7,
   },
   deviceIconSmallActive: {
     backgroundColor: 'rgba(139, 92, 246, 0.15)',
@@ -552,7 +458,7 @@ const styles = StyleSheet.create({
   deviceRowName: {
     color: '#fff',
     fontSize: 15,
-    fontWeight: '600',
+    fontWeight: '500',
   },
   deviceRowNameActive: {
     color: ACCENT_COLOR,
@@ -596,14 +502,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
-  helpLink: {
+  btFooterButton: {
+    flexDirection: 'column',
     alignItems: 'center',
-    paddingVertical: 16,
-    marginTop: 4,
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 8,
+    paddingVertical: 8,
+    marginTop: 8,
   },
-  helpLinkText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 13,
-    fontWeight: '600',
+  btFooterText: {
+    color: '#fff',
+    fontSize: 10.5,
+    fontWeight: '500',
   },
 });

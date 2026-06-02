@@ -11,6 +11,7 @@ import {
     TouchableWithoutFeedback,
     Keyboard
 } from 'react-native';
+import Colors from '@/constants/Colors';
 import { BlurView } from 'expo-blur';
 import { COLORS, RADIUS } from '@/constants/design';
 import * as Haptics from 'expo-haptics';
@@ -61,9 +62,9 @@ export const CreatePlaylistModal = ({ visible, onClose, onCreate }: CreatePlayli
                                     value={name}
                                     onChangeText={setName}
                                     placeholder="My playlist"
-                                    placeholderTextColor="#71717a"
+                                    placeholderTextColor={Colors.textMuted}
                                     autoFocus
-                                    selectionColor="#7B2CF5"
+                                    selectionColor={Colors.accent}
                                 />
                                 <View style={styles.underline} />
                             </View>
@@ -103,7 +104,7 @@ export const CreatePlaylistModal = ({ visible, onClose, onCreate }: CreatePlayli
 const styles = StyleSheet.create({
     overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: Colors.blackAlpha50,
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
     },
     underline: {
         height: 1,
-        backgroundColor: '#71717a',
+        backgroundColor: Colors.textMuted,
         width: '100%',
     },
     buttonContainer: {
@@ -149,29 +150,29 @@ const styles = StyleSheet.create({
         paddingVertical: 12,
         borderRadius: 25,
         borderWidth: 1,
-        borderColor: '#71717a',
+        borderColor: Colors.textMuted,
     },
     buttonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: '700',
+        fontWeight: '600',
     },
     createButton: {
         paddingHorizontal: 40,
         paddingVertical: 12,
         borderRadius: 25,
-        backgroundColor: '#7B2CF5', // Spotify Green
+        backgroundColor: Colors.accent,
     },
     buttonDisabled: {
-        backgroundColor: '#27272a',
-        borderColor: '#27272a',
+        backgroundColor: Colors.border,
+        borderColor: Colors.border,
     },
     createButtonText: {
-        color: '#000',
+        color: Colors.background,
         fontSize: 16,
-        fontWeight: '700',
+        fontWeight: '600',
     },
     textDisabled: {
-        color: '#71717a',
+        color: Colors.textMuted,
     }
 });

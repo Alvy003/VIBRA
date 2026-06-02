@@ -10,7 +10,7 @@ export interface DynamicColors {
 
 const DEFAULT_COLORS: DynamicColors = {
   primary: '#310a5b', // Dark Purple brand fallback
-  darkened: '#000000',
+  darkened: '#09090b',
   isDark: true,
 };
 
@@ -32,21 +32,21 @@ export function useDynamicColors(imageUrl?: string): DynamicColors {
           case 'android':
             setColors({
               primary: result.vibrant || result.dominant || DEFAULT_COLORS.primary,
-              darkened: '#000000',
+              darkened: '#09090b',
               isDark: true,
             });
             break;
           case 'ios':
             setColors({
               primary: result.background || DEFAULT_COLORS.primary,
-              darkened: '#000000',
+              darkened: '#09090b',
               isDark: true,
             });
             break;
           case 'web':
             setColors({
               primary: result.vibrant || result.dominant || DEFAULT_COLORS.primary,
-              darkened: '#000000',
+              darkened: '#09090b',
               isDark: true,
             });
             break;

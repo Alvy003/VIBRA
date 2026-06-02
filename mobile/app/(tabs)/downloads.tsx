@@ -1,44 +1,149 @@
-import React, { useMemo, useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, StatusBar, Dimensions } from 'react-native';
+import React, { useMemo, useCallback, useRef } from 'react';
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    StyleSheet,
+    StatusBar,
+    Dimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { ArrowLeft, Play, Shuffle, Download, Music, User, Disc } from 'lucide-react-native';
-import { useDownloadStore, DownloadedSong, DownloadedCollection } from '@/stores/useDownloadStore';
-import { DownloadedIcon } from '@/components/DownloadedIcon';
+import { ArrowLeft, Download } from 'lucide-react-native';
+import { useDownloadStore, DownloadedSong } from '@/stores/useDownloadStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { TrackListItem } from '@/components/TrackListItem';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Image } from 'expo-image';
-import { resolveAssetUrl } from '@/lib/url';
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    useAnimatedScrollHandler,
+    interpolate,
+    Extrapolate,
+} from 'react-native-reanimated';
+import { FlashList as OriginalFlashList } from '@shopify/flash-list';
+import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import Colors from '@/constants/Colors';
+import { DownloadedIcon } from '@/components/DownloadedIcon';
 
-const { width } = Dimensions.get('window');
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const ACCENT_COLOR = Colors.accent;
+const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 
-type DownloadTab = 'songs' | 'playlists' | 'albums';
+interface DownloadsHeaderProps {
+    count: number;
+    onPlayAll: (shuffle?: boolean) => void;
+    onToggleShuffle: () => void;
+    shuffleMode: boolean;
+    isCurrentPlaying: boolean;
+    onPause: () => void;
+}
+
+const DownloadsHeader = React.memo<DownloadsHeaderProps>(({
+    count,
+    onPlayAll,
+    onToggleShuffle,
+    shuffleMode,
+    isCurrentPlaying,
+    onPause,
+}) => (
+    <View style={[styles.headerContent, { backgroundColor: '#1e293b' }]}>
+        {/* Modern Slate/Blue Gradient for Downloads - Blending from transparent to background */}
+        <LinearGradient
+            colors={[
+                'transparent',
+                'rgba(9, 9, 11, 0.05)',
+                'rgba(9, 9, 11, 0.15)',
+                'rgba(9, 9, 11, 0.3)',
+                'rgba(9, 9, 11, 0.5)',
+                'rgba(9, 9, 11, 0.7)',
+                'rgba(9, 9, 11, 0.85)',
+                Colors.background,
+                Colors.background,
+            ]}
+            locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
+            style={styles.headerGradient}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+        />
+        
+        <View style={styles.titleSection}>
+            <Text style={styles.titleText}>Offline Music</Text>
+            <View style={styles.metadataRow}>
+                <Text style={styles.metadataText}>{count} tracks available</Text>
+            </View>
+        </View>
+
+        <View style={styles.actionBar}>
+            {/* Left Controls: Just a branded icon */}
+            <View style={styles.leftControls}>
+                <DownloadedIcon size={22} />
+            </View>
+
+            {/* Right Controls: Shuffle and Play */}
+            <View style={styles.rightControls}>
+                <TouchableOpacity onPress={onToggleShuffle} activeOpacity={0.7} style={styles.iconButton}>
+                    <View style={styles.shuffleContainer}>
+                        <SharpShuffle size={26} color={shuffleMode ? ACCENT_COLOR : Colors.whiteAlpha60} />
+                        {shuffleMode && <View style={styles.shuffleDot} />}
+                    </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    onPress={isCurrentPlaying ? onPause : () => onPlayAll(false)}
+                    style={styles.playButton}
+                    activeOpacity={0.8}
+                >
+                    {isCurrentPlaying ? (
+                        <SharpPause size={28} color="black" />
+                    ) : (
+                        <SharpPlay size={28} color="black" style={{ marginLeft: 3 }} />
+                    )}
+                </TouchableOpacity>
+            </View>
+        </View>
+    </View>
+));
 
 export default function DownloadsScreen() {
     const router = useRouter();
-    const { downloadedSongs, downloadedPlaylists, downloadedAlbums } = useDownloadStore();
-    const { playTrack, initializeQueue } = usePlayerStore();
-    const [activeTab, setActiveTab] = useState<DownloadTab>('songs');
+    const listRef = useRef<any>(null);
+    const optionsRef = useRef<CollectionOptionsRef>(null);
+    
+    const { downloadedSongs } = useDownloadStore();
+    const { 
+        currentTrack, 
+        isPlaying, 
+        initializeQueue, 
+        pauseTrack, 
+        shuffleMode, 
+        toggleShuffle 
+    } = usePlayerStore();
 
     const songs = useMemo(() => {
         return Object.values(downloadedSongs).sort((a, b) => b.downloadedAt - a.downloadedAt);
     }, [downloadedSongs]);
 
-    const playlists = useMemo(() => {
-        return Object.values(downloadedPlaylists).sort((a, b) => b.downloadedAt - a.downloadedAt);
-    }, [downloadedPlaylists]);
+    const isCurrentPlaying = useMemo(() => {
+        return songs.some(s => s.id === currentTrack?.id) && isPlaying;
+    }, [songs, currentTrack?.id, isPlaying]);
 
-    const albums = useMemo(() => {
-        return Object.values(downloadedAlbums).sort((a, b) => b.downloadedAt - a.downloadedAt);
-    }, [downloadedAlbums]);
+    const scrollY = useSharedValue(0);
+    const scrollHandler = useAnimatedScrollHandler({
+        onScroll: (event) => {
+            scrollY.value = event.contentOffset.y;
+        },
+    });
 
-    const handlePlayAll = async (shuffle = false) => {
+    const handleBack = useCallback(() => {
+        // Explicitly return to Library to ensure tab consistency 
+        router.push('/(tabs)/library');
+    }, [router]);
+
+    const handlePlayAll = useCallback(async (shuffle = false) => {
         if (songs.length === 0) return;
-
         const queueSongs = shuffle ? [...songs].sort(() => Math.random() - 0.5) : songs;
-
-        // Map downloaded songs to Player tracks
         const playerTracks = queueSongs.map(s => ({
             id: s.id,
             title: s.title,
@@ -47,167 +152,256 @@ export default function DownloadsScreen() {
             artwork: s.artwork,
             duration: s.duration
         }));
+        await initializeQueue(playerTracks, 0, { type: 'playlist', id: 'downloads', title: 'Offline Music' });
+    }, [songs, initializeQueue]);
 
-        await initializeQueue(playerTracks, 0);
-    };
+    const handlePlayTrack = useCallback((song: DownloadedSong, index: number) => {
+        const playerTracks = songs.map(s => ({
+            id: s.id,
+            title: s.title,
+            artist: s.artist,
+            url: s.localUri,
+            artwork: s.artwork,
+            duration: s.duration
+        }));
+        initializeQueue(playerTracks, index, { type: 'playlist', id: 'downloads', title: 'Offline Music' });
+    }, [songs, initializeQueue]);
+
+    // Animated styles for sticky header
+    const stickyHeaderStyle = useAnimatedStyle(() => {
+        const opacity = interpolate(scrollY.value, [80, 140], [0, 1], Extrapolate.CLAMP);
+        return { opacity };
+    });
+
+    const headerTitleStyle = useAnimatedStyle(() => {
+        const opacity = interpolate(scrollY.value, [120, 160], [0, 1], Extrapolate.CLAMP);
+        const translateY = interpolate(scrollY.value, [120, 160], [10, 0], Extrapolate.CLAMP);
+        return { opacity, transform: [{ translateY }] };
+    });
+
+    const headerPlayButtonStyle = useAnimatedStyle(() => {
+        const opacity = interpolate(scrollY.value, [140, 180], [0, 1], Extrapolate.CLAMP);
+        const scale = interpolate(scrollY.value, [140, 180], [0.6, 1], Extrapolate.CLAMP);
+        return { opacity, transform: [{ scale }] };
+    });
 
     return (
-        <View className="flex-1 bg-black">
-            <StatusBar barStyle="light-content" />
-            <LinearGradient
-                colors={['#4c1d95', '#000000']}
-                style={StyleSheet.absoluteFill}
-                start={{ x: 0.5, y: 0 }}
-                end={{ x: 0.5, y: 0.5 }}
-            />
-
-            <SafeAreaView className="flex-1 pt-6">
-                {/* Header */}
-                <View className="flex-row items-center px-4 py-4">
-                    <TouchableOpacity
-                        onPress={() => router.back()}
-                        className="w-10 h-10 items-center justify-center"
-                    >
-                        <ArrowLeft size={28} color="white" />
+        <View style={styles.container}>
+            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+            
+            {/* Back Button */}
+            <View style={styles.backButtonContainer}>
+                <SafeAreaView edges={['top']}>
+                    <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                        <ArrowLeft size={26} color={Colors.textPrimary} />
                     </TouchableOpacity>
-                    <View className="flex-1 items-center">
-                        <Text className="text-white text-lg font-bold">Downloads</Text>
-                    </View>
-                    <View className="w-10" />
-                </View>
+                </SafeAreaView>
+            </View>
 
-                {/* Hero section */}
-                <View className="px-6 pb-6 pt-2">
-                    <Text className="text-white text-4xl font-black mb-2">
-                        {activeTab === 'songs' ? 'Offline Music' : activeTab === 'playlists' ? 'Offline Playlists' : 'Offline Albums'}
-                    </Text>
-                    <Text className="text-zinc-400 text-base mb-6">
-                        {activeTab === 'songs' ? songs.length : activeTab === 'playlists' ? playlists.length : albums.length} items available
-                    </Text>
-
-                    <View className="flex-row items-center space-x-4">
-                        <TouchableOpacity
-                            onPress={() => handlePlayAll(false)}
-                            className="flex-1 flex-row items-center justify-center bg-[#7B2CF5] py-3.5 rounded-full"
-                        >
-                            <Play size={20} color="white" fill="white" />
-                            <Text className="text-white font-bold ml-2 text-lg">Play All</Text>
-                        </TouchableOpacity>
-
-                        <TouchableOpacity
-                            onPress={() => handlePlayAll(true)}
-                            className="w-14 h-14 items-center justify-center bg-zinc-800/80 rounded-full"
-                        >
-                            <Shuffle size={22} color="white" />
-                        </TouchableOpacity>
-                    </View>
-                </View>
-
-                {/* Tabs */}
-                <View className="flex-row px-4 mb-4 border-b border-zinc-800/50">
-                    {(['songs', 'playlists', 'albums'] as const).map((tab) => (
-                        <TouchableOpacity
-                            key={tab}
-                            onPress={() => setActiveTab(tab)}
-                            className={`pb-3 px-4 mr-2 ${activeTab === tab ? 'border-b-2 border-[#7B2CF5]' : ''}`}
-                        >
-                            <Text className={`text-sm font-bold capitalize ${activeTab === tab ? 'text-white' : 'text-zinc-500'}`}>
-                                {tab}
-                            </Text>
-                        </TouchableOpacity>
-                    ))}
-                </View>
-
-                {/* List */}
-                <FlatList
-                    data={(activeTab === 'songs' ? songs : activeTab === 'playlists' ? playlists : albums) as any[]}
-                    keyExtractor={(item) => item.id}
-                    renderItem={({ item, index }) => {
-                        if (activeTab === 'songs') {
-                            const song = item as DownloadedSong;
-                            return (
-                                <TrackListItem
-                                    track={{
-                                        id: song.id,
-                                        title: song.title,
-                                        artist: song.artist,
-                                        imageUrl: song.artwork,
-                                        url: song.localUri,
-                                        duration: song.duration
-                                    }}
-                                    index={index}
-                                    isCurrent={false}
-                                    onPress={() => {
-                                        playTrack({
-                                            id: song.id,
-                                            title: song.title,
-                                            artist: song.artist,
-                                            url: song.localUri,
-                                            artwork: song.artwork,
-                                            duration: song.duration
-                                        });
-                                    }}
-                                />
-                            );
-                        }
-
-                        const collection = item as DownloadedCollection;
-                        const resolvedUri = resolveAssetUrl(collection.artwork);
-                        const isAlbum = activeTab === 'albums';
-
-                        return (
-                            <TouchableOpacity
-                                className="flex-row items-center px-4 py-3 mb-1"
-                                onPress={() => {
-                                    let route = '';
-                                    const rawId = collection.id;
-                                    if (isAlbum) {
-                                        route = rawId.startsWith('jiosaavn_')
-                                            ? `/(tabs)/album/external/jiosaavn/${rawId.replace('jiosaavn_album_', '')}`
-                                            : `/(tabs)/album/${rawId}`;
-                                    } else {
-                                        route = rawId.startsWith('jiosaavn_')
-                                            ? `/(tabs)/playlist/external/jiosaavn/${rawId.replace('jiosaavn_playlist_', '')}`
-                                            : `/(tabs)/playlist/${rawId}`;
-                                    }
-                                    router.push(route as any);
-                                }}
-                            >
-                                <View className="w-14 h-14 bg-zinc-900 rounded-md overflow-hidden mr-4 items-center justify-center">
-                                    {resolvedUri ? (
-                                        <Image source={{ uri: resolvedUri }} style={{ width: '100%', height: '100%' }} />
-                                    ) : (
-                                        isAlbum ? <Disc size={24} color="#52525b" /> : <Music size={24} color="#52525b" />
-                                    )}
-                                </View>
-                                <View className="flex-1">
-                                    <View className="flex-row items-center">
-                                        <View className="mr-2">
-                                            <DownloadedIcon size={12} />
-                                        </View>
-                                        <Text className="text-white font-medium text-base flex-1" numberOfLines={1}>{collection.title}</Text>
-                                    </View>
-                                    <Text className="text-zinc-500 text-xs mt-1" numberOfLines={1}>
-                                        {isAlbum ? 'Album' : 'Playlist'} • {collection.artist} • {collection.songIds?.length || 0} songs
-                                    </Text>
-                                </View>
-                            </TouchableOpacity>
-                        );
-                    }}
-                    contentContainerStyle={{ paddingBottom: 120 }}
-                    ListEmptyComponent={
-                        <View className="py-20 items-center justify-center px-10">
-                            <View className="w-20 h-20 bg-zinc-900 rounded-full items-center justify-center mb-6">
-                                <Download size={40} color="#52525b" />
-                            </View>
-                            <Text className="text-white text-xl font-bold mb-2">No {activeTab} yet</Text>
-                            <Text className="text-zinc-400 text-center">
-                                Downloaded {activeTab} will appear here for offline listening.
-                            </Text>
-                        </View>
-                    }
+            {/* Sticky Header */}
+            <Animated.View style={[styles.stickyHeader, stickyHeaderStyle]}>
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
+                {/* Branded Gradient Overlay for Sticky Header */}
+                <LinearGradient
+                    colors={['#1e293b', Colors.background]}
+                    style={StyleSheet.absoluteFill}                    
                 />
-            </SafeAreaView>
+                <SafeAreaView edges={['top']} style={styles.stickyHeaderContent}>
+                    <View style={{ width: 40 }} />
+                    <Animated.View style={[styles.stickyTitleContainer, headerTitleStyle]}>
+                        <Text style={styles.stickyTitle} numberOfLines={1}>Offline Music</Text>
+                    </Animated.View>
+                    <Animated.View style={headerPlayButtonStyle}>
+                        <TouchableOpacity
+                            onPress={isCurrentPlaying ? pauseTrack : () => handlePlayAll(false)}
+                            style={styles.stickyPlayButton}
+                        >
+                            {isCurrentPlaying ? (
+                                <SharpPause size={22} color="black" />
+                            ) : (
+                                <SharpPlay size={22} color="black" style={{ marginLeft: 2 }} />
+                            )}
+                        </TouchableOpacity>
+                    </Animated.View>
+                </SafeAreaView>
+            </Animated.View>
+
+            <AnimatedFlashList
+                ref={listRef}
+                data={songs}
+                keyExtractor={(item: any) => item.id}
+                onScroll={scrollHandler}
+                scrollEventThrottle={16}
+                renderItem={({ item, index }: any) => (
+                    <TrackListItem
+                        track={item}
+                        index={index}
+                        isCurrent={currentTrack?.id === item.id}
+                        onPress={() => handlePlayTrack(item, index)}
+                    />
+                )}
+                ListHeaderComponent={
+                    <DownloadsHeader
+                        count={songs.length}
+                        onPlayAll={handlePlayAll}
+                        onToggleShuffle={toggleShuffle}
+                        shuffleMode={shuffleMode}
+                        isCurrentPlaying={isCurrentPlaying}
+                        onPause={pauseTrack}
+                    />
+                }
+                estimatedItemSize={70}
+                contentContainerStyle={{ paddingBottom: 160 }}
+                ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                         <Download size={48} color={Colors.whiteAlpha20} />
+                         <Text style={styles.emptyText}>No downloaded songs yet</Text>
+                    </View>
+                }
+            />
+            
+            <CollectionOptions ref={optionsRef} />
         </View>
     );
 }
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: Colors.background,
+    },
+    backButtonContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 100,
+        pointerEvents: 'box-none',
+    },
+    backButton: {
+        width: 44,
+        height: 44,
+        marginLeft: 8,
+        marginTop: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    stickyHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 90,
+        zIndex: 90,
+    },
+    stickyHeaderContent: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 13,
+    },
+    stickyTitleContainer: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    stickyTitle: {
+        color: Colors.textPrimary,
+        fontSize: 16,
+        fontWeight: '700',
+    },
+    stickyPlayButton: {
+        width: 42,
+        height: 42,
+        borderRadius: 21,
+        backgroundColor: ACCENT_COLOR,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    headerContent: {
+        paddingTop: 100,
+        paddingBottom: 24,
+        paddingHorizontal: 16,
+    },
+    headerGradient: {
+        ...StyleSheet.absoluteFillObject,
+    },
+    titleSection: {
+        marginBottom: 24,
+    },
+    titleText: {
+        color: Colors.textPrimary,
+        fontSize: 25,
+        fontWeight: '800',
+        letterSpacing: -0.5,
+    },
+    metadataRow: {
+        marginTop: 4,
+    },
+    metadataText: {
+        color: Colors.textSecondary,
+        fontSize: 13,
+        fontWeight: '500',
+    },
+    actionBar: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    leftControls: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingLeft: 3
+    },
+    downloadIconBadge: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    rightControls: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 20,
+    },
+    iconButton: {
+        padding: 4,
+    },
+    shuffleContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    shuffleDot: {
+        width: 4,
+        height: 4,
+        borderRadius: 2,
+        backgroundColor: ACCENT_COLOR,
+        position: 'absolute',
+        bottom: -8,
+    },
+    playButton: {
+        width: 56,
+        height: 56,
+        borderRadius: 28,
+        backgroundColor: ACCENT_COLOR,
+        alignItems: 'center',
+        justifyContent: 'center',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 6,
+    },
+    emptyContainer: {
+        paddingVertical: 100,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyText: {
+        color: Colors.textSecondary,
+        marginTop: 16,
+        fontSize: 15,
+        fontWeight: '500',
+    }
+});

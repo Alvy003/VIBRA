@@ -42,6 +42,7 @@ interface DownloadStore {
     removePlaylistDownload: (playlistId: string) => Promise<void>;
     removeAlbumDownload: (albumId: string) => Promise<void>;
     isDownloaded: (songId: string) => boolean;
+    getStorageSize: () => Promise<number>;
     reset: () => Promise<void>;
 }
 
@@ -246,6 +247,29 @@ export const useDownloadStore = create<DownloadStore>()(
                 return !!get().downloadedSongs[songId];
             },
 
+            getStorageSize: async () => {
+                try {
+                    await ensureDir();
+                    const info = await FileSystem.getInfoAsync(DOWNLOAD_DIR);
+                    if (!info.exists) return 0;
+                    
+                    // On native, we can't easily get recursive size of folder with getInfoAsync
+                    // We need to sum up individual files
+                    const files = await FileSystem.readDirectoryAsync(DOWNLOAD_DIR);
+                    let total = 0;
+                    for (const file of files) {
+                        const fileInfo = await FileSystem.getInfoAsync(`${DOWNLOAD_DIR}${file}`);
+                        if (fileInfo.exists && !fileInfo.isDirectory) {
+                            total += fileInfo.size;
+                        }
+                    }
+                    return total;
+                } catch (e) {
+                    console.error("[DownloadStore] getStorageSize error", e);
+                    return 0;
+                }
+            },
+
             reset: async () => {
                 set({
                     downloadedSongs: {},
@@ -258,6 +282,11 @@ export const useDownloadStore = create<DownloadStore>()(
         {
             name: 'vibra-downloads',
             storage: createJSONStorage(() => AsyncStorage),
+            partialize: (state) => ({
+                downloadedSongs: state.downloadedSongs,
+                downloadedAlbums: state.downloadedAlbums,
+                downloadedPlaylists: state.downloadedPlaylists,
+            }),
         }
     )
 );

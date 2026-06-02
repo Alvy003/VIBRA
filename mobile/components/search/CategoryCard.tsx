@@ -6,7 +6,8 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
-import Svg, { Circle, Path, Rect, Defs, LinearGradient, Stop } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import {
   Music,
   Sparkles,
@@ -55,35 +56,17 @@ const CATEGORY_ICONS: Record<string, React.ElementType> = {
   '90s': Clock,
 };
 
-// Decorative pattern component
-const CardPattern = React.memo(({ color }: { color: string }) => (
-  <Svg width="100" height="100" style={styles.pattern}>
-    <Defs>
-      <LinearGradient id="fadeGrad" x1="0" y1="0" x2="1" y2="1">
-        <Stop offset="0" stopColor="#fff" stopOpacity="0.15" />
-        <Stop offset="1" stopColor="#fff" stopOpacity="0" />
-      </LinearGradient>
-    </Defs>
-    {/* Abstract circles */}
-    {/* <Circle cx="70" cy="30" r="35" fill="url(#fadeGrad)" />
-    <Circle cx="85" cy="65" r="25" fill="#fff" fillOpacity="0.08" />
-    <Circle cx="50" cy="80" r="15" fill="#fff" fillOpacity="0.05" /> */}
-  </Svg>
-));
-
-CardPattern.displayName = 'CardPattern';
-
 interface CategoryCardProps {
   id: string;
   label: string;
-  color: string;
+  gradient: readonly [string, string, ...string[]];
   onPress: () => void;
 }
 
 export const CategoryCard = React.memo(({
   id,
   label,
-  color,
+  gradient,
   onPress,
 }: CategoryCardProps) => {
   const scale = useSharedValue(1);
@@ -94,7 +77,7 @@ export const CategoryCard = React.memo(({
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.95, { damping: 40, stiffness: 600 });
+    scale.value = withSpring(0.96, { damping: 40, stiffness: 600 });
   };
 
   const handlePressOut = () => {
@@ -106,17 +89,29 @@ export const CategoryCard = React.memo(({
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
-      style={[styles.card, { backgroundColor: color }, animatedStyle]}
+      style={[styles.card, animatedStyle]}
     >
-      {/* Background pattern */}
-      <View style={styles.patternContainer}>
-        <CardPattern color={color} />
-      </View>
+      <LinearGradient
+        colors={gradient}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Grain Texture Overflow */}
+      <Image
+        source={require('@/assets/images/grain.jpg')}
+        style={styles.grain}
+        contentFit="cover"
+      />
+
+      {/* Decorative top highlight */}
+      <View style={styles.topHighlight} />
 
       {/* Icon container */}
       <View style={styles.iconContainer}>
         <View style={styles.iconBackground}>
-          <IconComponent size={26} color="#fff" strokeWidth={2} />
+          <IconComponent size={26} color="#fff" strokeWidth={2.4} />
         </View>
       </View>
 
@@ -132,34 +127,37 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 8,
+    borderRadius: 6,
     padding: 14,
     overflow: 'hidden',
     position: 'relative',
-    justifyContent: 'flex-end',
+    backgroundColor: '#1c1c1c',
   },
-  patternContainer: {
+  grain: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.12,
+    mixBlendMode: 'overlay',
+  },
+  topHighlight: {
     position: 'absolute',
     top: 0,
+    left: 0,
     right: 0,
-    width: 100,
-    height: 100,
-  },
-  pattern: {
-    position: 'absolute',
-    top: -10,
-    right: -10,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.15)',
   },
   iconContainer: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    bottom: 10,
+    right: 10,
   },
   iconBackground: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     transform: [{ rotate: '8deg' }],
@@ -167,7 +165,7 @@ const styles = StyleSheet.create({
   label: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     maxWidth: '70%',
     textShadowColor: 'rgba(0,0,0,0.2)',
     textShadowOffset: { width: 0, height: 1 },

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { PremiumCard } from '@/components/PremiumCard';
 import { useStreamStore } from '@/stores/useStreamStore';
 import { SectionHeader } from './SectionHeader';
+import Colors from '@/constants/Colors';
 import { ExternalItem } from './types';
 import { Dimensions } from 'react-native';
 
@@ -12,14 +13,14 @@ const CARD_WIDTH = SCREEN_WIDTH * 0.45;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
-export const TopChartsSection = React.memo(() => {
+export const TopChartsSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     const router = useRouter();
     const charts = useStreamStore(s => s.homepageData?.charts);
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
             const id = item.externalId?.replace('jiosaavn_playlist_', '');
-            if (id) router.push(`/(tabs)/playlist/external/jiosaavn/${id}` as any);
+            if (id) router.push(`/(tabs)/playlist/external/jiosaavn/${id}?from=home` as any);
         },
         [router]
     );
@@ -27,12 +28,13 @@ export const TopChartsSection = React.memo(() => {
     const renderTopChart = useCallback(({ item, index }: { item: ExternalItem; index: number }) => (
         <PremiumCard
             title={item.title}
-            subtitle={item.description}
+            // subtitle={item.description}
             imageUrl={item.imageUrl}
             onPress={() => handleNavigateExternal(item)}
+            onLongPress={() => onOptions?.(item, 'playlist')}
             index={index}
         />
-    ), [handleNavigateExternal]);
+    ), [handleNavigateExternal, onOptions]);
 
     if (!charts || charts.length === 0) return null;
 
@@ -40,7 +42,7 @@ export const TopChartsSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="Top Charts"
-                accentColor="#06b6d4"
+                accentColor={Colors.accent}
             />
             <FlatList
                 horizontal

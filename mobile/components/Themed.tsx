@@ -18,15 +18,19 @@ export type ViewProps = ThemeProps & DefaultView['props'];
 
 export function useThemeColor(
   props: { light?: string; dark?: string },
-  colorName: keyof typeof Colors.light & keyof typeof Colors.dark
+  colorName: 'text' | 'background' | 'tint'
 ) {
-  const theme = useColorScheme() ?? 'light';
+  const theme = 'dark'; // App is dark-themed only
   const colorFromProps = props[theme];
 
   if (colorFromProps) {
     return colorFromProps;
   } else {
-    return Colors[theme][colorName];
+    // Map existing themed keys to new centralized Colors
+    if (colorName === 'text') return Colors.textPrimary;
+    if (colorName === 'background') return Colors.background;
+    if (colorName === 'tint') return Colors.accent;
+    return Colors.background;
   }
 }
 

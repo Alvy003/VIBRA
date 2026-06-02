@@ -5,10 +5,12 @@ import {
     TouchableOpacity,
     Dimensions,
     Alert,
-    StyleSheet
+    StyleSheet,
+    BackHandler,
+    Share
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useGlobalSearchParams } from 'expo-router';
 import { useStreamStore } from '@/stores/useStreamStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import Animated, {
@@ -27,23 +29,25 @@ import {
     CirclePlus,
     Shuffle,
     Check,
+    Share2,
 } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { resolveAssetUrl } from '@/lib/url';
 import { useDynamicColors } from '@/hooks/useDynamicColors';
 import { FlashList as OriginalFlashList } from '@shopify/flash-list';
-const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { useDownloadStore } from '@/stores/useDownloadStore';
-import PlaylistOptions from '@/components/PlaylistOptions';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
 import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
+import Colors from '@/constants/Colors';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#7B2CF5';
+const ACCENT_COLOR = Colors.accent;
+const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 
 interface ExternalPlaylistHeaderProps {
     displayPlaylist: any;
@@ -58,6 +62,8 @@ interface ExternalPlaylistHeaderProps {
     onToggleShuffle: () => void;
     onPlayAll: () => void;
     onPause: () => void;
+    onOptions: () => void;
+    onShare: () => void;
     width: number;
 }
 
@@ -74,24 +80,26 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
     onToggleShuffle,
     onPlayAll,
     onPause,
+    onOptions,
+    onShare,
     width,
 }) => (
     <View style={{ backgroundColor: colors.primary }}>
-            <LinearGradient
-                colors={[
-                    'transparent',
-                    'rgba(0,0,0,0.05)',
-                    'rgba(0,0,0,0.15)',
-                    'rgba(0,0,0,0.3)',
-                    'rgba(0,0,0,0.5)',
-                    'rgba(0,0,0,0.7)',
-                    'rgba(0,0,0,0.85)',
-                    '#000000',
-                    '#000000',
-                ]}
-                locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
-                style={{ paddingTop: 60, paddingBottom: 10 }}
-            >
+        <LinearGradient
+            colors={[
+                'transparent',
+                'rgba(9,9,11,0.05)',
+                'rgba(9,9,11,0.15)',
+                'rgba(9,9,11,0.3)',
+                'rgba(9,9,11,0.5)',
+                'rgba(9,9,11,0.7)',
+                'rgba(9,9,11,0.85)',
+                Colors.background,
+                Colors.background,
+            ]}
+            locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
+            style={{ paddingTop: 60, paddingBottom: 10 }}
+        >
             <View className="items-center px-6">
                 {/* Artwork */}
                 <View style={{
@@ -112,7 +120,7 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
 
                 {/* Title & Info */}
                 <View className="w-full mt-5">
-                    <Text className="text-white text-[24px] font-bold mb-2 leading-tight tracking-tight" numberOfLines={1}>
+                    <Text className="text-white text-[24px] font-semibold mb-2 leading-tight tracking-tight" numberOfLines={1}>
                         {displayPlaylist.title}
                     </Text>
                     <Text className="text-zinc-300 text-sm font-medium mb-4 leading-5" numberOfLines={1}>
@@ -126,14 +134,14 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
                             style={{ width: 18, height: 18 }}
                             contentFit="contain"
                         />
-                        <Text className="text-white text-[11px] font-bold tracking-wider">
+                        <Text className="text-white text-[11px] font-semibold tracking-wider">
                             Vibra <Text className="text-zinc-400 font-medium lowercase">• {displayPlaylist.songs?.length || 0} tracks</Text>
                         </Text>
                     </View>
                 </View>
             </View>
 
-            {/* Action Bar */}
+             {/* Action Bar */}
             <View className="px-6 pt-4 pb-0 flex-row items-center justify-between">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
                     <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
@@ -142,7 +150,7 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
                                 <Check size={14} color="black" strokeWidth={4} />
                             </View>
                         ) : (
-                            <CirclePlus size={22} color="#b3b3b3" />
+                            <CirclePlus size={24} color="#b3b3b3" />
                         )}
                     </TouchableOpacity>
 
@@ -154,17 +162,9 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
                         )}
                     </TouchableOpacity>
 
-                    <PlaylistOptions
-                        playlist={displayPlaylist}
-                        isDiscovery={true}
-                        isDownloaded={isPlaylistDownloaded}
-                        onDownload={onDownload}
-                        trigger={
-                            <View style={{ height: 40, width: 32, alignItems: 'center', justifyContent: 'center' }}>
-                                <MoreVertical size={22} color="#b3b3b3" />
-                            </View>
-                        }
-                    />
+                    <TouchableOpacity onPress={onOptions} activeOpacity={0.7}>
+                        <MoreVertical size={22} color="#b3b3b3" />
+                    </TouchableOpacity>
                 </View>
 
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
@@ -176,7 +176,7 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
                                 width: 4,
                                 height: 4,
                                 borderRadius: 2,
-                                backgroundColor: '#7B2CF5',
+                                backgroundColor: ACCENT_COLOR,
                                 marginTop: 2,
                                 position: 'absolute',
                                 bottom: -6
@@ -207,7 +207,10 @@ const ExternalPlaylistHeader = React.memo<ExternalPlaylistHeaderProps>(({
 
 export default function ExternalPlaylistScreen() {
     const { id } = useLocalSearchParams();
+    const { from } = useGlobalSearchParams();
     const router = useRouter();
+    const listRef = React.useRef<any>(null);
+    const optionsRef = React.useRef<CollectionOptionsRef>(null);
     const [isInitialLoading, setIsInitialLoading] = React.useState(true);
 
     const {
@@ -229,16 +232,58 @@ export default function ExternalPlaylistScreen() {
     const { isItemSaved, toggleSaveItem } = useSavedItemsStore();
     const { downloadPlaylist, downloadedSongs, downloadedPlaylists } = useDownloadStore();
 
+    const handleBack = useCallback(() => {
+        // If we have a clear context of where we came from, use it to switch back to that tab
+        if (from === 'search') {
+            router.push('/(tabs)/search');
+            return;
+        } 
+        
+        if (from === 'library') {
+            router.push('/(tabs)/library');
+            return;
+        }
+
+        if (from === 'home') {
+            router.push('/(tabs)');
+            return;
+        }
+
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(tabs)/library');
+        }
+    }, [from, router]);
+
     const artworkUrl = useMemo(() => resolveAssetUrl(playlist?.imageUrl), [playlist?.imageUrl]);
     const colors = useDynamicColors(artworkUrl);
 
     useEffect(() => {
         if (id) {
+            // Reset scroll position on ID change
+            listRef.current?.scrollToOffset({ offset: 0, animated: false });
+            
             setIsInitialLoading(true);
             fetchExternalPlaylist('jiosaavn', id as string);
         }
         return () => clearDetail();
     }, [id]);
+
+    // Handle system back gesture
+    useEffect(() => {
+        const backAction = () => {
+            handleBack();
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener(
+            'hardwareBackPress',
+            backAction
+        );
+
+        return () => backHandler.remove();
+    }, [handleBack]); // Depend on handleBack to avoid stale closures
 
     useEffect(() => {
         if (!isLoadingDetail && playlist) {
@@ -312,15 +357,8 @@ export default function ExternalPlaylistScreen() {
         };
     });
 
-    const handleBack = () => {
-        if (router.canGoBack()) {
-            router.back();
-        } else {
-            router.replace('/(tabs)/library');
-        }
-    };
 
-    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : '#121212';
+    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : Colors.surface;
 
     // Offline/Cached Data Fallback
     const cachedPlaylist = downloadedPlaylists[id as string];
@@ -385,7 +423,18 @@ export default function ExternalPlaylistScreen() {
         );
     }, [displayPlaylist, downloadPlaylist]);
 
-    const renderHeader = useCallback(() => (
+    const handleShare = useCallback(async () => {
+        if (!displayPlaylist) return;
+        try {
+            const cleanId = (displayPlaylist.externalId || id as string).replace(/^jiosaavn_playlist_/, '');
+            const message = `Check out this playlist "${displayPlaylist.title}" on Vibra!\n\nListen here: https://vibra-969f.onrender.com/playlist/external/jiosaavn/${cleanId}`;
+            await Share.share({ message, title: displayPlaylist.title });
+        } catch (error) {
+            console.error('Error sharing playlist:', error);
+        }
+    }, [displayPlaylist, id]);
+
+    const headerComponent = useMemo(() => (
         <ExternalPlaylistHeader
             displayPlaylist={displayPlaylist}
             artworkUrl={artworkUrl}
@@ -399,9 +448,11 @@ export default function ExternalPlaylistScreen() {
             onToggleShuffle={toggleShuffle}
             onPlayAll={handlePlayAll}
             onPause={pauseTrack}
+            onOptions={() => optionsRef.current?.open(displayPlaylist, 'playlist')}
+            onShare={handleShare}
             width={width}
         />
-    ), [displayPlaylist, artworkUrl, colors, isSaved, isPlaylistDownloaded, isCurrentPlaylistPlaying, shuffleMode, handleDownloadPlaylist, handlePlayAll]);
+    ), [displayPlaylist, artworkUrl, colors, isSaved, isPlaylistDownloaded, isCurrentPlaylistPlaying, shuffleMode, handleDownloadPlaylist, toggleShuffle, handlePlayAll, pauseTrack, handleShare]);
 
     const displaySongs = useMemo(() => {
         const allSongs = displayPlaylist?.songs || [];
@@ -427,7 +478,7 @@ export default function ExternalPlaylistScreen() {
 
     if (!displayPlaylist) {
         return (
-            <View className="flex-1 bg-black items-center justify-center p-6">
+            <View className="flex-1 items-center justify-center p-6" style={{ backgroundColor: Colors.background }}>
                 <Text className="text-white text-lg mb-4">Playlist not found</Text>
                 <TouchableOpacity onPress={() => router.navigate('/(tabs)/library' as any)} className="bg-zinc-800 px-6 py-2 rounded-full">
                     <Text className="text-white">Go Back</Text>
@@ -437,7 +488,7 @@ export default function ExternalPlaylistScreen() {
     }
 
     return (
-        <View className="flex-1 bg-black">
+        <View className="flex-1 mb-5" style={{ backgroundColor: Colors.background }}>
             <View
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
@@ -448,7 +499,7 @@ export default function ExternalPlaylistScreen() {
                         className="w-10 h-10 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" />
+                        <ArrowLeft size={24} color={Colors.textPrimary} />
                     </TouchableOpacity>
                 </SafeAreaView>
             </View>
@@ -457,17 +508,17 @@ export default function ExternalPlaylistScreen() {
                 style={[stickyHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }]}
                 pointerEvents="box-none"
             >
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#121212' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
 
                 <LinearGradient
-                    colors={[headerBaseColor, '#000000']}
+                    colors={[headerBaseColor, Colors.background]}
                     style={StyleSheet.absoluteFill}
                 />
 
                 <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
                     <View className="w-10 mr-2" />
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
-                        <Text className="text-white text-base font-bold" numberOfLines={1}>
+                        <Text className="text-white text-base font-semibold" numberOfLines={1}>
                             {displayPlaylist?.title}
                         </Text>
                     </Animated.View>
@@ -490,15 +541,17 @@ export default function ExternalPlaylistScreen() {
             </Animated.View>
 
             <AnimatedFlashList
+                ref={listRef}
                 data={displaySongs}
                 renderItem={renderTrackItem}
                 keyExtractor={(item: any) => item._id || item.id || item.externalId}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
-                ListHeaderComponent={renderHeader}
+                ListHeaderComponent={headerComponent}
                 estimatedItemSize={80}
                 contentContainerStyle={{ paddingBottom: 100 }}
             />
+            <CollectionOptions ref={optionsRef} />
         </View>
     );
 }

@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   title: {
     color: COLORS.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: -0.3,
   },
   subtitle: {

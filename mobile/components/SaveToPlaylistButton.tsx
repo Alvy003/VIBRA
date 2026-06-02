@@ -5,20 +5,22 @@ import { Plus, Check } from 'lucide-react-native';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import AddTrackBottomSheet, { AddTrackBottomSheetRef } from './AddTrackBottomSheet';
-import * as Haptics from 'expo-haptics';
+import Colors from '@/constants/Colors';
 
 interface SaveToPlaylistButtonProps {
     track: any;
     size?: number;
     color?: string;
     activeColor?: string;
+    iconColor?: string;
+    checkmarkColor?: string;
 }
 
 export const SaveToPlaylistButton = React.memo(({
     track,
     size = 24,
-    color = "rgba(255,255,255,0.7)",
-    activeColor = "#7B2CF5"
+    iconColor = "#000000",
+    checkmarkColor
 }: SaveToPlaylistButtonProps) => {
     const bottomSheetRef = useRef<AddTrackBottomSheetRef>(null);
     const { toggleLikeSong, likedSongs, isSongLiked, isSongMatch } = useMusicStore();
@@ -56,7 +58,7 @@ export const SaveToPlaylistButton = React.memo(({
                     <View style={[styles.iconCircleActive, { width: size, height: size, borderRadius: size / 2 }]}>
                         <Check
                             size={size * 0.6}
-                            color="#18181b"
+                            color={checkmarkColor || iconColor}
                             strokeWidth={3}
                         />
                     </View>
@@ -64,7 +66,7 @@ export const SaveToPlaylistButton = React.memo(({
                     <View style={[styles.iconCircle, { width: size, height: size, borderRadius: size / 2, borderWidth: Math.max(1.5, size * 0.09) }]}>
                         <Plus
                             size={size * 0.7}
-                            color="#ffffffff"
+                            color={Colors.textPrimary}
                             strokeWidth={3}
                         />
                     </View>
@@ -87,7 +89,7 @@ const styles = StyleSheet.create({
         height: 22,
         borderRadius: 12,
         borderWidth: 2,
-        borderColor: '#ffffffff',
+        borderColor: Colors.textPrimary,
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -95,7 +97,7 @@ const styles = StyleSheet.create({
         width: 22,
         height: 22,
         borderRadius: 12,
-        backgroundColor: '#7B2CF5',
+        backgroundColor: Colors.accent,
         alignItems: 'center',
         justifyContent: 'center',
     },

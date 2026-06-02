@@ -74,7 +74,7 @@ const styles = StyleSheet.create({
   title: {
     color: SEARCH_COLORS.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: -0.3,
     paddingHorizontal: 16,
     marginBottom: 14,

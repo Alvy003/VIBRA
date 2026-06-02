@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, Dimensions, ScrollView, StyleSheet } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, Dimensions, ScrollView, StyleSheet, InteractionManager, BackHandler } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { 
     useSharedValue, 
@@ -8,10 +8,10 @@ import Animated, {
     interpolate, 
     Extrapolate 
 } from 'react-native-reanimated';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useGlobalSearchParams } from 'expo-router';
 import { useStreamStore } from '@/stores/useStreamStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
-import { ArrowLeft, Play, Pause, MoreVertical, Music, Shuffle } from 'lucide-react-native';
+import { ArrowLeft, MoreVertical, Music } from 'lucide-react-native';
 import SongOptions from '@/components/SongOptions';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,13 +19,61 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { resolveAssetUrl } from '@/lib/url';
 import { useDynamicColors } from '@/hooks/useDynamicColors';
 import { ArtistSkeleton } from '@/components/Skeleton';
+import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
+import Colors from '@/constants/Colors';
+
+interface ArtistHeaderProps {
+    artist: any;
+    artworkUrl: string | null | undefined;
+    isCurrentArtistPlaying: boolean;
+    onPlayTopSongs: (index: number) => void;
+}
+
+const ArtistHeader = React.memo<ArtistHeaderProps>(({
+    artist,
+    artworkUrl,
+    isCurrentArtistPlaying,
+    onPlayTopSongs
+}) => (
+    <View style={{ height: 440 }}>
+        <Image
+            source={{ uri: artworkUrl ?? undefined }}
+            style={{ width: '100%', height: '100%', position: 'absolute' }}
+            contentFit="cover"
+            transition={0}
+            cachePolicy="memory-disk"
+        />
+        <LinearGradient
+            colors={['transparent', 'rgba(9,9,11,0.2)', 'rgba(9,9,11,0.8)', Colors.background]}
+            style={{ position: 'absolute', width: '100%', height: '100%' }}
+        />
+        
+        {/* Artist Title Overlay */}
+        <View className="absolute bottom-6 left-5 right-5">
+            <Text 
+                className="text-white text-5xl font-extrabold tracking-tighter" 
+                numberOfLines={2}
+                style={{ textShadowColor: 'rgba(0, 0, 0, 0.4)', textShadowOffset: { width: 0, height: 2 }, shadowRadius: 10 }}
+            >
+                {artist.name}
+            </Text>
+            
+            {artist.followerCount > 0 && (
+                <Text className="text-zinc-300 text-sm font-semibold mt-4">
+                    {artist.followerCount.toLocaleString()} monthly listeners
+                </Text>
+            )}
+        </View>
+    </View>
+));
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#7B2CF5';
 
 export default function ExternalArtistScreen() {
     const { id } = useLocalSearchParams();
+    const { from } = useGlobalSearchParams();
     const router = useRouter();
+    const scrollRef = React.useRef<ScrollView>(null);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     
     const {
@@ -49,13 +97,55 @@ export default function ExternalArtistScreen() {
     const artworkUrl = resolveAssetUrl(artist?.imageUrl);
     const colors = useDynamicColors(artworkUrl);
 
+    const handleBack = useCallback(() => {
+        // If we have a clear context of where we came from, use it to switch back to that tab
+        if (from === 'search') {
+            router.push('/(tabs)/search');
+            return;
+        } 
+        
+        if (from === 'library') {
+            router.push('/(tabs)/library');
+            return;
+        }
+
+        if (from === 'home') {
+            router.push('/(tabs)');
+            return;
+        }
+
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(tabs)/library');
+        }
+    }, [from, router]);
+
     useEffect(() => {
         if (id) {
+            // Reset scroll position on ID change
+            scrollRef.current?.scrollTo({ y: 0, animated: false });
+            
             setIsInitialLoading(true);
             fetchExternalArtist('jiosaavn', id as string);
         }
         return () => clearDetail();
     }, [id]);
+
+    // Handle system back gesture
+    useEffect(() => {
+        const backAction = () => {
+            handleBack();
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener(
+            'hardwareBackPress',
+            backAction
+        );
+
+        return () => backHandler.remove();
+    }, [handleBack]); // Depend on handleBack to avoid stale closures
 
     useEffect(() => {
         if (!isLoadingDetail && artist) {
@@ -135,21 +225,13 @@ export default function ExternalArtistScreen() {
         });
     };
 
-    const handleBack = () => {
-        if (router.canGoBack()) {
-            router.back();
-        } else {
-            // Fallback to library if no history
-            router.replace('/(tabs)/library');
-        }
-    };
 
     // 2. Sticky Navigation Header - Fades In with Gradient
     // Fallback to a greyish black (#121212) if image color isn't ready or matches the background
-    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : '#121212';
+    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : Colors.surface;
 
     return (
-        <View className="flex-1 bg-black">
+        <View className="flex-1" style={{ backgroundColor: '#09090b' }}>
             {/* 1. Floating Back Button - Fades Out Early */}
             <Animated.View 
                 style={[floatingHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }]}
@@ -161,7 +243,7 @@ export default function ExternalArtistScreen() {
                         className="w-10 h-10 rounded-full bg-black/40 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" />
+                        <ArrowLeft size={24} color={Colors.textPrimary} />
                     </TouchableOpacity>
                 </SafeAreaView>
             </Animated.View>
@@ -172,11 +254,11 @@ export default function ExternalArtistScreen() {
                 pointerEvents="box-none"
             >
                 {/* Opaque Background Layer */}
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#121212' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
                 
                 {/* Gradient Layer for depth */}
                 <LinearGradient
-                    colors={[headerBaseColor, '#000000']}
+                    colors={[headerBaseColor, Colors.background]}
                     style={StyleSheet.absoluteFill}
                 />
                 
@@ -186,11 +268,11 @@ export default function ExternalArtistScreen() {
                         className="w-10 h-10 items-center justify-center mr-2"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" />
+                        <ArrowLeft size={24} color={Colors.textPrimary} />
                     </TouchableOpacity>
                     
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
-                        <Text className="text-white text-lg font-bold" numberOfLines={1}>
+                        <Text className="text-white text-lg font-semibold" numberOfLines={1}>
                             {artist.name}
                         </Text>
                     </Animated.View>
@@ -198,102 +280,61 @@ export default function ExternalArtistScreen() {
             </Animated.View>
 
             <Animated.ScrollView
+                ref={scrollRef as any}
                 className="flex-1"
                 contentContainerStyle={{ paddingBottom: 110 }}
                 showsVerticalScrollIndicator={false}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
             >
-                {/* Visual Header - Full Bleed */}
-                <View style={{ height: 440 }}>
-                    <Image
-                        source={{ uri: artworkUrl }}
-                        style={{ width: '100%', height: '100%', position: 'absolute' }}
-                        contentFit="cover"
-                        transition={300}
-                    />
-                    <LinearGradient
-                        colors={['transparent', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.8)', 'black']}
-                        style={{ position: 'absolute', width: '100%', height: '100%' }}
-                    />
-                    
-                    {/* Artist Title Overlay */}
-                    <View className="absolute bottom-6 left-5 right-5">
-                        <Text 
-                            className="text-white text-5xl font-extrabold tracking-tighter" 
-                            numberOfLines={2}
-                            style={{ textShadowColor: 'rgba(0, 0, 0, 0.4)', textShadowOffset: { width: 0, height: 2 }, shadowRadius: 10 }}
-                        >
-                            {artist.name}
-                        </Text>
-                        
-                        {artist.followerCount > 0 && (
-                            <Text className="text-zinc-300 text-sm font-semibold mt-4">
-                                {artist.followerCount.toLocaleString()} monthly listeners
-                            </Text>
-                        )}
-                    </View>
-                </View>
+                <ArtistHeader
+                    artist={artist}
+                    artworkUrl={artworkUrl}
+                    isCurrentArtistPlaying={isCurrentArtistPlaying}
+                    onPlayTopSongs={handlePlayTopSongs}
+                />
 
                 {/* Actions Bar */}
-                <View className="px-5 py-4 flex-row items-center justify-between bg-black">
+                <View className="px-5 py-4 flex-row items-center justify-between" style={{ backgroundColor: Colors.background }}>
                     <View className="flex-row items-center gap-6">
                         <TouchableOpacity 
                             onPress={handleFollowToggle}
                             className={`px-4 py-1.5 rounded-md border ${isFollowing ? `bg-transparent border-zinc-500` : 'border-zinc-500'}`}
                             activeOpacity={0.7}
                         >
-                            <Text className="font-bold text-xs uppercase tracking-tight text-white">
+                            <Text className="font-semibold text-xs uppercase tracking-tight text-white">
                                 {isFollowing ? 'Following' : 'Follow'}
                             </Text>
-                        </TouchableOpacity>
-                        
-                        <TouchableOpacity activeOpacity={0.7}>
-                            <Shuffle size={24} color={ACCENT_COLOR} />
                         </TouchableOpacity>
                         
                         <TouchableOpacity activeOpacity={0.7}>
                             <MoreVertical size={24} color="#b3b3b3" />
                         </TouchableOpacity>
                     </View>
-
-                    <TouchableOpacity
-                        onPress={() => handlePlayTopSongs(0)}
-                        style={{ backgroundColor: ACCENT_COLOR, shadowColor: ACCENT_COLOR, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 12 }}
-                        className="w-14 h-14 rounded-full items-center justify-center"
-                        activeOpacity={0.8}
-                    >
-                        {isCurrentArtistPlaying ? (
-                            <Pause size={28} color="black" fill="black" />
-                        ) : (
-                            <Play size={28} color="black" fill="black" className="ml-1" />
-                        )}
-                    </TouchableOpacity>
+                   
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+                        <TouchableOpacity activeOpacity={0.7}>
+                            <SharpShuffle size={24} color={Colors.accent} />
+                        </TouchableOpacity>
+                    
+                        <TouchableOpacity
+                            onPress={() => handlePlayTopSongs(0)}
+                            style={{ backgroundColor: Colors.accent, shadowColor: Colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 12 }}
+                            className="w-14 h-14 rounded-full items-center justify-center"
+                            activeOpacity={0.8}
+                        >
+                            {isCurrentArtistPlaying ? (
+                                <SharpPause size={28} color="black" />
+                            ) : (
+                                <SharpPlay size={28} color="black" />
+                            )}
+                        </TouchableOpacity>
+                    </View>
                 </View>
 
-                {/* Promotional Banner */}
-                {artist.topSongs?.[0] && (
-                    <TouchableOpacity 
-                        className="mx-5 mb-2 mt-2 bg-zinc-900/50 rounded-md p-3 flex-row items-center border border-zinc-800/50"
-                        activeOpacity={0.7}
-                        onPress={() => handlePlayTopSongs(0)}
-                    >
-                        <View className="w-10 h-10 rounded-sm overflow-hidden mr-3">
-                            <Image 
-                                source={{ uri: resolveAssetUrl(artist.topSongs[0].imageUrl || artist.imageUrl) }}
-                                style={{ width: '100%', height: '100%' }}
-                            />
-                        </View>
-                        <View className="flex-1">
-                            <Text className="text-white font-bold text-xs">Listen to the new track</Text>
-                            <Text className="text-zinc-400 text-[10px]" numberOfLines={1}>{artist.topSongs[0].title}</Text>
-                        </View>
-                        <ArrowLeft size={16} color="#71717a" style={{ transform: [{ rotate: '180deg' }] }} />
-                    </TouchableOpacity>
-                )}
 
                 {/* Popular Tracks */}
-                <View className="mt-8">
+                <View className="mt-4">
                     <Text className="text-white/95 text-xl font-extrabold px-5 mb-4">Popular</Text>
                     {artist.topSongs?.slice(0, showAllSongs ? undefined : 10).map((song: any, index: number) => {
                         const isCurrent = currentTrack?.id === song.externalId;
@@ -312,7 +353,7 @@ export default function ExternalArtistScreen() {
                                 >
                                     {index + 1}
                                 </Text>
-                                <View className="w-12 h-12 rounded-sm mx-3 overflow-hidden bg-zinc-900 items-center justify-center">
+                                <View className="w-12 h-12 rounded-sm mx-3 overflow-hidden items-center justify-center" style={{ backgroundColor: Colors.surfaceLighter }}>
                                     {!!songArtwork ? (
                                         <Image
                                             source={{ uri: resolveAssetUrl(songArtwork) }}
@@ -326,7 +367,7 @@ export default function ExternalArtistScreen() {
                                 </View>
                                 <View className="flex-1">
                                     <Text 
-                                        style={{ color: isCurrent ? ACCENT_COLOR : '#ffffff' }}
+                                        style={{ color: isCurrent ? Colors.accent : '#ffffff' }}
                                         className="font-medium text-base" 
                                         numberOfLines={1}
                                     >
@@ -377,7 +418,7 @@ export default function ExternalArtistScreen() {
                                         }}
                                         className="mr-5 w-36"
                                     >
-                                        <View className="w-36 h-36 rounded-md mb-2 bg-zinc-900 shadow-sm items-center justify-center overflow-hidden">
+                                        <View className="w-36 h-36 rounded-md mb-2 shadow-sm items-center justify-center overflow-hidden" style={{ backgroundColor: Colors.surfaceLighter }}>
                                             {albumArtwork ? (
                                                 <Image
                                                     source={{ uri: albumArtwork }}
@@ -389,7 +430,7 @@ export default function ExternalArtistScreen() {
                                                 <Music size={40} color="#3f3f46" />
                                             )}
                                         </View>
-                                        <Text className="text-white text-sm font-bold" numberOfLines={1}>{album.title}</Text>
+                                        <Text className="text-white text-sm font-semibold" numberOfLines={1}>{album.title}</Text>
                                         <Text className="text-zinc-500 text-xs">{album.year || 'Album'}</Text>
                                     </TouchableOpacity>
                                 );

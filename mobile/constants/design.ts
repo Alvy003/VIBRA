@@ -1,4 +1,5 @@
-// constants/design.ts
+import Colors from './Colors';
+
 export const RADIUS = {
   xs: 2,
   sm: 4,
@@ -10,12 +11,13 @@ export const RADIUS = {
 };
 
 export const COLORS = {
-  background: '#09090b',
-  surface: '#18181b',
-  surfaceLight: '#27272a',
-  textPrimary: '#ffffff',
-  textSecondary: '#a1a1aa',
-  textMuted: '#71717a',
+  accent: Colors.accent,
+  background: Colors.background,
+  surface: Colors.surface,
+  surfaceLight: Colors.border,
+  textPrimary: Colors.textPrimary,
+  textSecondary: Colors.textSecondary,
+  textMuted: Colors.textMuted,
   border: 'rgba(255,255,255,0.08)',
 };
 
@@ -39,7 +41,7 @@ export const TIME_GRADIENTS = {
   night: {
     // 10pm - 6am: Deep purples
     colors: ['#9333ea', '#7c3aed', '#310a5b', '#09090b'] as const,
-    accent: '#9333ea',
+    accent: '#7B2CF5',
   },
 };
 
@@ -55,14 +57,14 @@ export const getTimeOfDay = (): keyof typeof TIME_GRADIENTS => {
 // Search Colors
 export const SEARCH_COLORS = {
   background: '#09090b',
-  surface: '#18181b',
+  surface: '#121212',
   surfaceLight: '#27272a',
   input: '#1a1a1a',
   inputBorder: 'rgba(255,255,255,0.07)',
   textPrimary: '#ffffff',
   textSecondary: '#a1a1aa',
   textMuted: '#71717a',
-  accent: '#9333ea',
+  accent: '#7B2CF5',
   accentLight: 'rgba(147, 51, 234, 0.1)',
   divider: 'rgba(255,255,255,0.05)',
   trendingGlow: '#f97316',

@@ -19,7 +19,7 @@ interface ColorState {
 }
 
 // Default neutral gradient - typed as const to make it a tuple
-const DEFAULT_GRADIENT: GradientColors = ['#1a1a2e', '#16213e', '#0f0f1a', '#000000'] as const;
+const DEFAULT_GRADIENT: GradientColors = ['#1a1a2e', '#16213e', '#0f0f1a', '#09090b'] as const;
 
 const DEFAULT_COLORS: TrackColors = {
   gradient: DEFAULT_GRADIENT,
@@ -177,7 +177,7 @@ function generateGradient(dominantColor: string): GradientColors {
     darkenColor(baseColor, 0.25),
     darkenColor(baseColor, 0.5),
     // darkenColor(baseColor, 0.95),
-    '#000000',
+    '#09090b',
   ] as const;
 }
 

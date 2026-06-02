@@ -3,9 +3,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react'; // Added useCallback
 import 'react-native-reanimated';
 import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/clerk-expo';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -13,6 +13,7 @@ import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import * as SecureStore from 'expo-secure-store';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import Colors from '@/constants/Colors'; // Added Colors import
 
 const tokenCache = {
   async getToken(key: string) {
@@ -67,13 +68,37 @@ import { ClerkAuthHandler } from '@/components/ClerkAuthHandler';
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
-function InitialLayout() {
+function InitialLayout({ onReady }: { onReady: () => void }) {
   const { isLoaded, isSignedIn } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const rootNavState = useRootNavigationState();
+  const [bootTimeout, setBootTimeout] = useState(false);
 
   useEffect(() => {
-    if (!isLoaded) return;
+    // Fail-safe: if Clerk doesn't load in 2.5 seconds (likely offline/stuck), 
+    // proceed anyway so the user can at least see cached data.
+    const timer = setTimeout(() => {
+        if (!isLoaded) setBootTimeout(true);
+    }, 2500);
+    return () => clearTimeout(timer);
+  }, [isLoaded]);
+
+  useEffect(() => {
+    // Notify RootLayout when we're ready to hide splash
+    if (isLoaded || bootTimeout) {
+      onReady();
+    }
+  }, [isLoaded, bootTimeout, onReady]);
+
+  useEffect(() => {
+    // Only redirect if Clerk is definitely loaded or we've timed out,
+    // AND the Expo Router navigation container is ready.
+    // Without the rootNavState guard, tapping a media-session notification while
+    // the service is alive (ContinuePlayback) can trigger navigation before the
+    // Root Layout has finished mounting — causing the "navigate before mounting" error.
+    if (!rootNavState?.key) return;
+    if (!isLoaded && !bootTimeout) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
@@ -82,14 +107,14 @@ function InitialLayout() {
     } else if (!isSignedIn && !inAuthGroup) {
       router.replace('/(auth)/login');
     }
-  }, [isSignedIn, isLoaded, segments]);
+  }, [isSignedIn, isLoaded, bootTimeout, segments, rootNavState?.key]);
 
   useEffect(() => {
     // Initialize the main player store on app boot
     usePlayerStore.getState().initPlayer();
   }, []);
 
-  if (!isLoaded) return null;
+  if (!isLoaded && !bootTimeout) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
@@ -113,35 +138,34 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
+  const [isAppReady, setIsAppReady] = useState(false); // Added isAppReady state
+
   // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
 
   useEffect(() => {
-    if (loaded) {
+    // Only hide splash when BOTH fonts and auth are ready
+    if (loaded && isAppReady) {
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+  }, [loaded, isAppReady]);
 
   if (!loaded) {
     return null;
   }
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.background }}>
       <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
-        <ClerkLoaded>
-          <ClerkAuthHandler />
-          <BottomSheetModalProvider>
-            <ThemeProvider value={DarkTheme}>
-              <InitialLayout />
-            </ThemeProvider>
-          </BottomSheetModalProvider>
-        </ClerkLoaded>
+        <ClerkAuthHandler />
+        <BottomSheetModalProvider>
+          <ThemeProvider value={DarkTheme}>
+            <InitialLayout onReady={() => setIsAppReady(true)} />
+          </ThemeProvider>
+        </BottomSheetModalProvider>
       </ClerkProvider>
     </GestureHandlerRootView>
   );
 }
-
-

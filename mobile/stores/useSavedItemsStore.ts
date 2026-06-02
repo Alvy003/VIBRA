@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { axiosInstance } from "@/lib/axios";
+import { mmkvStorage } from "@/lib/mmkvStorage";
+import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
 
 export interface SavedItem {
     _id: string;
@@ -79,8 +80,15 @@ export const useSavedItemsStore = create<SavedItemsStore>()(
         }),
         {
             name: 'vibra-saved-items-storage',
-            storage: createJSONStorage(() => AsyncStorage),
+            storage: createJSONStorage(() => mmkvStorage),
             partialize: (state) => ({ savedItems: state.savedItems }),
         }
     )
 );
+
+// Trigger one-time async migration on first launch
+migrateStoreToMMKV("vibra-saved-items-storage").then((migrated) => {
+    if (migrated) {
+        useSavedItemsStore.persist.rehydrate();
+    }
+});

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,7 +6,7 @@ import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { useUser } from '@clerk/clerk-expo';
-import { Plus, List as ListIcon, Search, Download, Music, Heart, LayoutGrid, ArrowUpDown, User as UserIcon, X } from 'lucide-react-native';
+import { Plus, List as ListIcon, Search, Download, Music, Heart, LayoutGrid, ArrowUpDown, ArrowDown, User as UserIcon, X } from 'lucide-react-native';
 import { resolveAssetUrl } from '@/lib/url';
 import { useRouter } from 'expo-router';
 import { useDownloadStore } from '@/stores/useDownloadStore';
@@ -14,6 +14,11 @@ import { RefreshControl } from 'react-native';
 import { CreatePlaylistModal } from '@/components/library/CreatePlaylistModal';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
 import Animated, { FadeIn, Layout } from 'react-native-reanimated';
+import { UserProfileIcon } from '@/components/UserProfileIcon';
+import { LibraryPlusMenu } from '@/components/library/LibraryPlusMenu';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import { LinearGradient } from 'expo-linear-gradient';
+import Colors from '@/constants/Colors';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 40) / 2;
@@ -47,6 +52,8 @@ export default function LibraryScreen() {
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isDownloadedFilterActive, setIsDownloadedFilterActive] = useState(false);
     const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
+    const [isPlusMenuOpen, setIsPlusMenuOpen] = useState(false);
+    const optionsRef = useRef<CollectionOptionsRef>(null);
 
     useEffect(() => {
         fetchUserPlaylists();
@@ -67,9 +74,9 @@ export default function LibraryScreen() {
                     type: 'special',
                     title: 'Downloads',
                     subtitle: `${downloadCount} tracks available offline`,
-                    icon: Download,
-                    gradient: ['#7B2CF5', '#7c3aed'],
-                    onPress: () => router.push('/(tabs)/downloads' as any)
+                    icon: ArrowDown,
+                    gradient: ['#0f172a', '#1e293b', '#334155'],
+                    onPress: () => router.push('/(tabs)/downloads?from=library' as any)
                 });
             } else {
                 items.push({
@@ -78,8 +85,8 @@ export default function LibraryScreen() {
                     title: 'Liked Songs',
                     subtitle: `Playlist • ${likedSongs.length} songs`,
                     icon: Heart,
-                    gradient: ['#9333ea', '#4f46e5'],
-                    onPress: () => router.push('/favorites' as any)
+                    gradient: [Colors.primaryDark, Colors.accent],
+                    onPress: () => router.push('/favorites?from=library' as any)
                 });
 
                 if (downloadCount > 0) {
@@ -88,9 +95,9 @@ export default function LibraryScreen() {
                         type: 'special',
                         title: 'Downloads',
                         subtitle: `${downloadCount} tracks available offline`,
-                        icon: Download,
-                        gradient: ['#7B2CF5', '#7c3aed'],
-                        onPress: () => router.push('/(tabs)/downloads' as any)
+                        icon: ArrowDown,
+                        gradient: ['#0f172a', '#1e293b', '#334155'],
+                        onPress: () => router.push('/(tabs)/downloads?from=library' as any)
                     });
                 }
             }
@@ -178,50 +185,46 @@ export default function LibraryScreen() {
         const isExternal = !!item.externalId && item.source !== 'ai';
 
         if (isAlbum) {
-            route = isExternal ? `/(tabs)/album/external/jiosaavn/${id}` : `/(tabs)/album/${id}`;
+            route = isExternal ? `/(tabs)/album/external/jiosaavn/${id}?from=library` : `/(tabs)/album/${id}?from=library`;
         } else if (isPlaylist) {
-            route = isExternal ? `/(tabs)/playlist/external/jiosaavn/${id}` : `/(tabs)/playlist/${id}`;
+            route = isExternal ? `/(tabs)/playlist/external/jiosaavn/${id}?from=library` : `/(tabs)/playlist/${id}?from=library`;
         } else if (isArtist) {
-            route = isExternal ? `/(tabs)/artist/external/jiosaavn/${id}` : `/(tabs)/artist/${id}`;
+            route = isExternal ? `/(tabs)/artist/external/jiosaavn/${id}?from=library` : `/(tabs)/artist/${id}?from=library`;
         }
 
         router.push(route as any);
     };
 
+    const handleOpenOptions = (item: any, type: any) => {
+        if (item.type === 'special') return;
+        optionsRef.current?.open(item, type);
+    };
+
     const renderItem = ({ item }: { item: any }) => {
         if (viewMode === 'grid') {
-            return <LibraryGridItem item={item} onPress={() => handleItemPress(item)} />;
+            return <LibraryGridItem item={item} onPress={() => handleItemPress(item)} onLongPress={() => handleOpenOptions(item, item.type)} />;
         }
-        return <LibraryListItem item={item} onPress={() => handleItemPress(item)} />;
+        return <LibraryListItem item={item} onPress={() => handleItemPress(item)} onLongPress={() => handleOpenOptions(item, item.type)} />;
     };
 
     return (
-        <SafeAreaView className="flex-1 bg-black">
-            <View className="px-4 py-4 flex-row items-center justify-between">
+        <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
+            <View className="py-4 flex-row items-center justify-between" style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
                 <View className="flex-row items-center gap-3">
                     <Text className="text-white text-2xl font-extrabold">Your Library</Text>
                 </View>
                 <View className="flex-row items-center gap-6">
-                    <TouchableOpacity onPress={() => router.push('/library-search' as any)}>
-                        <Search size={22} color="#ffffff" />
+                    <TouchableOpacity onPress={() => router.push('/(tabs)/library-search?from=library' as any)}>
+                        <Search size={22} color={Colors.textPrimary} />
                     </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setIsCreateModalVisible(true)}>
-                        <Plus size={24} color="#ffffff" />
+                    <TouchableOpacity onPress={() => setIsPlusMenuOpen(true)}>
+                        <Plus size={26} color={Colors.textPrimary} />
                     </TouchableOpacity>
-                    <TouchableOpacity
-                        onPress={() => router.push('/profile' as any)}
-                        activeOpacity={0.7}
-                    >
-                        <Image
-                            source={{ uri: user?.imageUrl || 'https://avatar.iran.liara.run/public/boy' }}
-                            style={{ width: 32, height: 32, borderRadius: 16 }}
-                            cachePolicy="memory-disk"
-                        />
-                    </TouchableOpacity>
+                    <UserProfileIcon size={34} />
                 </View>
             </View>
 
-            <View className="flex-row items-center justify-between mt-0">
+            <View className="flex-row items-center justify-between">
                 <View className="flex-1 flex-row items-center px-2 py-2">
                     {filter !== 'all' || isDownloadedFilterActive ? (
                         <Animated.View entering={FadeIn.duration(200)} layout={Layout.springify()}>
@@ -234,7 +237,7 @@ export default function LibraryScreen() {
                                 style={styles.closeButton}
                                 className="mr-2"
                             >
-                                <X size={20} color="#fff" />
+                                <X size={20} color={Colors.textPrimary} />
                             </TouchableOpacity>
                         </Animated.View>
                     ) : null}
@@ -300,7 +303,7 @@ export default function LibraryScreen() {
                 </View>
             </View>
 
-            <View className="px-4 py-3 mt-1 flex-row items-center justify-between">
+            <View className="px-5 py-3 mt-0 flex-row items-center justify-between border-b-2">
                 <TouchableOpacity
                     className="flex-row items-center"
                     onPress={() => {
@@ -308,7 +311,7 @@ export default function LibraryScreen() {
                     }}
                 >
                     <View className="mr-2">
-                        <ArrowUpDown size={14} color="#ffffff" />
+                        <ArrowUpDown size={14} color={Colors.textPrimary} />
                     </View>
                     <Text className="text-white text-sm font-semibold">
                         {sortBy === 'recents' ? 'Recents' : sortBy === 'name' ? 'Name' : 'Artist'}
@@ -316,9 +319,9 @@ export default function LibraryScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setViewMode(viewMode === 'list' ? 'grid' : 'list')}>
                     {!!(viewMode === 'list') ? (
-                        <LayoutGrid size={18} color="#e9e9e9ff" />
+                        <LayoutGrid size={18} color={Colors.textPrimary} />
                     ) : (
-                        <ListIcon size={18} color="#e9e9e9ff" />
+                        <ListIcon size={18} color={Colors.textPrimary} />
                     )}
                 </TouchableOpacity>
             </View>
@@ -332,7 +335,7 @@ export default function LibraryScreen() {
                 columnWrapperStyle={viewMode === 'grid' ? { paddingHorizontal: 16, justifyContent: 'space-between' } : undefined}
                 contentContainerStyle={{
                     paddingHorizontal: viewMode === 'list' ? 4 : 0,
-                    paddingTop: 8,
+                    paddingTop: 0,
                     paddingBottom: 120
                 }}
                 showsVerticalScrollIndicator={false}
@@ -340,9 +343,9 @@ export default function LibraryScreen() {
                     <RefreshControl
                         refreshing={isRefreshing}
                         onRefresh={onRefresh}
-                        tintColor="#a1a1aa"
-                        colors={['#a1a1aa']}
-                        progressBackgroundColor="#18181b"
+                        tintColor={Colors.textSecondary}
+                        colors={[Colors.textSecondary]}
+                        progressBackgroundColor={Colors.surfaceLighter}
                     />
                 }
                 ListEmptyComponent={
@@ -357,17 +360,31 @@ export default function LibraryScreen() {
                 onCreate={async (name) => {
                     try {
                         const newPlaylist = await createPlaylist(name);
-                        router.push(`/(tabs)/playlist/${newPlaylist._id}` as any);
+                        router.push(`/(tabs)/playlist/${newPlaylist._id}?from=library` as any);
                     } catch (err) {
                         console.error("Failed to create playlist:", err);
                     }
                 }}
             />
+            <LibraryPlusMenu
+                isOpen={isPlusMenuOpen}
+                onClose={() => setIsPlusMenuOpen(false)}
+                onOptionSelected={(option) => {
+                    if (option === 'ai') {
+                        router.push('/(tabs)/chat' as any);
+                    } else if (option === 'new') {
+                        setIsCreateModalVisible(true);
+                    } else if (option === 'spotify' || option === 'youtube') {
+                        router.push({ pathname: '/(tabs)/chat', params: { import: 'spotify' } } as any);
+                    }
+                }}
+            />
+            <CollectionOptions ref={optionsRef} />
         </SafeAreaView>
     );
 }
 
-const LibraryListItem = React.memo(({ item, onPress }: any) => {
+const LibraryListItem = React.memo(({ item, onPress, onLongPress }: any) => {
     const { user } = useUser();
     const { downloadedPlaylists, downloadedAlbums } = useDownloadStore();
     const isSpecial = item.type === 'special';
@@ -385,16 +402,22 @@ const LibraryListItem = React.memo(({ item, onPress }: any) => {
         <TouchableOpacity
             className="flex-row items-center p-2.5 rounded-xl"
             onPress={onPress}
+            onLongPress={onLongPress}
             activeOpacity={0.7}
         >
-            <View className={`w-16 h-16 mr-4 bg-zinc-900 overflow-hidden items-center justify-center ${isArtist ? 'rounded-full' : 'rounded-md'}`}>
+            <View className={`w-16 h-16 mr-4 bg-zinc-900 overflow-hidden items-center justify-center ${isArtist ? 'rounded-full' : 'rounded-sm'}`}>
                 {isSpecial ? (
-                    <View
-                        style={{ backgroundColor: item.gradient[0] }}
-                        className="w-full h-full items-center justify-center"
+                    <LinearGradient
+                        colors={item.gradient}
+                        style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <item.icon size={28} color="#fff" fill="#fff" />
-                    </View>
+                        <item.icon
+                            size={28}
+                            color={Colors.textPrimary}
+                            strokeWidth={2}
+                            {...(item.icon === Heart ? { fill: Colors.textPrimary } : {})}
+                        />
+                    </LinearGradient>
                 ) : (
                     <View className="w-full h-full items-center justify-center">
                         {!!resolvedUri ? (
@@ -404,7 +427,7 @@ const LibraryListItem = React.memo(({ item, onPress }: any) => {
                                 contentFit="cover"
                             />
                         ) : (
-                            isArtist ? <UserIcon size={32} color="#52525b" /> : <Music size={24} color="#52525b" />
+                            isArtist ? <UserIcon size={32} color={Colors.textSecondary} /> : <Music size={24} color={Colors.textSecondary} />
                         )}
                     </View>
                 )}
@@ -420,7 +443,7 @@ const LibraryListItem = React.memo(({ item, onPress }: any) => {
                         </View>
                     )}
                     <Text className="text-zinc-400 text-sm flex-1" numberOfLines={1}>
-                        {isSpecial ? item.subtitle : (isAlbum ? `Album • ${item.artist}` : isArtist ? `Artist` : `Playlist • ${item.artist || creatorName}`)}
+                        {isSpecial ? item.subtitle : (isAlbum ? `Album • ${item.artist}` : isArtist ? `Artist` : `Playlist • ${(item.artist === 'Vibra AI' ? 'Vibra' : item.artist) || creatorName}`)}
                     </Text>
                 </View>
             </View>
@@ -428,7 +451,7 @@ const LibraryListItem = React.memo(({ item, onPress }: any) => {
     );
 });
 
-const LibraryGridItem = React.memo(({ item, onPress }: any) => {
+const LibraryGridItem = React.memo(({ item, onPress, onLongPress }: any) => {
     const { user } = useUser();
     const { downloadedPlaylists, downloadedAlbums } = useDownloadStore();
     const isSpecial = item.type === 'special';
@@ -446,16 +469,17 @@ const LibraryGridItem = React.memo(({ item, onPress }: any) => {
         <TouchableOpacity
             style={{ width: COLUMN_WIDTH, marginBottom: 20 }}
             onPress={onPress}
+            onLongPress={onLongPress}
             activeOpacity={0.7}
         >
             <View style={{ width: COLUMN_WIDTH, height: COLUMN_WIDTH }} className={`bg-zinc-900 overflow-hidden items-center justify-center mb-3 ${isArtist ? 'rounded-full' : 'rounded-sm'}`}>
                 {isSpecial ? (
-                    <View
-                        style={{ backgroundColor: item.gradient[0] }}
-                        className="w-full h-full items-center justify-center"
+                    <LinearGradient
+                        colors={item.gradient}
+                        style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <item.icon size={48} color="#fff" fill="#fff" />
-                    </View>
+                        <item.icon size={28} color={Colors.textPrimary} fill={Colors.textPrimary} />
+                    </LinearGradient>
                 ) : (
                     <View className="w-full h-full items-center justify-center">
                         {!!resolvedUri ? (
@@ -465,7 +489,7 @@ const LibraryGridItem = React.memo(({ item, onPress }: any) => {
                                 contentFit="cover"
                             />
                         ) : (
-                            isArtist ? <UserIcon size={48} color="#52525b" /> : <Music size={40} color="#52525b" />
+                            isArtist ? <UserIcon size={48} color={Colors.textSecondary} /> : <Music size={40} color={Colors.textSecondary} />
                         )}
                     </View>
                 )}
@@ -481,7 +505,7 @@ const LibraryGridItem = React.memo(({ item, onPress }: any) => {
                         </View>
                     )}
                     <Text className="text-zinc-400 text-xs flex-1" numberOfLines={1}>
-                        {isAlbum ? `Album • ${item.artist}` : isArtist ? 'Artist' : `Playlist • ${creatorName}`}
+                        {isAlbum ? `Album • ${item.artist}` : isArtist ? 'Artist' : `Playlist • ${(item.artist === 'Vibra AI' ? 'Vibra' : item.artist) || creatorName}`}
                     </Text>
                 </View>
             </View>
@@ -494,14 +518,14 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderRadius: 20,
-        backgroundColor: '#18181b',
+        backgroundColor: Colors.surface,
         marginHorizontal: 4,
     },
     filterChipActive: {
-        backgroundColor: '#7B2CF5',
+        backgroundColor: Colors.accent,
     },
     filterChipText: {
-        color: '#e4e4e7',
+        color: Colors.textPrimary,
         fontSize: 12,
         fontWeight: '600',
     },
@@ -513,7 +537,7 @@ const styles = StyleSheet.create({
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: '#27272a',
+        backgroundColor: Colors.surface,
         justifyContent: 'center',
         alignItems: 'center',
     }

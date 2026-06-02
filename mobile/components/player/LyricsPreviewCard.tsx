@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import * as Haptics from 'expo-haptics';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useLyricsStore } from '@/stores/useLyricsStore';
 import { useColorStore } from '@/stores/useColorStore';
@@ -69,7 +68,6 @@ const LyricsPreviewCard = React.memo(() => {
             ]}
             activeOpacity={0.85}
             onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setLyricsModalVisible(true);
             }}
         >
@@ -118,7 +116,6 @@ const LyricsPreviewCard = React.memo(() => {
                 style={styles.expandButton}
                 activeOpacity={0.7}
                 onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     setLyricsModalVisible(true);
                 }}
             >
@@ -150,18 +147,17 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
     expandButton: {
-        backgroundColor: 'rgba(255, 255, 255, 0.2)',
-        paddingHorizontal: 14,
+        marginTop: 25,
         paddingVertical: 8,
-        borderRadius: 14,
-        marginTop: 20,
+        paddingHorizontal: 16,
+        backgroundColor: 'rgba(255,255,255,0.2)',
+        borderRadius: 16,
         alignSelf: 'flex-start',
     },
     expandButtonText: {
         color: '#fff',
         fontSize: 12,
-        fontWeight: '700',
-        letterSpacing: 0.5,
+        fontWeight: '600',
     },
     lyricsPreviewContentWrapper: {
         height: LYRICS_PREVIEW_HEIGHT,
@@ -176,21 +172,21 @@ const styles = StyleSheet.create({
         marginBottom: 2,
     },
     lyricsPreviewLine: {
-        fontSize: 20,
+        fontSize: 18,
         fontWeight: '800',
         textAlign: 'left',
         letterSpacing: -0.3,
     },
     lyricsPreviewActive: {
         color: '#fff',
-        fontSize: 20,
+        fontSize: 18,
     },
     lyricsPreviewPast: {
-        color: '#fff',
-        fontSize: 20,
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 18,
     },
     lyricsPreviewInactive: {
-        color: '#000',
+        color: 'rgba(255,255,255,0.25)',
         fontSize: 20,
     },
     plainLyricsPreview: {

@@ -16,17 +16,22 @@ interface SearchResultsProps {
 
 export const SearchResults = React.memo(({ visible, activeFilter }: SearchResultsProps) => {
   const suggestions = useSearchStore((s) => s.suggestions);
+  const results = useSearchStore((s) => s.results);
   const isSuggesting = useSearchStore((s) => s.isSuggesting);
+  const isSearching = useSearchStore((s) => s.isSearching);
   const query = useSearchStore((s) => s.query);
 
+  const displayData = results || suggestions;
+  const isLoading = isSearching || (isSuggesting && !displayData);
+
   const topResult = useMemo(() => {
-    if (!suggestions) return null;
+    if (!displayData) return null;
     
-    // Prioritize: exact artist match > exact playlist match > song > album
-    const artists = suggestions.artists || [];
-    const songs = suggestions.songs || [];
-    const albums = suggestions.albums || [];
-    const playlists = suggestions.playlists || [];
+    // Prioritize: exact artist match > exact song match > exact playlist match > startsWith song > fuzzy artist
+    const artists = displayData.artists || [];
+    const songs = displayData.songs || [];
+    const albums = displayData.albums || [];
+    const playlists = displayData.playlists || [];
 
     const lowerQuery = query.toLowerCase().trim();
 
@@ -36,13 +41,25 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
     );
     if (artistMatch) return { data: artistMatch, type: 'artist' as const };
 
-    // 2. Check for exact playlist match
+    // 2. Check for exact song title match
+    const exactSongMatch = songs.find((s: any) => 
+      (s.title)?.toLowerCase() === lowerQuery
+    );
+    if (exactSongMatch) return { data: exactSongMatch, type: 'song' as const };
+
+    // 3. Check for exact playlist match
     const playlistMatch = playlists.find((p: any) => 
         (p.title || p.name)?.toLowerCase() === lowerQuery
     );
     if (playlistMatch) return { data: playlistMatch, type: 'playlist' as const };
 
-    // 3. Fallback to fuzzy artist match
+    // 4. Check for song starting with query
+    const startsWithSong = songs.find((s: any) => 
+        (s.title)?.toLowerCase().startsWith(lowerQuery)
+    );
+    if (startsWithSong) return { data: startsWithSong, type: 'song' as const };
+
+    // 5. Fallback to fuzzy artist match
     const fuzzyArtistMatch = artists.find((a: any) => 
         (a.title || a.name)?.toLowerCase().includes(lowerQuery)
     );
@@ -55,53 +72,75 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
     if (artists.length > 0) return { data: artists[0], type: 'artist' as const };
 
     return null;
-  }, [suggestions, query]);
+  }, [displayData, query]);
+
+  const sortByStartsWith = (items: any[], q: string) => {
+    const lq = q.toLowerCase().trim();
+    return [...items].sort((a, b) => {
+      const aStarts = (a.title || a.name || '').toLowerCase().startsWith(lq) ? 0 : 1;
+      const bStarts = (b.title || b.name || '').toLowerCase().startsWith(lq) ? 0 : 1;
+      return aStarts - bStarts;
+    });
+  };
 
   const songs = useMemo(() => {
-    if (!suggestions?.songs) return [];
-    // Filter out top result if it's a song
+    if (!displayData?.songs) return [];
+    let filtered = displayData.songs;
     if (topResult?.type === 'song') {
-      return suggestions.songs.filter((s: any) => 
+      filtered = displayData.songs.filter((s: any) => 
         s._id !== topResult.data._id && 
         s.videoId !== topResult.data.videoId
-      ).slice(0, 4);
+      );
     }
-    return suggestions.songs.slice(0, 4);
-  }, [suggestions, topResult]);
+    return sortByStartsWith(filtered, query).slice(0, 4);
+  }, [displayData, topResult, query]);
 
   const artists = useMemo(() => {
-    if (!suggestions?.artists) return [];
+    if (!displayData?.artists) return [];
+    let filtered = displayData.artists;
     if (topResult?.type === 'artist') {
-      return suggestions.artists.filter((a: any) => 
+      filtered = displayData.artists.filter((a: any) => 
         a._id !== topResult.data._id
-      ).slice(0, 3);
+      );
     }
-    return suggestions.artists.slice(0, 3);
-  }, [suggestions, topResult]);
+    return sortByStartsWith(filtered, query).slice(0, 3);
+  }, [displayData, topResult, query]);
 
   const albums = useMemo(() => {
-    if (!suggestions?.albums) return [];
+    if (!displayData?.albums) return [];
+    let filtered = displayData.albums;
     if (topResult?.type === 'album') {
-      return suggestions.albums.filter((a: any) => 
+      filtered = displayData.albums.filter((a: any) => 
         a._id !== topResult.data._id && a.id !== topResult.data.id
-      ).slice(0, 3);
+      );
     }
-    return suggestions.albums.slice(0, 3);
-  }, [suggestions, topResult]);
+    return sortByStartsWith(filtered, query).slice(0, 3);
+  }, [displayData, topResult, query]);
 
   const playlists = useMemo(() => {
-    if (!suggestions?.playlists) return [];
+    if (!displayData?.playlists) return [];
+    let filtered = displayData.playlists;
     if (topResult?.type === 'playlist') {
-      return suggestions.playlists.filter((p: any) => 
+      filtered = displayData.playlists.filter((p: any) => 
         p._id !== topResult.data._id && p.id !== topResult.data.id
-      ).slice(0, 3);
+      );
     }
-    return suggestions.playlists.slice(0, 3);
-  }, [suggestions, topResult]);
+    return sortByStartsWith(filtered, query).slice(0, 3);
+  }, [displayData, topResult, query]);
+
+  const hasResults = useMemo(() => {
+    if (isLoading) return true; // Show loading instead
+    if (activeFilter === 'all') return !!topResult || songs.length > 0 || artists.length > 0 || albums.length > 0 || playlists.length > 0;
+    if (activeFilter === 'songs') return songs.length > 0;
+    if (activeFilter === 'artists') return artists.length > 0;
+    if (activeFilter === 'albums') return albums.length > 0;
+    if (activeFilter === 'playlists') return playlists.length > 0;
+    return false;
+  }, [activeFilter, topResult, songs, artists, albums, playlists, isLoading]);
 
   if (!visible) return null;
 
-  if (isSuggesting && !suggestions) {
+  if (isLoading && !displayData) {
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Searching...</Text>
@@ -109,16 +148,15 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
     );
   }
 
-  if (!suggestions || (!topResult && songs.length === 0)) {
-    return query.length > 0 ? (
+  if (!hasResults && query.length > 0) {
+    return (
       <View style={styles.emptyContainer}>
-        <Text style={styles.emptyTitle}>No results found for</Text>
-        <Text style={styles.emptyQuery}>"{query}"</Text>
+        <Text style={styles.emptyTitle}>No results found for "{query}"{activeFilter !== 'all' ? ` in ${activeFilter}` : ''}</Text>
         <Text style={styles.emptyHint}>
           Check your spelling, or try different keywords.
         </Text>
       </View>
-    ) : null;
+    );
   }
 
   return (
@@ -143,7 +181,7 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
             <Text style={styles.sectionTitle}>Songs</Text>
             {songs.map((song: any) => (
               <SongResultRow
-                key={song._id || song.videoId || song.externalId}
+                key={song.externalId || song._id || song.videoId || song.id || `${song.title}-${song.artist}`}
                 song={song}
                 searchQuery={query}
               />
@@ -201,7 +239,7 @@ SearchResults.displayName = 'SearchResults';
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#09090b',
   },
   scrollView: {
     flex: 1,
@@ -216,13 +254,14 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 12,
   },
   loadingContainer: {
     flex: 1,
     paddingTop: 40,
     alignItems: 'center',
+    backgroundColor: '#09090b',
   },
   loadingText: {
     color: '#b3b3b3',
@@ -230,25 +269,21 @@ const styles = StyleSheet.create({
   },
   emptyContainer: {
     flex: 1,
-    paddingTop: 60,
-    paddingHorizontal: 32,
+    justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 40, 
+    paddingBottom: 50, 
   },
   emptyTitle: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 4,
-  },
-  emptyQuery: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 16,
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
   },
   emptyHint: {
-    color: '#b3b3b3',
-    fontSize: 14,
+    color: '#a1a1aa',
+    fontSize: 12,
     textAlign: 'center',
     lineHeight: 20,
   },

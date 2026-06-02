@@ -1,16 +1,9 @@
 // components/home/HomeSkeleton.tsx
 import React, { useEffect, useMemo } from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  interpolate,
-  Easing,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RADIUS, COLORS, TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
+import { Skeleton } from '../Skeleton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 10;
@@ -19,47 +12,9 @@ const CARD_WIDTH = (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - GRID_GAP) / 2;
 const CARD_HEIGHT = 60;
 const CAROUSEL_CARD_WIDTH = SCREEN_WIDTH * 0.38;
 
-// ─── Shimmer Bone ───
-const ShimmerBone = React.memo(({
-  width,
-  height,
-  borderRadius = RADIUS.sm,
-  style,
-}: {
-  width: number | string;
-  height: number;
-  borderRadius?: number;
-  style?: any;
-}) => {
-  const shimmer = useSharedValue(0);
+// ─── Shimmer Bone (Aliased to global Skeleton) ───
+const ShimmerBone = Skeleton;
 
-  useEffect(() => {
-    shimmer.value = withRepeat(
-      withTiming(1, { duration: 1200, easing: Easing.bezier(0.4, 0, 0.6, 1) }),
-      -1,
-      true
-    );
-  }, []);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(shimmer.value, [0, 1], [0.08, 0.2]),
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        {
-          width: width as any,
-          height,
-          borderRadius,
-          backgroundColor: '#a1a1aa',
-        },
-        animatedStyle,
-        style,
-      ]}
-    />
-  );
-});
 
 // ─── Hero Skeleton (Pattern + Quick Picks Grid) ───
 export const HeroSkeleton = React.memo(() => {

@@ -2,320 +2,458 @@ import React, { useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
-import { BlurView } from 'expo-blur';
-import Animated, { 
-    useSharedValue, 
-    useAnimatedStyle, 
-    withRepeat, 
-    withTiming, 
+import Animated, {
+    useSharedValue,
+    useAnimatedStyle,
+    withRepeat,
+    withTiming,
     withSequence,
     Easing,
-    interpolate
 } from 'react-native-reanimated';
 
-const VIBRA_LOGO = require('../../assets/images/vibra-white.png');
 const GRAIN_TEXTURE = require('../../assets/images/grain.jpg');
-
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-interface MixCoverProps {
-    variant: 'daily' | 'weekly';
-    title?: string; // Optional custom title override
-    style?: any;
-}
-
-/**
- * Animated Gradient Blob Component
- * Creates a soft, moving organic shape using LinearGradient
- */
-const AnimatedBlob = ({ 
-    color, 
-    size, 
-    initialPos, 
-    duration = 8000, 
-    delay = 0 
-}: { 
-    color: string, 
-    size: number, 
-    initialPos: { x: number, y: number },
-    duration?: number,
-    delay?: number
+// ─── Floating Orb (replaces GeometricShape + AnimatedBlob) ───────────────────
+const FloatingOrb = ({
+    color,
+    size,
+    initialPos,
+    duration = 10000,
+    dominant = false,
+    gradientStart = { x: 0.3, y: 0.3 },
+    gradientEnd = { x: 1, y: 1 },
+    opacity = 1,
+}: {
+    color: string;
+    size: number;
+    initialPos: { x: number; y: number };
+    duration?: number;
+    dominant?: boolean;
+    gradientStart?: { x: number; y: number };
+    gradientEnd?: { x: number; y: number };
+    opacity?: number;
 }) => {
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
     const scale = useSharedValue(1);
 
     useEffect(() => {
-        translateX.value = withRepeat(
-            withSequence(
-                withTiming(20, { duration, easing: Easing.inOut(Easing.sin) }),
-                withTiming(-20, { duration, easing: Easing.inOut(Easing.sin) })
-            ),
-            -1,
-            true
-        );
-        translateY.value = withRepeat(
-            withSequence(
-                withTiming(-30, { duration: duration * 1.2, easing: Easing.inOut(Easing.sin) }),
-                withTiming(30, { duration: duration * 1.2, easing: Easing.inOut(Easing.sin) })
-            ),
-            -1,
-            true
-        );
-        scale.value = withRepeat(
-            withSequence(
-                withTiming(1.1, { duration: duration * 1.5 }),
-                withTiming(0.9, { duration: duration * 1.5 })
-            ),
-            -1,
-            true
-        );
+        const delay = Math.random() * 800;
+        const timer = setTimeout(() => {
+            translateX.value = withRepeat(
+                withSequence(
+                    withTiming(dominant ? 14 : 20, { duration, easing: Easing.inOut(Easing.sin) }),
+                    withTiming(dominant ? -14 : -20, { duration, easing: Easing.inOut(Easing.sin) })
+                ),
+                -1,
+                true
+            );
+            translateY.value = withRepeat(
+                withSequence(
+                    withTiming(dominant ? -16 : -24, { duration: duration * 1.3, easing: Easing.inOut(Easing.sin) }),
+                    withTiming(dominant ? 16 : 24, { duration: duration * 1.3, easing: Easing.inOut(Easing.sin) })
+                ),
+                -1,
+                true
+            );
+            scale.value = withRepeat(
+                withSequence(
+                    withTiming(dominant ? 1.06 : 1.1, { duration: duration * 1.5 }),
+                    withTiming(0.94, { duration: duration * 1.5 })
+                ),
+                -1,
+                true
+            );
+        }, delay);
+        return () => clearTimeout(timer);
     }, []);
 
-    const animatedStyle = useAnimatedStyle(() => ({
+    const animStyle = useAnimatedStyle(() => ({
         transform: [
             { translateX: translateX.value },
             { translateY: translateY.value },
-            { scale: scale.value }
+            { scale: scale.value },
         ],
     }));
 
     return (
-        <Animated.View 
+        <Animated.View
             style={[
-                styles.blobBase, 
-                { 
-                    width: size, 
-                    height: size, 
+                {
+                    position: 'absolute',
+                    width: size,
+                    height: size,
                     borderRadius: size / 2,
                     left: initialPos.x,
                     top: initialPos.y,
-                    backgroundColor: color,
+                    opacity,
                 },
-                animatedStyle
+                animStyle,
             ]}
         >
             <LinearGradient
                 colors={[color, 'transparent']}
                 style={StyleSheet.absoluteFill}
-                start={{ x: 0.5, y: 0.5 }}
-                end={{ x: 1, y: 1 }}
+                start={gradientStart}
+                end={gradientEnd}
             />
         </Animated.View>
     );
 };
 
-/**
- * Noise Overlay Component
- * Simulates film grain for a premium texture
- */
+// ─── Noise Overlay ────────────────────────────────────────────────────────────
 const NoiseOverlay = () => (
-    <Image 
-        source={GRAIN_TEXTURE} 
-        style={[StyleSheet.absoluteFill, { opacity: 0.04 }]} 
+    <Image
+        source={GRAIN_TEXTURE}
+        style={[StyleSheet.absoluteFill, { opacity: 0.06 }]}
         contentFit="cover"
     />
 );
 
-/**
- * Geometric Shape for Weekly Mix
- */
-const GeometricShape = ({ 
-    color, 
-    size, 
-    initialPos, 
-    variant,
-    rotation = 0,
-    dominant = false
-}: { 
-    color: string, 
-    size: number, 
-    initialPos: { x: number, y: number },
-    variant: 'daily' | 'weekly',
-    rotation?: number,
-    dominant?: boolean
-}) => {
-    const isDaily = variant === 'daily';
-    const rotate = useSharedValue(rotation);
-    const translateX = useSharedValue(0);
-    const translateY = useSharedValue(0);
-    const scale = useSharedValue(1);
-
-    useEffect(() => {
-        const randomDelay = Math.random() * 2000;
-        
-        const rotationDuration = isDaily 
-            ? (dominant ? 18000 : 22000) 
-            : (dominant ? 30000 : 35000);
-            
-        const scaleDuration = isDaily ? 6000 : 8000;
-        const movementDuration = isDaily ? 8000 : 12000;
-
-        const startAnimations = () => {
-            rotate.value = withRepeat(
-                withTiming(rotation + (dominant ? 120 : 60), { 
-                    duration: rotationDuration, 
-                    easing: isDaily ? Easing.inOut(Easing.sin) : Easing.linear 
-                }),
-                -1,
-                true
-            );
-
-            scale.value = withRepeat(
-                withTiming(isDaily ? 1.12 : 1.05, { 
-                    duration: scaleDuration,
-                    easing: Easing.inOut(Easing.sin)
-                }),
-                -1,
-                true
-            );
-
-            if (isDaily) {
-                translateX.value = withRepeat(
-                    withSequence(
-                        withTiming(15, { duration: movementDuration, easing: Easing.inOut(Easing.sin) }),
-                        withTiming(-15, { duration: movementDuration, easing: Easing.inOut(Easing.sin) })
-                    ),
-                    -1,
-                    true
-                );
-                translateY.value = withRepeat(
-                    withSequence(
-                        withTiming(-20, { duration: movementDuration * 1.2, easing: Easing.inOut(Easing.sin) }),
-                        withTiming(20, { duration: movementDuration * 1.2, easing: Easing.inOut(Easing.sin) })
-                    ),
-                    -1,
-                    true
-                );
-            }
-        };
-
-        const timeout = setTimeout(startAnimations, randomDelay);
-        return () => clearTimeout(timeout);
-    }, [isDaily, dominant]);
-
-    const animatedStyle = useAnimatedStyle(() => ({
-        transform: [
-            { rotate: `${rotate.value}deg` },
-            { translateX: translateX.value },
-            { translateY: translateY.value },
-            { scale: scale.value }
-        ],
-    }));
-
-    return (
-        <Animated.View 
-            style={[
-                styles.geometricBase, 
-                { 
-                    width: size, 
-                    height: size * (dominant ? 0.8 : 0.6), 
-                    left: initialPos.x,
-                    top: initialPos.y,
-                    backgroundColor: color,
-                    borderWidth: 1.5,
-                    borderColor: 'rgba(255,255,255,0.15)',
-                    zIndex: dominant ? 2 : 1,
-                    shadowColor: color,
-                    shadowOffset: { width: 0, height: 0 },
-                    shadowOpacity: dominant ? 0.35 : 0.15,
-                    shadowRadius: 20,
-                },
-                animatedStyle
-            ]}
-        >
-            <BlurView intensity={dominant ? 40 : 20} style={StyleSheet.absoluteFill} tint="light" />
-        </Animated.View>
-    );
+// ─── Time Context ─────────────────────────────────────────────────────────────
+const getTimeContext = () => {
+    const hour = new Date().getHours();
+    const day = new Date().getDay();
+    const isWeekend = day === 0 || day === 6;
+    if (hour >= 5 && hour < 12) return { type: 'morning', isWeekend };
+    if (hour >= 12 && hour < 17) return { type: 'afternoon', isWeekend };
+    if (hour >= 17 && hour < 21) return { type: 'evening', isWeekend };
+    return { type: 'night', isWeekend };
 };
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+interface MixCoverProps {
+    variant: 'daily' | 'weekly';
+    title?: string;
+    style?: any;
+}
 
 export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
     const isDaily = variant === 'daily';
+    const context = useMemo(() => getTimeContext(), []);
 
-    // Design Tokens
     const config = useMemo(() => {
-        if (isDaily) {
-            return {
-                baseGradient: ['#db2777', '#be185d', '#000'] as string[],
-                blobs: [],
-                shapes: [
-                    { color: 'rgba(244, 114, 182, 0.5)', size: 320, pos: { x: -60, y: 30 }, rotation: 15, dominant: true },
-                    { color: 'rgba(251, 191, 36, 0.4)', size: 250, pos: { x: 120, y: 150 }, rotation: -20 },
-                    { color: 'rgba(252, 165, 165, 0.3)', size: 200, pos: { x: 40, y: 220 }, rotation: 45 },
-                ],
-                label: 'DAILY MIX',
-                subtitle: "Today's Energy",
-                brandColor: '#e890bc',
-            };
-        }
-        return {
-            baseGradient: ['#1e1b4b', '#312e81', '#09090b'] as string[],
-            blobs: [],
-            shapes: [
-                { color: 'rgba(167, 139, 250, 0.5)', size: 320, pos: { x: -60, y: 30 }, rotation: 15, dominant: true },
-                { color: 'rgba(124, 58, 237, 0.4)', size: 250, pos: { x: 120, y: 150 }, rotation: -20 },
-                { color: 'rgba(196, 181, 253, 0.3)', size: 200, pos: { x: 40, y: 220 }, rotation: 45 },
-            ],
-            label: 'WEEKLY MIX',
-            subtitle: 'Your Recap',
-            brandColor: '#a78bfa',
+        const { type, isWeekend } = context;
+
+        const palettes: Record<string, any> = {
+            morning: {
+                daily: {
+                    gradient: ['#e11d48', '#7c3aed', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(225,29,72,0.85)', size: 300, 
+                            pos: { x: -90, y: -80 }, 
+                            dominant: true, duration: 9000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(124,58,237,0.7)', size: 240, 
+                            pos: { x: 80, y: 160 },
+                            duration: 11000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(251,113,133,0.5)', size: 180, 
+                            pos: { x: 160, y: -40 },
+                            duration: 13000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.9)', size: 6, pos: { x: 60, y: 80 } },
+                        { color: 'rgba(251,113,133,1)', size: 4, pos: { x: 200, y: 200 } },
+                        { color: 'rgba(255,255,255,0.7)', size: 3, pos: { x: 140, y: 120 } },
+                    ],
+                    label: 'DAILY MIX',
+                    subtitle: 'Morning Energy',
+                },
+                weekly: {
+                    gradient: ['#4f46e5', '#7c3aed', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(99,102,241,0.9)', size: 300, 
+                            pos: { x: -90, y: -80 },
+                            dominant: true, duration: 12000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(167,139,250,0.65)', size: 220, 
+                            pos: { x: 100, y: 170 },
+                            duration: 14000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(79,70,229,0.4)', size: 160, 
+                            pos: { x: 170, y: -30 },
+                            duration: 16000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.9)', size: 6, pos: { x: 70, y: 90 } },
+                        { color: 'rgba(167,139,250,1)', size: 4, pos: { x: 190, y: 190 } },
+                        { color: 'rgba(255,255,255,0.6)', size: 3, pos: { x: 130, y: 140 } },
+                    ],
+                    label: 'WEEKLY MIX',
+                    subtitle: 'Your Week in Music',
+                },
+            },
+            afternoon: {
+                daily: {
+                    gradient: ['#c026d3', '#7c3aed', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(192,38,211,0.9)', size: 300, 
+                            pos: { x: -90, y: -80 },
+                            dominant: true, duration: 9000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(139,92,246,0.65)', size: 230, 
+                            pos: { x: 90, y: 150 },
+                            duration: 11000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(232,121,249,0.45)', size: 170, 
+                            pos: { x: 160, y: -40 },
+                            duration: 13000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.9)', size: 6, pos: { x: 55, y: 75 } },
+                        { color: 'rgba(232,121,249,1)', size: 4, pos: { x: 195, y: 195 } },
+                        { color: 'rgba(255,255,255,0.6)', size: 3, pos: { x: 145, y: 115 } },
+                    ],
+                    label: 'DAILY MIX',
+                    subtitle: "Today's Energy",
+                },
+                weekly: {
+                    gradient: ['#3730a3', '#6d28d9', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(79,70,229,0.9)', size: 300, 
+                            pos: { x: -90, y: -80 },
+                            dominant: true, duration: 12000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(139,92,246,0.6)', size: 220, 
+                            pos: { x: 100, y: 160 },
+                            duration: 14000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(109,40,217,0.4)', size: 160, 
+                            pos: { x: 165, y: -35 },
+                            duration: 16000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.9)', size: 6, pos: { x: 65, y: 85 } },
+                        { color: 'rgba(139,92,246,1)', size: 4, pos: { x: 185, y: 185 } },
+                        { color: 'rgba(255,255,255,0.6)', size: 3, pos: { x: 135, y: 130 } },
+                    ],
+                    label: 'WEEKLY MIX',
+                    subtitle: 'Your Week in Music',
+                },
+            },
+            evening: {
+                daily: {
+                    gradient: ['#9333ea', '#e11d48', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(147,51,234,0.9)', size: 300, 
+                            pos: { x: -90, y: -80 },
+                            dominant: true, duration: 10000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(225,29,72,0.65)', size: 230, 
+                            pos: { x: 95, y: 155 },
+                            duration: 12000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(192,38,211,0.45)', size: 170, 
+                            pos: { x: 160, y: -35 },
+                            duration: 14000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.9)', size: 6, pos: { x: 58, y: 78 } },
+                        { color: 'rgba(249,168,212,1)', size: 4, pos: { x: 192, y: 192 } },
+                        { color: 'rgba(255,255,255,0.6)', size: 3, pos: { x: 138, y: 118 } },
+                    ],
+                    label: 'DAILY MIX',
+                    subtitle: 'Evening Vibes',
+                },
+                weekly: {
+                    gradient: ['#1e1b4b', '#4c1d95', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(99,102,241,0.8)', size: 300, 
+                            pos: { x: -90, y: -80 },
+                            dominant: true, duration: 13000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(124,58,237,0.55)', size: 220, 
+                            pos: { x: 100, y: 160 },
+                            duration: 15000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(139,92,246,0.35)', size: 160, 
+                            pos: { x: 165, y: -35 },
+                            duration: 17000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.85)', size: 6, pos: { x: 62, y: 82 } },
+                        { color: 'rgba(167,139,250,1)', size: 4, pos: { x: 188, y: 188 } },
+                        { color: 'rgba(255,255,255,0.55)', size: 3, pos: { x: 132, y: 128 } },
+                    ],
+                    label: 'WEEKLY MIX',
+                    subtitle: isWeekend ? 'Weekend Recap' : 'Weekly Recap',
+                },
+            },
+            night: {
+                daily: {
+                    gradient: ['#581c87', '#312e81', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(126,34,206,0.9)', size: 300, 
+                            pos: { x: -90, y: -80 },
+                            dominant: true, duration: 14000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(168,85,247,0.55)', size: 220, 
+                            pos: { x: 100, y: 160 },
+                            duration: 16000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(109,40,217,0.35)', size: 165, 
+                            pos: { x: 165, y: -35 },
+                            duration: 18000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.85)', size: 5, pos: { x: 62, y: 82 } },
+                        { color: 'rgba(216,180,254,1)', size: 4, pos: { x: 185, y: 185 } },
+                        { color: 'rgba(255,255,255,0.5)', size: 3, pos: { x: 130, y: 125 } },
+                    ],
+                    label: 'DAILY MIX',
+                    subtitle: 'Late Night Vibes',
+                },
+                weekly: {
+                    gradient: ['#1e1b4b', '#0f172a', '#000'],
+                    orbs: [
+                        { 
+                            color: 'rgba(79,70,229,0.75)', size: 300, 
+                            pos: { x: -90, y: -80 },
+                            dominant: true, duration: 15000,
+                            gradientStart: { x: 0.2, y: 0.2 },
+                            gradientEnd: { x: 1, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(99,102,241,0.5)', size: 220, 
+                            pos: { x: 100, y: 165 },
+                            duration: 17000,
+                            gradientStart: { x: 0.5, y: 0 },
+                            gradientEnd: { x: 0, y: 1 }
+                        },
+                        { 
+                            color: 'rgba(67,56,202,0.35)', size: 160, 
+                            pos: { x: 165, y: -35 },
+                            duration: 19000,
+                            gradientStart: { x: 0, y: 0.5 },
+                            gradientEnd: { x: 1, y: 0.5 }
+                        },
+                    ],
+                    accents: [
+                        { color: 'rgba(255,255,255,0.8)', size: 5, pos: { x: 65, y: 85 } },
+                        { color: 'rgba(129,140,248,1)', size: 4, pos: { x: 182, y: 182 } },
+                        { color: 'rgba(255,255,255,0.5)', size: 3, pos: { x: 128, y: 122 } },
+                    ],
+                    label: 'WEEKLY MIX',
+                    subtitle: isWeekend ? 'Weekend Recap' : 'Your Weekly Recap',
+                },
+            },
         };
-    }, [isDaily]);
+        return palettes[type][isDaily ? 'daily' : 'weekly'];
+    }, [isDaily, context]);
 
     return (
         <View style={[styles.container, style]}>
             {/* 1. Base Gradient */}
             <LinearGradient
-                colors={config.baseGradient as any}
+                colors={config.gradient}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 1 }}
                 style={StyleSheet.absoluteFill}
             />
 
-            {/* 2. Abstract Content (Unified Geometric Glass for both) */}
-            {config.shapes.map((shape, i) => (
-                <GeometricShape 
-                    key={`${variant}-shape-${i}`}
-                    color={shape.color}
-                    size={shape.size}
-                    initialPos={shape.pos}
-                    variant={variant}
-                    rotation={shape.rotation}
-                    dominant={shape.dominant}
-                />
+            {/* 2. Floating Orbs */}
+            {config.orbs.map((orb: any, i: number) => (
+                <FloatingOrb
+                    key={`${variant}-orb-${i}`}
+                    color={orb.color}
+                    size={orb.size}
+                    initialPos={orb.pos}
+                    duration={orb.duration}
+                    dominant={orb.dominant}
+                    gradientStart={orb.gradientStart}
+                    gradientEnd={orb.gradientEnd}
+                    opacity={orb.opacity ?? 1}
+                    />
             ))}
 
-            {/* 3. Texture Overlay (Grain) */}
+            {/* 3. Grain Texture */}
             <NoiseOverlay />
 
-            {/* 4. Glassmorphism for Weekly */}
-            {!isDaily && (
-                <LinearGradient
-                    colors={['rgba(255,255,255,0.05)', 'transparent']}
-                    style={StyleSheet.absoluteFill}
-                />
-            )}
+            {/* Subtle Overlay to make it feel "baked in" */}
+            <View style={{ ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.12)', zIndex: 1 }} />
 
-            {/* 5. Vignette for text readability */}
+            {/* 4. Bottom vignette for text readability */}
             <LinearGradient
-                colors={['transparent', 'rgba(0,0,0,0.85)']}
+                colors={['transparent', 'rgba(0,0,0,0.75)']}
                 style={styles.vignette}
             />
 
-            {/* 6. Typography Badge */}
+            {/* 5. Typography */}
             <View style={styles.textContainer}>
                 <Text style={styles.label}>{config.label}</Text>
                 <Text style={styles.subtitle}>{config.subtitle}</Text>
-            </View>
-
-            {/* 7. Branding Mark (Top Right) */}
-            <View style={styles.brandMark}>
-                <Image 
-                    source={VIBRA_LOGO} 
-                    style={styles.logo} 
-                    contentFit="contain"
-                    tintColor={config.brandColor}
-                />
             </View>
         </View>
     );
@@ -326,73 +464,38 @@ MixCover.displayName = 'MixCover';
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        borderRadius: 20,
         backgroundColor: '#000',
         overflow: 'hidden',
-        // Slight shadow for depth
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 10 },
-        shadowOpacity: 0.3,
-        shadowRadius: 15,
-        elevation: 8,
-    },
-    blobBase: {
-        position: 'absolute',
-        opacity: 0.25,
-    },
-    geometricBase: {
-        position: 'absolute',
-        opacity: 0.4,
-        borderRadius: 4,
-    },
-    glassOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: '#fff',
     },
     vignette: {
         position: 'absolute',
         left: 0,
         right: 0,
         bottom: 0,
-        height: '65%',
+        height: '55%',
     },
     textContainer: {
         position: 'absolute',
-        bottom: 24,
-        left: 20,
-        right: 20,
+        bottom: 20,
+        left: 18,
+        right: 18,
     },
     label: {
         color: '#fff',
-        fontSize: 29,
-        fontWeight: '700',
-        letterSpacing: -1.2,
+        fontSize: 22,
+        fontWeight: '800',
+        letterSpacing: -0.5,
         textTransform: 'uppercase',
-        textShadowColor: 'rgba(0,0,0,0.5)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+        // textShadowColor: 'rgba(0,0,0,0.4)',
+        // textShadowOffset: { width: 0, height: 1 },
+        // textShadowRadius: 4,
     },
     subtitle: {
-        color: 'rgba(255, 255, 255, 0.9)',
-        fontSize: 13,
+        color: 'rgba(255,255,255,0.75)',
+        fontSize: 11,
         fontWeight: '600',
-        marginTop: 2,
-        letterSpacing: 0.2,
+        marginTop: 3,
+        letterSpacing: 1.2,
         textTransform: 'uppercase',
-        textShadowColor: 'rgba(0,0,0,0.4)',
-        textShadowOffset: { width: 0, height: 1 },
-        textShadowRadius: 2,
     },
-    brandMark: {
-        position: 'absolute',
-        right: 0,
-        top: 5,
-        width: 40,
-        height: 20,
-    },
-    logo: {
-        width: '100%',
-        height: '100%',
-        opacity: 0.8,
-    }
 });

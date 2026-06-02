@@ -5,10 +5,12 @@ import {
     Text,
     TouchableOpacity,
     Dimensions,
-    Alert
+    Alert,
+    BackHandler,
+    Share
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useGlobalSearchParams } from 'expo-router';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useStreamStore } from '@/stores/useStreamStore';
@@ -25,11 +27,9 @@ import {
     Pause,
     MoreVertical,
     Shuffle,
-    CirclePlus,
-    CircleArrowDown,
-    Check,
-    Music,
+    Share2,
 } from 'lucide-react-native';
+import { SharpPlay, SharpPause, SharpShuffle, SharpPlus, SharpCheck } from '@/components/SharpIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { resolveAssetUrl } from '@/lib/url';
@@ -43,12 +43,13 @@ import { MixCover } from '@/components/home/MixCover';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { useDownloadStore } from '@/stores/useDownloadStore';
 import EditPlaylistModal from '@/components/modals/EditPlaylistModal';
-import PlaylistOptions from '@/components/PlaylistOptions';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
-import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
+import { Music, CircleArrowDown } from 'lucide-react-native';
+import Colors from '@/constants/Colors';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#7B2CF5';
+const ACCENT_COLOR = Colors.accent;
 
 // ─── PlaylistHeader is defined OUTSIDE the screen component ───────────────────
 // This is critical: if defined inside, React creates a new type on each render
@@ -71,6 +72,8 @@ interface PlaylistHeaderProps {
     onToggleShuffle: () => void;
     onPlayAll: () => void;
     onPause: () => void;
+    onOptions: () => void;
+    onShare: () => void;
     width: number;
 }
 
@@ -92,6 +95,8 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
     onToggleShuffle,
     onPlayAll,
     onPause,
+    onOptions,
+    onShare,
     width,
 }) => {
     const isOwner = playlist.userId === user?.id;
@@ -103,14 +108,14 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
             <LinearGradient
                 colors={[
                     'transparent',
-                    'rgba(0,0,0,0.05)',
-                    'rgba(0,0,0,0.15)',
-                    'rgba(0,0,0,0.3)',
-                    'rgba(0,0,0,0.5)',
-                    'rgba(0,0,0,0.7)',
-                    'rgba(0,0,0,0.85)',
-                    '#000000',
-                    '#000000',
+                    'rgba(9,9,11,0.05)',
+                    'rgba(9,9,11,0.15)',
+                    'rgba(9,9,11,0.3)',
+                    'rgba(9,9,11,0.5)',
+                    'rgba(9,9,11,0.7)',
+                    'rgba(9,9,11,0.85)',
+                    Colors.background,
+                    Colors.background,
                 ]}
                 locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
                 style={{ paddingTop: 60, paddingBottom: 10 }}
@@ -132,7 +137,7 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
                                 cachePolicy="memory-disk"
                             />
                         ) : (
-                            <View style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2, overflow: 'hidden', backgroundColor: '#18181b', alignItems: 'center', justifyContent: 'center' }}>
+                            <View style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2, overflow: 'hidden', backgroundColor: Colors.surfaceLighter, alignItems: 'center', justifyContent: 'center' }}>
                                 {isDiscovery ? (
                                     <MixCover title={playlist.name} variant={String(id)?.includes('weekly') ? 'weekly' : 'daily'} />
                                 ) : (
@@ -143,7 +148,7 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
                     </View>
 
                     <View className="w-full mt-5">
-                        <Text className="text-white text-[24px] font-bold mb-2 leading-tight tracking-tight" numberOfLines={1}>
+                        <Text className="text-white text-[24px] font-semibold mb-2 leading-tight tracking-tight" numberOfLines={1}>
                             {playlist.name}
                         </Text>
                         <Text className="text-zinc-400 text-sm font-medium mb-4 leading-5" numberOfLines={1}>
@@ -162,7 +167,7 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
                                     contentFit="contain"
                                 />
                             )}
-                            <Text className="text-white text-[11px] font-bold tracking-wider">
+                            <Text className="text-white text-[11px] font-semibold tracking-wider">
                                 {creatorName} <Text className="text-zinc-400 font-medium lowercase">• {allSongs.length} tracks</Text>
                             </Text>
                         </View>
@@ -171,39 +176,36 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
 
                 <View className="px-6 pt-4 pb-0 flex-row items-center justify-between">
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
-                        {isDiscovery && (
-                                 <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
-                                 {isSaved ? (
-                                     <View style={{ width: 22, height: 22, backgroundColor: ACCENT_COLOR, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
-                                         <Check size={14} color="black" strokeWidth={4} />
-                                     </View>
-                                 ) : (
-                                     <CirclePlus size={22} color="#b3b3b3" />
-                                 )}
-                             </TouchableOpacity>
-                         )}
- 
-                         <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
-                             {isPlaylistDownloaded ? (
-                                 <DownloadedIcon size={22} />
-                             ) : (
-                                 <CircleArrowDown size={24} color="#b3b3b3" />
-                             )}
-                         </TouchableOpacity>
- 
-                         <PlaylistOptions
-                             playlist={playlist}
-                             isDiscovery={isDiscovery}
-                             isDownloaded={isPlaylistDownloaded}
-                             onEdit={onEdit}
-                             onDownload={onDownload}
-                             trigger={
-                                 <View style={{ height: 40, width: 32, alignItems: 'center', justifyContent: 'center' }}>
-                                     <MoreVertical size={22} color="#b3b3b3" />
-                                 </View>
-                             }
-                         />
-                     </View>
+                        {!isDiscovery ? (
+                            <>
+                                <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
+                                    {isSaved ? (
+                                        <View style={{ width: 22, height: 22, backgroundColor: ACCENT_COLOR, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
+                                            <SharpCheck size={14} color="black" />
+                                        </View>
+                                    ) : (
+                                        <SharpPlus size={22} color="#b3b3b3" />
+                                    )}
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
+                                    {isPlaylistDownloaded ? (
+                                        <DownloadedIcon size={22} />
+                                    ) : (
+                                        <CircleArrowDown size={24} color="#b3b3b3" />
+                                    )}
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={onShare} activeOpacity={0.7}>
+                                    <Share2 size={22} color="#b3b3b3" />
+                                </TouchableOpacity>
+
+                                <TouchableOpacity onPress={onOptions} activeOpacity={0.7}>
+                                    <MoreVertical size={22} color="#b3b3b3" />
+                                </TouchableOpacity>
+                            </>
+                        ) : null}
+                      </View>
  
                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
                          <TouchableOpacity onPress={onToggleShuffle} activeOpacity={0.7}>
@@ -214,7 +216,7 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
                                     width: 4,
                                     height: 4,
                                     borderRadius: 2,
-                                    backgroundColor: '#7B2CF5',
+                                    backgroundColor: ACCENT_COLOR,
                                     marginTop: 2,
                                     position: 'absolute',
                                     bottom: -6
@@ -246,9 +248,12 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
 
 export default function PlaylistScreen() {
     const { id } = useLocalSearchParams();
+    const { from } = useGlobalSearchParams();
     const router = useRouter();
+    const listRef = React.useRef<any>(null);
     const { user } = useUser();
     const [isEditModalVisible, setIsEditModalVisible] = useState(false);
+    const optionsRef = React.useRef<CollectionOptionsRef>(null);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
 
     const { playlists, fetchPlaylistById, updatePlaylist, isLoading: isLoadingPlaylist } = usePlaylistStore();
@@ -263,6 +268,30 @@ export default function PlaylistScreen() {
     const { dailyMix, weeklyMix, isLoadingDailyMix, isLoadingWeeklyMix } = useStreamStore();
     const { isItemSaved, toggleSaveItem } = useSavedItemsStore();
     const { downloadPlaylist, downloadedPlaylists } = useDownloadStore();
+
+    const handleBack = useCallback(() => {
+        // If we have a clear context of where we came from, use it to switch back to that tab
+        if (from === 'search') {
+            router.push('/(tabs)/search');
+            return;
+        } 
+        
+        if (from === 'library') {
+            router.push('/(tabs)/library');
+            return;
+        }
+
+        if (from === 'home') {
+            router.push('/(tabs)');
+            return;
+        }
+
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(tabs)/library');
+        }
+    }, [from, router]);
 
     const isDiscovery = id === 'daily-mix' || id === 'weekly-mix';
 
@@ -286,10 +315,28 @@ export default function PlaylistScreen() {
 
     useEffect(() => {
         if (id && !isDiscovery) {
+            // Reset scroll position on ID change
+            listRef.current?.scrollToOffset({ offset: 0, animated: false });
+            
             setIsInitialLoading(true);
             fetchPlaylistById(id as string);
         }
     }, [id, isDiscovery]);
+
+    // Handle system back gesture
+    useEffect(() => {
+        const backAction = () => {
+            handleBack();
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener(
+            'hardwareBackPress',
+            backAction
+        );
+
+        return () => backHandler.remove();
+    }, [handleBack]); // Depend on handleBack to avoid stale closures
 
     useEffect(() => {
         if (!isLoading && playlist) {
@@ -370,15 +417,8 @@ export default function PlaylistScreen() {
 
     const colors = useDynamicColors(artworkUrl);
 
-    const handleBack = () => {
-        if (router.canGoBack()) {
-            router.back();
-        } else {
-            router.replace('/(tabs)/library');
-        }
-    };
 
-    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : '#121212';
+    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : Colors.surface;
 
     const filteredSongs = allSongs;
 
@@ -434,6 +474,17 @@ export default function PlaylistScreen() {
         );
     }, [allSongs, playlist, downloadPlaylist]);
 
+    const handleShare = useCallback(async () => {
+        if (!playlist) return;
+        try {
+            const cleanId = (id as string).replace(/^jiosaavn_playlist_/, '');
+            const message = `Check out this playlist "${playlist.name}" on Vibra!\n\nListen here: https://vibra-969f.onrender.com/playlist/${cleanId}`;
+            await Share.share({ message, title: playlist.name });
+        } catch (error) {
+            console.error('Error sharing playlist:', error);
+        }
+    }, [playlist, id]);
+
     const handleEditSave = useCallback(async (name: string, description: string) => {
         try {
             await updatePlaylist(id as string, name, description);
@@ -442,7 +493,7 @@ export default function PlaylistScreen() {
         }
     }, [id, updatePlaylist]);
 
-    const renderHeader = useCallback(() => (
+    const headerComponent = useMemo(() => (
         <PlaylistHeader
             playlist={playlist}
             allSongs={allSongs}
@@ -461,9 +512,11 @@ export default function PlaylistScreen() {
             onToggleShuffle={toggleShuffle}
             onPlayAll={handlePlayPlaylist}
             onPause={pauseTrack}
+            onOptions={() => playlist && optionsRef.current?.open({ ...playlist, title: playlist.name }, 'playlist')}
+            onShare={handleShare}
             width={width}
         />
-    ), [playlist, allSongs, artworkUrl, colors, isDiscovery, id, user, isSaved, isPlaylistDownloaded, isCurrentPlaylistPlaying, shuffleMode, handleDownloadPlaylist, handlePlayPlaylist]);
+    ), [playlist, allSongs, artworkUrl, colors, isDiscovery, id, user, isSaved, isPlaylistDownloaded, isCurrentPlaylistPlaying, shuffleMode, handleDownloadPlaylist, handlePlayPlaylist, handleShare]);
 
     const displaySongs = useMemo(() => {
         return allSongs.map((s: any) => ({
@@ -488,7 +541,7 @@ export default function PlaylistScreen() {
 
     if (!playlist) {
         return (
-            <View className="flex-1 bg-black items-center justify-center p-6">
+            <View className="flex-1 items-center justify-center p-6" style={{ backgroundColor: Colors.background }}>
                 <Text className="text-white text-lg mb-4">Playlist not found</Text>
                 <TouchableOpacity onPress={() => router.replace('/(tabs)/library' as any)} className="bg-zinc-800 px-6 py-2 rounded-full">
                     <Text className="text-white">Go Back</Text>
@@ -498,7 +551,7 @@ export default function PlaylistScreen() {
     }
 
     return (
-        <View className="flex-1 bg-black">
+        <View className="flex-1 mb-5" style={{ backgroundColor: Colors.background }}>
             <View
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
@@ -509,7 +562,7 @@ export default function PlaylistScreen() {
                         className="w-10 h-10 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" />
+                        <ArrowLeft size={24} color={Colors.textPrimary} />
                     </TouchableOpacity>
                 </SafeAreaView>
             </View>
@@ -518,17 +571,17 @@ export default function PlaylistScreen() {
                 style={[stickyHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }]}
                 pointerEvents="box-none"
             >
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#121212' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
 
                 <LinearGradient
-                    colors={[headerBaseColor, '#000000']}
+                    colors={[headerBaseColor, Colors.background]}
                     style={StyleSheet.absoluteFill}
                 />
 
                 <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
                     <View className="w-10 mr-2" />
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
-                        <Text className="text-white text-base font-bold" numberOfLines={1}>
+                        <Text className="text-white text-base font-semibold" numberOfLines={1}>
                             {playlist?.name}
                         </Text>
                     </Animated.View>
@@ -551,15 +604,17 @@ export default function PlaylistScreen() {
             </Animated.View>
 
                 <AnimatedFlashList
+                    ref={listRef}
                     data={displaySongs}
                     renderItem={renderTrackItem}
                     keyExtractor={(item: any) => item._id || item.id || item.externalId}
                     onScroll={scrollHandler}
                     scrollEventThrottle={16}
-                    ListHeaderComponent={renderHeader}
+                    ListHeaderComponent={headerComponent}
                     estimatedItemSize={80}
                     contentContainerStyle={{ paddingBottom: 100 }}
                 />
+                <CollectionOptions ref={optionsRef} />
 
             <EditPlaylistModal
                 visible={isEditModalVisible}

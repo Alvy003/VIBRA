@@ -20,6 +20,7 @@ const PRESS_SPRING = {
 interface AnimatedCardProps {
   children: React.ReactNode;
   onPress: () => void;
+  onLongPress?: () => void;
   style?: ViewStyle;
   scaleDown?: number;
   enableHaptic?: boolean;
@@ -29,6 +30,7 @@ interface AnimatedCardProps {
 export const AnimatedCard: React.FC<AnimatedCardProps> = React.memo(({
   children,
   onPress,
+  onLongPress,
   style,
   scaleDown = 0.97,
   enableHaptic = false,
@@ -59,11 +61,21 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = React.memo(({
     onPress();
   }, [onPress, enableHaptic, hapticStyle]);
 
+  const handleLongPress = useCallback(() => {
+    if (onLongPress) {
+      if (enableHaptic) {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+      onLongPress();
+    }
+  }, [onLongPress, enableHaptic]);
+
   return (
     <AnimatedPressable
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       onPress={handlePress}
+      onLongPress={handleLongPress}
       style={[style, animatedStyle]}
     >
       {children}

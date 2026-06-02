@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { Tabs, useSegments } from 'expo-router';
+import { Tabs, useSegments, useGlobalSearchParams } from 'expo-router';
 import {
   View,
   Platform,
@@ -13,6 +13,7 @@ import Svg, { Path } from 'react-native-svg';
 import { BottomPlayer } from '@/components/BottomPlayer';
 import FullScreenPlayer from '@/components/FullScreenPlayer';
 import QueueBottomSheet from '@/components/QueueBottomSheet';
+import { GlobalSongOptionsHost } from '@/components/GlobalSongOptionsHost';
 import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sparkles, Library } from 'lucide-react-native';
@@ -88,8 +89,8 @@ const TabIcon: React.FC<TabIconProps> = ({ children }) => {
 
 export default function TabLayout() {
   const segments = useSegments();
-  const { isPlayerExpanded, setIsPlayerExpanded } = usePlayerUIStore();
-  const [isQueueVisible, setIsQueueVisible] = useState(false);
+  const { from } = useGlobalSearchParams();
+  const { isPlayerExpanded, setIsPlayerExpanded, isQueueVisible, setQueueVisible } = usePlayerUIStore();
   const miniPlayerOpacity = useRef(new Animated.Value(1)).current;
   const insets = useSafeAreaInsets();
 
@@ -106,7 +107,7 @@ export default function TabLayout() {
     // Fade out mini player quickly
     Animated.timing(miniPlayerOpacity, {
       toValue: 0,
-      duration: 150,
+      duration: 100,
       useNativeDriver: true,
     }).start(() => {
       setIsPlayerExpanded(true);
@@ -124,8 +125,8 @@ export default function TabLayout() {
     }).start();
   }, [setIsPlayerExpanded, miniPlayerOpacity]);
 
-  const handleOpenQueue = useCallback(() => setIsQueueVisible(true), []);
-  const handleCloseQueue = useCallback(() => setIsQueueVisible(false), []);
+  const handleOpenQueue = useCallback(() => setQueueVisible(true), [setQueueVisible]);
+  const handleCloseQueue = useCallback(() => setQueueVisible(false), [setQueueVisible]);
 
   return (
     <View style={styles.container}>
@@ -185,22 +186,30 @@ export default function TabLayout() {
           name="index"
           options={{
             title: 'Home',
-            tabBarIcon: ({ color, focused }) => (
-              <TabIcon>
-                {focused ? <HomeFilled size={23} color={color} /> : <HomeOutline size={23} color={color} />}
-              </TabIcon>
-            ),
+            tabBarIcon: ({ color, focused }) => {
+              const active = focused || (from === 'home' && ['artist', 'album', 'playlist'].includes(segments[1] ?? ''));
+              const activeColor = active ? COLORS.activeTab : COLORS.inactiveTab;
+              return (
+                <TabIcon>
+                  {active ? <HomeFilled size={23} color={activeColor} /> : <HomeOutline size={23} color={activeColor} />}
+                </TabIcon>
+              );
+            },
           }}
         />
         <Tabs.Screen
           name="search"
           options={{
             title: 'Search',
-            tabBarIcon: ({ color, focused }) => (
-              <TabIcon>
-                {focused ? <SearchFilled size={23} color={color} /> : <SearchOutline size={23} color={color} />}
-              </TabIcon>
-            ),
+            tabBarIcon: ({ color, focused }) => {
+              const active = focused || (from === 'search' && ['artist', 'album', 'playlist'].includes(segments[1] ?? ''));
+              const activeColor = active ? COLORS.activeTab : COLORS.inactiveTab;
+              return (
+                <TabIcon>
+                  {active ? <SearchFilled size={23} color={activeColor} /> : <SearchOutline size={23} color={activeColor} />}
+                </TabIcon>
+              );
+            },
           }}
         />
         <Tabs.Screen
@@ -208,8 +217,8 @@ export default function TabLayout() {
           options={{
             title: 'Library',
             tabBarIcon: ({ color, focused }) => {
-              const isMediaDetail = ['playlist', 'album', 'artist', 'downloads'].includes(segments[1] ?? '');
-              const active = focused || isMediaDetail;
+              const isMediaDetail = ['playlist', 'album', 'artist', 'downloads', 'library-search'].includes(segments[1] ?? '');
+              const active = focused || (isMediaDetail && (from === 'library' || !from));
               const activeColor = active ? COLORS.activeTab : COLORS.inactiveTab;
               return (
                 <TabIcon>
@@ -222,7 +231,7 @@ export default function TabLayout() {
         <Tabs.Screen
           name="chat"
           options={{
-            title: 'AI Chat',
+            title: 'Vibra AI',
             tabBarIcon: ({ color, focused }) => (
               <TabIcon>
                 <Sparkles size={23} color={color} fill={focused ? color : 'none'} strokeWidth={focused ? 2.5 : 1.8} />
@@ -232,12 +241,14 @@ export default function TabLayout() {
         />
 
         {/* Hidden detail routes to maintain Player/Tab bar visibility */}
+        <Tabs.Screen name="favorites" options={{ href: null }} />
         <Tabs.Screen name="album/[id]" options={{ href: null }} />
         <Tabs.Screen name="album/external/jiosaavn/[id]" options={{ href: null }} />
         <Tabs.Screen name="playlist/[id]" options={{ href: null }} />
         <Tabs.Screen name="playlist/external/jiosaavn/[id]" options={{ href: null }} />
         <Tabs.Screen name="artist/external/jiosaavn/[id]" options={{ href: null }} />
         <Tabs.Screen name="downloads" options={{ href: null }} />
+        <Tabs.Screen name="library-search" options={{ href: null }} />
       </Tabs>
 
       {!isPlayerExpanded && (
@@ -262,6 +273,7 @@ export default function TabLayout() {
         />
       )}
       <QueueBottomSheet visible={isQueueVisible} onClose={handleCloseQueue} />
+      <GlobalSongOptionsHost />
     </View>
   );
 }
@@ -279,17 +291,17 @@ const styles = StyleSheet.create({
     shadowRadius: 0,
   },
   tabBarTopLine: {
-  position: 'absolute',
-  top: 0,
-  left: 0,
-  right: 0,
-  height: StyleSheet.hairlineWidth,
-  backgroundColor: 'rgba(255,255,255,0.06)',
-  zIndex: 10,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    zIndex: 10,
   },
   androidOverlay: {
-  ...StyleSheet.absoluteFillObject,
-  backgroundColor: 'rgba(0,0,0,0.55)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   blurOverlay: {
     backgroundColor: Platform.OS === 'android'

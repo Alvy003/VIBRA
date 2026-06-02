@@ -3,9 +3,10 @@ import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
 import { Music2, Instagram, Twitter, Youtube, Github } from 'lucide-react-native';
 import { COLORS, TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
+import Colors from '@/constants/Colors';
 
 export const HomeFooter = React.memo(() => {
-  const BRAND_PURPLE = '#7B2CF5';
+  const BRAND_PURPLE = Colors.accent;
 
   const links = [
     { label: 'Premium', url: '#' },
@@ -29,7 +30,7 @@ export const HomeFooter = React.memo(() => {
   return (
     <View style={styles.container}>
       {/* Static Brand Line */}
-      <View style={[styles.glowLine, { backgroundColor: BRAND_PURPLE }]} />
+      <View style={[styles.glowLine]} />
 
       <View style={styles.mainContent}>
         {/* Branding Section */}
@@ -66,13 +67,13 @@ export const HomeFooter = React.memo(() => {
         </View>
 
         {/* Bottom Credits */}
-        <View style={styles.bottomSection}>
+        {/* <View style={styles.bottomSection}>
           <Text style={styles.copyright}>© 2026 Vibra Music</Text>
           <View style={styles.versionContainer}>
             <Text style={styles.versionLabel}>Version</Text>
             <Text style={styles.versionValue}>1.0.1</Text>
           </View>
-        </View>
+        </View> */}
       </View>
     </View>
   );
@@ -84,15 +85,14 @@ const styles = StyleSheet.create({
   container: {
     paddingTop: 60,
     paddingBottom: 0,
-    marginTop: 20,
+    marginTop: 30,
     alignItems: 'center',
   },
   glowLine: {
     width: '100%',
-    height: 1,
-    opacity: 0.1,
     position: 'absolute',
     top: 0,
+    borderTopWidth: 2,
   },
   mainContent: {
     alignItems: 'center',
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     color: COLORS.textSecondary,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
   },
   linkDot: {
@@ -163,8 +163,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 24,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.05)',
+    borderTopWidth: 2,
   },
   copyright: {
     color: COLORS.textMuted,
@@ -185,6 +184,6 @@ const styles = StyleSheet.create({
   versionValue: {
     color: COLORS.textSecondary,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { axiosInstance } from "@/lib/axios";
+import { mmkvStorage } from "@/lib/mmkvStorage";
+import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
 
 export interface UserMusicPreferences {
   languages: string[];
@@ -161,7 +162,18 @@ export const useOnboardingStore = create<OnboardingStore>()(
     }),
     {
       name: "vibra-onboarding",
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => mmkvStorage),
+      partialize: (state) => ({
+        preferences: state.preferences,
+        showOnboarding: state.showOnboarding,
+      }),
     }
   )
 );
+
+// Trigger one-time async migration on first launch
+migrateStoreToMMKV("vibra-onboarding").then((migrated) => {
+    if (migrated) {
+        useOnboardingStore.persist.rehydrate();
+    }
+});

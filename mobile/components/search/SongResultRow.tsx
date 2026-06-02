@@ -5,6 +5,10 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useSearchStore } from '@/stores/useSearchStore';
+import SongOptions from '../SongOptions';
+
+// Placeholder URL - resolveAudioUrl will replace this with a fresh redirector URL at play time
+const DUMMY_URL = 'https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3';
 
 interface SongResultRowProps {
   song: any;
@@ -18,7 +22,16 @@ export const SongResultRow = React.memo(({ song, searchQuery }: SongResultRowPro
     const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    const songId = song.videoId || song._id || song.externalId || `${song.title}-${song.artist}`;
+    // Prefer externalId (e.g. "jiosaavn_abc123") for reliable redirector resolution.
+    // Autocomplete results have `id` (raw numeric), full-search results have `externalId`.
+    const source = song.source || 'jiosaavn';
+    const rawId = song.externalId || song._id || song.videoId || song.id;
+    // Ensure JioSaavn IDs are prefixed so getPlayableUrl cleanId logic works correctly
+    const songId = rawId
+        ? (source === 'jiosaavn' && !String(rawId).startsWith('jiosaavn_')
+            ? `jiosaavn_${rawId}`
+            : String(rawId))
+        : `${song.title}-${song.artist}`;
 
     // Add to recent searches
     addRecentSearch({
@@ -30,15 +43,16 @@ export const SongResultRow = React.memo(({ song, searchQuery }: SongResultRowPro
         timestamp: Date.now(),
     });
 
-    // Play the track
+    // Play the track — pass externalId so resolveAudioUrl/getPlayableUrl can use it
     playTrack({
         id: songId,
-        url: song.streamUrl || song.audioUrl || '',
+        externalId: songId,
+        url: DUMMY_URL,  // Never pass a raw CDN URL — let resolveAudioUrl build the redirector
         title: song.title,
         artist: song.artist,
         artwork: song.imageUrl,
         duration: song.duration,
-        source: song.source || 'jiosaavn',
+        source,
     } as any, searchQuery ? { type: 'search', id: 'search', title: searchQuery } : undefined);
     };
 
@@ -63,6 +77,7 @@ export const SongResultRow = React.memo(({ song, searchQuery }: SongResultRowPro
           Song • {song.artist}
         </Text>
       </View>
+      <SongOptions song={song} />
     </TouchableOpacity>
   );
 });
@@ -96,5 +111,6 @@ const styles = StyleSheet.create({
     color: '#b3b3b3',
     fontSize: 13,
     fontWeight: '400',
+    paddingRight: 30,
   },
 });

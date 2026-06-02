@@ -22,7 +22,7 @@ export const HomeHeroSection = React.memo(({
         <HeroPattern height={220 + insets.top} />
       </Animated.View>
 
-      {/* Quick Picks overlaid on pattern */}
+      {/* Content overlaid on pattern */}
       <View style={[styles.contentWrapper, { paddingTop: insets.top + 60 }]}>
         <QuickPicksGrid />
       </View>

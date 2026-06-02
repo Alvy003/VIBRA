@@ -4,6 +4,7 @@ import { PremiumCard } from '@/components/PremiumCard';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { SectionHeader } from './SectionHeader';
+import Colors from '@/constants/Colors';
 import { SongItem } from './types';
 import { Dimensions } from 'react-native';
 
@@ -49,7 +50,7 @@ export const QuickPicksSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="Quick Picks"
-                accentColor="#52525b"
+                accentColor={Colors.textMuted}
             />
             <FlatList
                 horizontal

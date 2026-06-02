@@ -18,6 +18,7 @@ import { Play, Heart, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { AnimatedCard } from './AnimatedCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Colors from '@/constants/Colors';
 
 const CROSSFADE_DURATION = 1000;
 const AUTO_ROTATE_MS = 10000;
@@ -172,9 +173,9 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
       <LinearGradient
         colors={[
           'transparent',
-          'rgba(9,9,11,0.3)',
-          'rgba(9,9,11,0.7)',
-          '#09090b',
+          Colors.blackAlpha30,
+          Colors.blackAlpha70,
+          Colors.background,
         ]}
         locations={[0, 0.45, 0.75, 1]}
         style={styles.bottomGradient}
@@ -201,7 +202,7 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
               scaleDown={0.95}
             >
               <View style={styles.playButton}>
-                <Play size={16} color="#000" fill="#000" />
+                <Play size={16} color={Colors.background} fill={Colors.background} />
                 <Text style={styles.playButtonText}>Play Now</Text>
               </View>
             </AnimatedCard>
@@ -218,8 +219,8 @@ export const HeroSection: React.FC<HeroSectionProps> = React.memo(({
                       {
                         width: i === heroIndex ? 20 : 6,
                         backgroundColor: i === heroIndex
-                          ? '#ffffffb2'
-                          : 'rgba(255,255,255,0.3)',
+                          ? Colors.whiteAlpha60
+                          : Colors.whiteAlpha30,
                       },
                     ]}
                   />
@@ -273,21 +274,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(147, 51, 234, 0.2)',
+    backgroundColor: Colors.primaryAlpha15,
     paddingHorizontal: 9,
     paddingVertical: 4,
     borderRadius: 16,
   },
   heroTitle: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: -0.8,
     lineHeight: 32,
     marginBottom: 2,
   },
   heroArtist: {
-    color: 'rgba(255,255,255,0.6)',
+    color: Colors.textSecondary,
     fontSize: 15,
     fontWeight: '500',
     marginBottom: 18,
@@ -315,9 +316,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: Colors.whiteAlpha10,
     borderWidth: 0.5,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: Colors.whiteAlpha15,
     alignItems: 'center',
     justifyContent: 'center',
   },

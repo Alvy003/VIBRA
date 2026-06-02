@@ -1,5 +1,5 @@
 import { useOAuth } from '@clerk/clerk-expo';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Text,
   View,
@@ -10,6 +10,7 @@ import {
   Platform,
   StatusBar,
   Dimensions,
+  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
@@ -22,6 +23,8 @@ const { height } = Dimensions.get('window');
 
 export default function LoginScreen() {
   useWarmUpBrowser();
+
+  const [isLoading, setIsLoading] = useState(false);
 
   const { startOAuthFlow } = useOAuth({ strategy: 'oauth_google' });
 
@@ -82,18 +85,23 @@ export default function LoginScreen() {
   };
 
   const onPress = React.useCallback(async () => {
+    if (isLoading) return;
     if (Platform.OS !== 'web') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
     try {
+      setIsLoading(true);
       const { createdSessionId, setActive } = await startOAuthFlow();
       if (createdSessionId) {
-        setActive!({ session: createdSessionId });
+        await setActive!({ session: createdSessionId });
+      } else {
+        setIsLoading(false);
       }
     } catch (err) {
       console.error('OAuth error', err);
+      setIsLoading(false);
     }
-  }, []);
+  }, [isLoading]);
 
   return (
     <View style={styles.container}>
@@ -146,7 +154,11 @@ export default function LoginScreen() {
                   style={styles.googleIcon}
                   resizeMode="contain"
                 />
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
+                {isLoading ? (
+                  <ActivityIndicator color="#000000" size="small" />
+                ) : (
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                )}
               </TouchableOpacity>
             </Animated.View>
 
@@ -154,7 +166,7 @@ export default function LoginScreen() {
             <View style={styles.divider} />
 
             {/* Footer */}
-            <View style={styles.footer}>
+            {/* <View style={styles.footer}>
               <Text style={styles.footerLabel}>Don't have an account?</Text>
               <TouchableOpacity
                 onPress={onPress}
@@ -162,7 +174,7 @@ export default function LoginScreen() {
               >
                 <Text style={styles.signUpText}>Sign Up</Text>
               </TouchableOpacity>
-            </View>
+            </View> */}
           </Animated.View>
 
         </View>
@@ -229,7 +241,7 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: '#000000',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.3,
   },
 
@@ -253,6 +265,6 @@ const styles = StyleSheet.create({
   signUpText: {
     color: '#FFFFFF',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

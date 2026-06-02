@@ -3,7 +3,6 @@ import React, { useRef, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
-  Modal,
   TouchableOpacity,
   StyleSheet,
   Pressable,
@@ -19,8 +18,6 @@ import Animated, {
   cancelAnimation,
   Easing,
   FadeIn,
-  SlideInDown,
-  SlideOutDown,
 } from 'react-native-reanimated';
 import { X, AudioLines, Check, RotateCcw } from 'lucide-react-native';
 import {
@@ -32,6 +29,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSearchStore } from '@/stores/useSearchStore';
 import * as Haptics from 'expo-haptics';
+import Constants from 'expo-constants';
+import BottomSheet from '../BottomSheet';
+import Colors from '@/constants/Colors';
 
 type ModalState = 'idle' | 'listening' | 'recognizing' | 'result' | 'error';
 
@@ -41,7 +41,7 @@ interface AudioSearchModalProps {
   onResult: (query: string) => void;
 }
 
-const API_BASE = process.env.EXPO_PUBLIC_API_URL;
+const API_BASE = Constants.expoConfig?.extra?.apiUrl || process.env.EXPO_PUBLIC_API_URL;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -241,13 +241,13 @@ export const AudioSearchModal = ({ visible, onClose, onResult }: AudioSearchModa
   const getButtonColor = () => {
     switch (state) {
       case 'listening':
-        return '#9333ea';
+        return Colors.accent;
       case 'result':
-        return '#22c55e';
+        return Colors.success;
       case 'error':
-        return '#ef4444';
+        return Colors.error;
       default:
-        return '#27272a';
+        return Colors.border;
     }
   };
 
@@ -265,154 +265,111 @@ export const AudioSearchModal = ({ visible, onClose, onResult }: AudioSearchModa
   if (!visible) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={handleClose}
-      statusBarTranslucent
+    <BottomSheet
+      isOpen={visible}
+      onClose={handleClose}
+      snapPoints={['50%']}
+      backgroundColor={Colors.surface}
+      showHandle
     >
-      <View style={styles.container}>
-        {/* Backdrop */}
-        <Pressable style={styles.backdrop} onPress={handleClose} />
+      <View style={styles.sheetContent}>
+        {/* Main content */}
+        <View style={styles.content}>
+          {/* Main button/indicator */}
+          <View style={styles.buttonContainer}>
+            {/* Pulse ring */}
+            {state === 'listening' && (
+              <Animated.View style={[styles.pulseRing, ringStyle]} />
+            )}
 
-        {/* Sheet */}
-        <Animated.View
-          entering={SlideInDown.duration(250).easing(Easing.out(Easing.cubic))}
-          exiting={SlideOutDown.duration(200)}
-          style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}
-        >
-          {/* Close button */}
-          <TouchableOpacity
-            onPress={handleClose}
-            style={styles.closeButton}
-            activeOpacity={0.7}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          >
-            <X size={20} color="#71717a" />
-          </TouchableOpacity>
-
-          {/* Main content */}
-          <View style={styles.content}>
-            {/* Main button/indicator */}
-            <View style={styles.buttonContainer}>
-              {/* Pulse ring */}
-              {state === 'listening' && (
-                <Animated.View style={[styles.pulseRing, ringStyle]} />
-              )}
-
-              {/* Main circle button */}
-              <AnimatedPressable
-                onPress={handleButtonPress}
-                onPressIn={handlePressIn}
-                onPressOut={handlePressOut}
-                disabled={state !== 'idle'}
-                style={[
-                  styles.mainButton,
-                  { backgroundColor: getButtonColor() },
-                  pulseStyle,
-                  buttonPressStyle,
-                ]}
-              >
-                {getIcon()}
-              </AnimatedPressable>
-            </View>
-
-            {/* Status text */}
-            <View style={styles.textContainer}>
-              {state === 'idle' && (
-                <Animated.View entering={FadeIn.duration(200)}>
-                  <Text style={styles.title}>Tap to identify</Text>
-                  <Text style={styles.subtitle}>
-                    Make sure the music is audible
-                  </Text>
-                </Animated.View>
-              )}
-
-              {state === 'listening' && (
-                <Animated.View entering={FadeIn.duration(200)}>
-                  <Text style={styles.title}>Listening...</Text>
-                  <Text style={styles.subtitle}>
-                    Hold your phone near the music
-                  </Text>
-                </Animated.View>
-              )}
-
-              {state === 'recognizing' && (
-                <Animated.View entering={FadeIn.duration(200)}>
-                  <Text style={styles.title}>Identifying...</Text>
-                  <Text style={styles.subtitle}>
-                    Searching for matches
-                  </Text>
-                </Animated.View>
-              )}
-
-              {state === 'result' && (
-                <Animated.View 
-                  entering={FadeIn.duration(200)} 
-                  style={styles.resultContainer}
-                >
-                  <Text style={styles.resultTitle}>{resultText.title}</Text>
-                  <Text style={styles.resultArtist}>{resultText.artist}</Text>
-                </Animated.View>
-              )}
-
-              {state === 'error' && (
-                <Animated.View 
-                  entering={FadeIn.duration(200)}
-                  style={styles.errorContainer}
-                >
-                  <Text style={styles.errorTitle}>{errorText}</Text>
-                  <Text style={styles.errorSubtitle}>
-                    Make sure the music is playing clearly
-                  </Text>
-                  
-                  <TouchableOpacity
-                    onPress={handleRetry}
-                    style={styles.retryButton}
-                    activeOpacity={0.8}
-                  >
-                    <RotateCcw size={18} color="#fff" />
-                    <Text style={styles.retryText}>Try again</Text>
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
-            </View>
+            {/* Main circle button */}
+            <AnimatedPressable
+              onPress={handleButtonPress}
+              onPressIn={handlePressIn}
+              onPressOut={handlePressOut}
+              disabled={state !== 'idle'}
+              style={[
+                styles.mainButton,
+                { backgroundColor: getButtonColor() },
+                pulseStyle,
+                buttonPressStyle,
+              ]}
+            >
+              {getIcon()}
+            </AnimatedPressable>
           </View>
-        </Animated.View>
+
+          {/* Status text */}
+          <View style={styles.textContainer}>
+            {state === 'idle' && (
+              <Animated.View entering={FadeIn.duration(200)}>
+                <Text style={styles.title}>Tap to identify</Text>
+                <Text style={styles.subtitle}>
+                  Make sure the music is audible
+                </Text>
+              </Animated.View>
+            )}
+
+            {state === 'listening' && (
+              <Animated.View entering={FadeIn.duration(200)}>
+                <Text style={styles.title}>Listening...</Text>
+                <Text style={styles.subtitle}>
+                  Hold your phone near the music
+                </Text>
+              </Animated.View>
+            )}
+
+            {state === 'recognizing' && (
+              <Animated.View entering={FadeIn.duration(200)}>
+                <Text style={styles.title}>Identifying...</Text>
+                <Text style={styles.subtitle}>
+                  Searching for matches
+                </Text>
+              </Animated.View>
+            )}
+
+            {state === 'result' && (
+              <Animated.View 
+                entering={FadeIn.duration(200)} 
+                style={styles.resultContainer}
+              >
+                <Text style={styles.resultTitle}>{resultText.title}</Text>
+                <Text style={styles.resultArtist}>{resultText.artist}</Text>
+              </Animated.View>
+            )}
+
+            {state === 'error' && (
+              <Animated.View 
+                entering={FadeIn.duration(200)}
+                style={styles.errorContainer}
+              >
+                <Text style={styles.errorTitle}>{errorText}</Text>
+                <Text style={styles.errorSubtitle}>
+                  Make sure the music is playing clearly
+                </Text>
+                
+                <TouchableOpacity
+                  onPress={handleRetry}
+                  style={styles.retryButton}
+                  activeOpacity={0.8}
+                >
+                  <RotateCcw size={18} color="#fff" />
+                  <Text style={styles.retryText}>Try again</Text>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </View>
+        </View>
       </View>
-    </Modal>
+    </BottomSheet>
   );
 };
 
 AudioSearchModal.displayName = 'AudioSearchModal';
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-  },
-  sheet: {
-    backgroundColor: '#121212',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingTop: 20,
-  },
-  closeButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#1e1e1e',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
+  sheetContent: {
+    paddingBottom: 20,
   },
   content: {
     alignItems: 'center',
@@ -433,7 +390,7 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 50,
     borderWidth: 2,
-    borderColor: '#9333ea',
+    borderColor: Colors.accent,
   },
   mainButton: {
     width: 100,
@@ -447,30 +404,30 @@ const styles = StyleSheet.create({
     minHeight: 120,
   },
   title: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#71717a',
-    fontSize: 15,
+    color: Colors.textMuted,
+    fontSize: 14,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   resultContainer: {
     alignItems: 'center',
   },
   resultTitle: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 6,
   },
   resultArtist: {
-    color: '#a1a1aa',
+    color: Colors.textMuted,
     fontSize: 16,
     fontWeight: '500',
     textAlign: 'center',
@@ -479,14 +436,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   errorTitle: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
     marginBottom: 6,
   },
   errorSubtitle: {
-    color: '#71717a',
+    color: Colors.textMuted,
     fontSize: 14,
     textAlign: 'center',
     marginBottom: 24,
@@ -495,13 +452,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#27272a',
+    backgroundColor: Colors.border,
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 24,
   },
   retryText: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 15,
     fontWeight: '600',
   },

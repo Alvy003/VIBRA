@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   label: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.2,
   },
   labelSelected: {

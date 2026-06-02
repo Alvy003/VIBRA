@@ -64,7 +64,7 @@ const styles = StyleSheet.create({
     title: {
         color: '#fff',
         fontSize: 18,
-        fontWeight: '700',
+        fontWeight: '600',
         letterSpacing: -0.3,
     },
     chips: {

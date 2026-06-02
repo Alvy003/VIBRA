@@ -14,13 +14,17 @@ import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { RADIUS, COLORS, TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
 import { resolveAssetUrl } from '@/lib/url';
+import SongOptions, { SongOptionsRef } from '@/components/SongOptions';
+
+// Placeholder URL - resolveAudioUrl will replace this with a fresh redirector URL at play time
+const DUMMY_URL = 'https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const GRID_GAP = 10;
 const HORIZONTAL_PADDING = 16;
 const CARD_WIDTH = (SCREEN_WIDTH - HORIZONTAL_PADDING * 2 - GRID_GAP) / 2;
-const CARD_HEIGHT = 60;
-const ARTWORK_SIZE = 44;
+const CARD_HEIGHT = 55;
+const ARTWORK_SIZE = 50;
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -28,12 +32,14 @@ interface QuickPickCardProps {
   item: any;
   index: number;
   onPress: () => void;
+  onLongPress: () => void;
 }
 
 const QuickPickCard = React.memo(({
   item,
   index,
   onPress,
+  onLongPress,
 }: QuickPickCardProps) => {
   const scale = useSharedValue(1);
   const playOpacity = useSharedValue(0);
@@ -46,7 +52,7 @@ const QuickPickCard = React.memo(({
 
   const playButtonStyle = useAnimatedStyle(() => ({
     opacity: playOpacity.value,
-    transform: [{ scale: 0.9 + playOpacity.value * 0.1 }],
+    transform: [{ scale: 0.99 + playOpacity.value * 0.1 }],
   }));
 
   const handlePressIn = () => {
@@ -60,7 +66,6 @@ const QuickPickCard = React.memo(({
   };
 
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress();
   };
 
@@ -68,24 +73,25 @@ const QuickPickCard = React.memo(({
     <AnimatedPressable
       entering={FadeIn.delay(index * 50).duration(300)}
       onPress={handlePress}
+      onLongPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        onLongPress();
+      }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       style={[styles.card, animatedStyle]}
     >
       {/* Artwork */}
       <View style={styles.artworkContainer}>
-        <Image
-          source={{ uri: resolvedUri }}
-          style={styles.artwork}
-          contentFit="cover"
-          transition={200}
-          cachePolicy="memory-disk"
-        />
-
-        {/* Play overlay on press */}
-        <Animated.View style={[styles.playOverlay, playButtonStyle]}>
-          <Play size={14} color="#fff" fill="#fff" />
-        </Animated.View>
+          <Image
+            source={{ uri: resolvedUri }}
+            style={styles.artwork}
+            contentFit="cover"
+            transition={200}
+            cachePolicy="memory-disk"
+          />
+          {/* Subtle Overlay */}
+          <View style={styles.imageOverlay} />
       </View>
 
       {/* Text content */}
@@ -105,6 +111,7 @@ export const QuickPicksGrid = React.memo(() => {
   const quickPicks = useMusicStore(s => s.quickPicks);
   const featuredSongs = useMusicStore(s => s.featuredSongs);
   const playTrack = usePlayerStore(s => s.playTrack);
+  const optionsRef = React.useRef<SongOptionsRef>(null);
 
   const displayPicks = useMemo(() => {
     if (quickPicks.length > 0) return quickPicks.slice(0, 6);
@@ -115,14 +122,24 @@ export const QuickPicksGrid = React.memo(() => {
   const accentColor = TIME_GRADIENTS[timeOfDay].accent;
 
   const handlePlay = useCallback((song: any) => {
+    const source = song.source || (song.videoId ? 'youtube' : 'jiosaavn');
+    const rawId = song.externalId || song._id || song.videoId || song.id;
+    // Ensure JioSaavn IDs are prefixed so getPlayableUrl cleanId logic works correctly
+    const trackId = rawId
+        ? (source === 'jiosaavn' && !String(rawId).startsWith('jiosaavn_')
+            ? `jiosaavn_${rawId}`
+            : String(rawId))
+        : `${song.title}-${song.artist}`;
+
     playTrack({
-      id: song.videoId || song.externalId || song._id || '',
-      url: song.streamUrl || song.audioUrl || '',
+      id: trackId,
+      externalId: trackId,
+      url: DUMMY_URL,  // Never pass a raw CDN URL — let resolveAudioUrl build the redirector
       title: song.title,
       artist: song.artist,
       artwork: song.imageUrl,
       duration: song.duration,
-      source: song.source || (song.videoId ? 'youtube' : 'jiosaavn'),
+      source,
     } as any);
   }, [playTrack]);
 
@@ -151,12 +168,15 @@ export const QuickPicksGrid = React.memo(() => {
                 item={item}
                 index={rowIndex * 2 + colIndex}
                 onPress={() => handlePlay(item)}
+                onLongPress={() => optionsRef.current?.open(item)}
               />
             ))}
             {Array.isArray(row) && row.length === 1 ? <View style={styles.cardPlaceholder} /> : null}
           </View>
         ))}
       </View>
+
+      <SongOptions ref={optionsRef} />
     </View>
   );
 });
@@ -182,7 +202,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: COLORS.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: -0.3,
   },
   grid: {
@@ -197,14 +217,14 @@ const styles = StyleSheet.create({
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
     backgroundColor: '#121214',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.04)',
     shadowOpacity: 0.15,
     shadowRadius: 6,
     borderRadius: RADIUS.sm,
     flexDirection: 'row',
     alignItems: 'center',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.04)',
   },
   cardPlaceholder: {
     width: CARD_WIDTH,
@@ -213,8 +233,8 @@ const styles = StyleSheet.create({
   artworkContainer: {
     width: ARTWORK_SIZE,
     height: ARTWORK_SIZE,
-    marginLeft: 8,
-    borderRadius: RADIUS.xs,
+    borderTopLeftRadius: RADIUS.xs,
+    borderBottomLeftRadius: RADIUS.xs,
     overflow: 'hidden',
     position: 'relative',
     shadowColor: '#000',
@@ -233,8 +253,7 @@ const styles = StyleSheet.create({
   },
   textContainer: {
     flex: 1,
-    paddingHorizontal: 10,
-    paddingRight: 12,
+    paddingHorizontal: 12,
     justifyContent: 'center',
   },
   title: {
@@ -247,5 +266,10 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.45)',
     fontSize: 11,
     fontWeight: '500',
+  },
+  imageOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.12)',
+    zIndex: 1,
   },
 });

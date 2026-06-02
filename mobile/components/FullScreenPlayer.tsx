@@ -8,6 +8,7 @@ import {
   StatusBar,
   BackHandler,
   useWindowDimensions,
+  Share,
 } from 'react-native';
 import { State } from 'react-native-track-player';
 import { Image } from 'expo-image';
@@ -17,7 +18,7 @@ import {
   Share2,
 } from 'lucide-react-native';
 import { SaveToPlaylistButton } from './SaveToPlaylistButton';
-import { SharpPlay, SharpPause, SharpSkipNext, SharpSkipBack, SharpShuffle, SharpRepeat } from './SharpIcons';
+import { SharpPlay, SharpPause, SharpSkipNext, SharpSkipBack, SharpShuffle, SharpRepeat, QueueIcon } from './SharpIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
@@ -39,27 +40,24 @@ import { useArtistStore } from '@/stores/useArtistStore';
 import TrackProgressObserver from './TrackProgressObserver';
 import TimeDisplay from './TimeDisplay';
 import LyricsPreviewCard from './player/LyricsPreviewCard';
+import Colors from '@/constants/Colors';
 import ArtistModal from './player/ArtistModal';
 import LyricsModal from './player/LyricsModal';
 import ProgressBar from './ProgressBar';
 import ControlButton from './ControlButton';
 import MarqueeText from './MarqueeText';
-import Svg, { Path } from 'react-native-svg';
-import TrackPlayer, { Event, useTrackPlayerEvents } from 'react-native-track-player';
+import TrackPlayer from 'react-native-track-player';
 import QueueBottomSheet from './QueueBottomSheet';
 import SongOptions from './SongOptions';
 
 
 const AnimatedRNGHScrollView = Animated.createAnimatedComponent(RNGHScrollView);
 
-const DEFAULT_GRADIENT = ['#1a1a2e', '#16213e', '#0f3460', '#121212'];
-
-// Mini player height for transition calculation
-const MINI_PLAYER_HEIGHT = 57;
-const TAB_BAR_HEIGHT = 56;
+const DEFAULT_GRADIENT = [Colors.surface, Colors.surface, Colors.surface, Colors.background];
+const ACCENT_COLOR = Colors.accent;
 
 function darkenColor(hex: string, factor: number = 0.5): string {
-  if (!hex) return '#000000';
+  if (!hex) return Colors.background;
   const color = hex.replace('#', '');
   const r = parseInt(color.substring(0, 2), 16);
   const g = parseInt(color.substring(2, 4), 16);
@@ -71,17 +69,6 @@ function darkenColor(hex: string, factor: number = 0.5): string {
 
   return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
 }
-
-const QueueIcon = ({ size = 24, color = '#fff' }) => (
-  <Svg width={size} height={size * 0.9} viewBox="0 0 51 46">
-    <Path
-      fillRule="evenodd"
-      clipRule="evenodd"
-      d="M48.095 41.0054C48.095 40.8239 47.9421 40.6878 47.7513 40.6878C43.7911 40.6878 6.28846 40.6878 2.32826 40.6878C2.14695 40.6878 1.99426 40.8239 1.99426 41.0054C1.99426 41.9491 1.99426 44.7077 1.99426 45.6604C1.99426 45.8328 2.14695 45.978 2.32826 45.978C6.28846 45.978 43.7911 45.978 47.7513 45.978C47.9421 45.978 48.095 45.8328 48.095 45.6604V41.0054ZM48.095 26.6141C48.095 26.4417 47.9421 26.2965 47.7513 26.2965C43.7911 26.2965 6.28846 26.2965 2.32826 26.2965C2.14695 26.2965 1.99426 26.4417 1.99426 26.6141C1.99426 27.5669 1.99426 30.3254 1.99426 31.2691C1.99426 31.4415 2.14695 31.5867 2.32826 31.5867C6.28846 31.5867 43.7911 31.5867 47.7513 31.5867C47.9421 31.5867 48.095 31.4415 48.095 31.2691V26.6141ZM0 8.31192C0 3.72048 3.91249 0 8.73152 0H41.3957C46.2148 0 50.175 3.72048 50.175 8.31192C50.175 12.8943 46.2148 16.6146 41.3957 16.6146H8.73152C3.91249 16.6146 0 12.8943 0 8.31192ZM5.56307 8.31192C5.56307 6.6423 6.98522 5.29925 8.73152 5.29925H41.3957C43.142 5.29925 44.5642 6.6423 44.5642 8.31192C44.5642 9.97246 43.142 11.3244 41.3957 11.3244H8.73152C6.98522 11.3244 5.56307 9.97246 5.56307 8.31192Z"
-      fill={color}
-    />
-  </Svg>
-);
 
 const ArtistCard = React.memo(
   ({
@@ -124,7 +111,7 @@ const ArtistCard = React.memo(
           <View style={styles.artistImageContainer}>
             <Image source={imageToUse} style={styles.artistImage} contentFit="cover" />
             <LinearGradient
-              colors={['transparent', 'rgba(0,0,0,0.8)']}
+              colors={['transparent', 'rgba(9,9,11,0.8)']}
               locations={[0.5, 1]}
               style={styles.artistImageGradient}
             />
@@ -180,18 +167,21 @@ interface FullScreenPlayerProps {
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
+
+const isTinyScreen = SCREEN_HEIGHT < 600;
+const isSmallScreen = SCREEN_HEIGHT < 700;
+const isMediumScreen = SCREEN_HEIGHT < 800;
+
 const ARTWORK_SIZE = (() => {
-  if (SCREEN_HEIGHT < 550) return Math.min(SCREEN_WIDTH * 0.45, 180); // Floating window
-  if (SCREEN_HEIGHT < 620) return SCREEN_WIDTH * 0.60;
-  if (SCREEN_HEIGHT < 700) return SCREEN_WIDTH * 0.72;
-  return SCREEN_WIDTH * 0.87;
+  if (SCREEN_HEIGHT < 600) return Math.min(SCREEN_WIDTH * 0.5, 200);
+  if (SCREEN_HEIGHT < 700) return SCREEN_WIDTH * 0.65;
+  if (SCREEN_HEIGHT < 800) return SCREEN_WIDTH * 0.78;
+  return SCREEN_WIDTH * 0.85;
 })();
 
-const isTinyScreen = SCREEN_HEIGHT < 550;
-const isSmallScreen = SCREEN_HEIGHT < 650;
-
-const artworkTopSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.03 : SCREEN_HEIGHT * 0.08);
-const artworkBottomSpacing = isTinyScreen ? 14 : (isSmallScreen ? SCREEN_HEIGHT * 0.04 : SCREEN_HEIGHT * 0.06);
+const artworkTopSpacing = isTinyScreen ? 10 : (isSmallScreen ? SCREEN_HEIGHT * 0.02 : (isMediumScreen ? SCREEN_HEIGHT * 0.04 : SCREEN_HEIGHT * 0.06));
+const artworkBottomSpacing = isTinyScreen ? 15 : (isSmallScreen ? SCREEN_HEIGHT * 0.03 : (isMediumScreen ? SCREEN_HEIGHT * 0.04 : SCREEN_HEIGHT * 0.05));
+const sectionSpacing = isTinyScreen ? 12 : (isSmallScreen ? 18 : 24);
 
 export default function FullScreenPlayer({
   onClose,
@@ -201,27 +191,30 @@ export default function FullScreenPlayer({
   // 1. Hooks (Above ALL early returns)
   const insets = useSafeAreaInsets();
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = useWindowDimensions();
-  
+
   const [primaryContentHeight, setPrimaryContentHeight] = useState(0);
   const [trackDuration, setTrackDuration] = useState(0);
   const [showDelayedContent, setShowDelayedContent] = useState(false);
   const [queueVisible, setQueueVisible] = useState(false);
+  const [visible, setVisible] = useState(false);
 
-  const {
-    currentTrack,
-    queue,
-    currentIndex,
-    isPlaying,
-    togglePlay,
-    playNext,
-    playPrevious,
-    shuffleMode,
-    repeatMode,
-    toggleShuffle,
-    toggleRepeat,
-    currentContext,
-    playbackState,
-  } = usePlayerStore();
+  const currentTrack = usePlayerStore(s => s.currentTrack);
+  const queue = usePlayerStore(s => s.queue);
+  const currentIndex = usePlayerStore(s => s.currentIndex);
+
+  const isPlaying = usePlayerStore(s => s.isPlaying);
+  const playbackState = usePlayerStore(s => s.playbackState);
+
+  const shuffleMode = usePlayerStore(s => s.shuffleMode);
+  const repeatMode = usePlayerStore(s => s.repeatMode);
+
+  const currentContext = usePlayerStore(s => s.currentContext);
+
+  const togglePlay = usePlayerStore(s => s.togglePlay);
+  const playNext = usePlayerStore(s => s.playNext);
+  const playPrevious = usePlayerStore(s => s.playPrevious);
+  const toggleShuffle = usePlayerStore(s => s.toggleShuffle);
+  const toggleRepeat = usePlayerStore(s => s.toggleRepeat);
 
   const { extractColors, getTrackColors } = useColorStore();
   const fetchLyrics = useLyricsStore((s) => s.fetchLyrics);
@@ -270,7 +263,9 @@ export default function FullScreenPlayer({
       return trackColors.gradient;
     }
     if (initialColors?.gradient) {
-      return initialColors.gradient;
+      // Properly create a tuple type
+      const [c0, c1, c2] = initialColors.gradient;
+      return [c0, c1, c2, '#09090b'] as const;
     }
     return DEFAULT_GRADIENT as unknown as readonly [string, string, string, string];
   }, [trackColors.gradient, trackColors.isLoading, initialColors?.gradient]);
@@ -281,8 +276,11 @@ export default function FullScreenPlayer({
     isClosing.current = true;
 
     translateY.value = withTiming(
-      SCREEN_HEIGHT,
-      { duration: 280, easing: Easing.out(Easing.cubic) },
+      SCREEN_HEIGHT + 30,
+      {
+        duration: 250,
+        easing: Easing.out(Easing.exp),
+      },
       (finished) => {
         if (finished) runOnJS(onClose)();
       }
@@ -305,6 +303,24 @@ export default function FullScreenPlayer({
   const scrollToTop = useCallback(() => {
     mainScrollRef.current?.scrollTo({ y: 0, animated: true });
   }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setVisible(false);
+  }, []);
+
+  const handleShare = async () => {
+    handleCloseModal();
+    try {
+      const cleanId = currentTrack?.id.replace(/^(jiosaavn_track_|jiosaavn_album_|jiosaavn_playlist_)/, '');
+      const message = `Check out "${currentTrack?.title}" by ${currentTrack?.artist} on Vibra!\n\nListen here: https://vibra-969f.onrender.com/track/${cleanId}`;
+      await Share.share({
+        message,
+        title: currentTrack?.title,
+      });
+    } catch (error) {
+      console.error('Error sharing song:', error);
+    }
+  };
 
   const scrollHandler = useCallback((event: any) => {
     'worklet';
@@ -444,7 +460,7 @@ export default function FullScreenPlayer({
                 ? darkenColor(trackColors.dominant, 0.4)
                 : initialColors?.dominant
                   ? darkenColor(initialColors.dominant, 0.4)
-                  : '#000',
+                  : Colors.background,
             },
             stickyHeaderStyle,
           ]}
@@ -472,9 +488,9 @@ export default function FullScreenPlayer({
 
             <TouchableOpacity onPress={togglePlay} style={styles.stickyPlayButton} activeOpacity={0.8}>
               {isPlaying || playbackState === State.Buffering || playbackState === State.Loading ? (
-                <SharpPause size={22} color="#fff" />
+                <SharpPause size={22} color={Colors.textPrimary} />
               ) : (
-                <SharpPlay size={22} color="#fff" style={{ marginLeft: 2 }} />
+                <SharpPlay size={22} color={Colors.textPrimary} style={{ marginLeft: 2 }} />
               )}
             </TouchableOpacity>
           </View>
@@ -506,7 +522,7 @@ export default function FullScreenPlayer({
                 style={styles.headerButton}
                 activeOpacity={0.7}
               >
-                <ChevronDown size={28} color="#fff" strokeWidth={2.5} />
+                <ChevronDown size={28} color={Colors.textPrimary} strokeWidth={2.5} />
               </TouchableOpacity>
 
               <View style={styles.headerCenter}>
@@ -533,7 +549,7 @@ export default function FullScreenPlayer({
                 song={currentTrack}
                 trigger={
                   <View style={styles.headerButton}>
-                    <MoreVertical size={24} color="#fff" />
+                    <MoreVertical size={24} color={Colors.textPrimary} />
                   </View>
                 }
               />
@@ -623,14 +639,14 @@ export default function FullScreenPlayer({
                 <View style={{ alignItems: 'center' }}>
                   <SharpShuffle
                     size={22}
-                    color={shuffleMode ? '#7B2CF5' : 'rgba(218, 214, 214, 1)'}
+                    color={shuffleMode ? ACCENT_COLOR : 'rgba(218, 214, 214, 1)'}
                   />
                   {shuffleMode && (
                     <View style={{
                       width: 4,
                       height: 4,
                       borderRadius: 2,
-                      backgroundColor: '#7B2CF5',
+                      backgroundColor: ACCENT_COLOR,
                       marginTop: 2,
                       position: 'absolute',
                       bottom: -6
@@ -640,35 +656,35 @@ export default function FullScreenPlayer({
               </ControlButton>
 
               <ControlButton onPress={playPrevious} size="large">
-                <SharpSkipBack size={23} color="#fff" />
+                <SharpSkipBack size={23} color={Colors.textPrimary} />
               </ControlButton>
 
               <ControlButton onPress={togglePlay} size="xl" variant="solid">
                 {isPlaying || playbackState === State.Buffering || playbackState === State.Loading ? (
-                  <SharpPause size={30} color="#000" />
+                  <SharpPause size={30} color={Colors.background} />
                 ) : (
-                  <SharpPlay size={30} color="#000" style={{ marginLeft: 3 }} />
+                  <SharpPlay size={30} color={Colors.background} style={{ marginLeft: 3 }} />
                 )}
               </ControlButton>
 
 
 
               <ControlButton onPress={playNext} size="large">
-                <SharpSkipNext size={23} color="#fff" />
+                <SharpSkipNext size={23} color={Colors.textPrimary} />
               </ControlButton>
 
               <ControlButton onPress={toggleRepeat} size="medium">
                 <View style={{ alignItems: 'center' }}>
                   <SharpRepeat
                     size={24}
-                    color={repeatMode !== 'off' ? '#7B2CF5' : 'rgba(218, 214, 214, 1)'}
+                    color={repeatMode !== 'off' ? ACCENT_COLOR : 'rgba(218, 214, 214, 1)'}
                   />
                   {repeatMode !== 'off' && (
                     <View style={{
                       width: 4,
                       height: 4,
                       borderRadius: 2,
-                      backgroundColor: '#7B2CF5',
+                      backgroundColor: ACCENT_COLOR,
                       marginTop: 2,
                       position: 'absolute',
                       bottom: -6
@@ -682,7 +698,7 @@ export default function FullScreenPlayer({
               <DeviceSelector compact />
 
               <View style={styles.subActionsRight}>
-                <TouchableOpacity style={styles.subActionButton} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.subActionButton} activeOpacity={0.7} onPress={handleShare}>
                   <Share2 size={18} color="rgba(218, 214, 214, 1)" />
                 </TouchableOpacity>
 
@@ -731,7 +747,7 @@ export default function FullScreenPlayer({
 const styles = StyleSheet.create({
   container: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
+    backgroundColor: Colors.background,
     zIndex: 200,
   },
   topHeader: {
@@ -754,19 +770,19 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   playingFromLabel: {
-    color: 'rgba(255, 255, 255, 0.74)',
+    color: Colors.whiteAlpha60,
     fontSize: 10,
     fontWeight: '600',
     letterSpacing: 0,
     marginBottom: 3,
   },
   playingFromText: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   playingFromRecommended: {
-    color: '#fff',
+    color: Colors.textPrimary,
     fontSize: 11,
     fontWeight: '500',
     textTransform: 'uppercase',
@@ -870,7 +886,7 @@ const styles = StyleSheet.create({
   },
   artistInfoSection: {
     padding: 16,
-    backgroundColor: 'rgba(22, 22, 22, 0.8)',
+    backgroundColor: '#121212',
   },
   artistInfoName: {
     color: '#fff',
@@ -936,8 +952,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 2,
-    marginTop: 25,
+    marginBottom: 6,
+    marginTop: isTinyScreen ? 10 : (isSmallScreen ? 15 : 25),
   },
   trackTextContainer: {
     flex: 1,
@@ -969,15 +985,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    marginBottom: 25,
+    marginTop: 8,
+    marginBottom: isTinyScreen ? 10 : (isSmallScreen ? 15 : 25),
   },
   subActions: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 15,
-    marginTop: 10,
-    marginBottom: 30,
+    marginTop: isTinyScreen ? 2 : 10,
+    marginBottom: isTinyScreen ? 10 : 30,
   },
   mainView: {
     paddingBottom: 20,

@@ -1,5 +1,4 @@
 import { create } from "zustand";
-import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { axiosInstance } from "@/lib/axios";
 import { useOnboardingStore } from "./useOnboardingStore";
@@ -51,9 +50,7 @@ interface StreamStore {
 
 
 
-export const useStreamStore = create<StreamStore>()(
-  persist(
-    (set, get) => ({
+export const useStreamStore = create<StreamStore>()((set, get) => ({
     searchResults: [],
     searchAllResults: null,
     isSearching: false,
@@ -290,14 +287,4 @@ export const useStreamStore = create<StreamStore>()(
             streamUrlCache: new Map(),
         });
     },
-}),
-{
-    name: "vibra-stream-cache",
-    storage: createJSONStorage(() => AsyncStorage),
-    partialize: (state) => ({ 
-        homepageData: state.homepageData, 
-        dailyMix: state.dailyMix 
-    }),
-}
-)
-);
+}));

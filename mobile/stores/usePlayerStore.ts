@@ -1,5 +1,7 @@
-// stores/usePlayerStore.ts
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import { mmkvStorage } from '@/lib/mmkvStorage';
+import { migrateStoreToMMKV } from '@/lib/mmkvMigration';
 import TrackPlayer, {
     RepeatMode,
     State,
@@ -52,7 +54,7 @@ interface PlayerStore {
     reorderQueue: (fromIndex: number, toIndex: number) => void;
 
     // Helpers
-    resolveAudioUrl: (track: Track) => Promise<string | null>;
+    resolveAudioUrl: (track: Track, force?: boolean) => Promise<string | null>;
     syncWithTrackPlayer: () => Promise<void>;
     preloadUpcomingTracks: () => Promise<void>;
 
@@ -65,7 +67,25 @@ interface PlayerStore {
     reset: () => Promise<void>;
 }
 
-export const usePlayerStore = create<PlayerStore>((set, get) => ({
+function sanitizeTrackForPersistence(track: Track): Track {
+    const isJioSaavn = (track as any).source === 'jiosaavn' || (track as any).source === 'saavn';
+    const isYouTube = (track as any).source === 'youtube';
+    
+    if (isJioSaavn || isYouTube) {
+        // Only persist metadata — strip ephemeral stream URL
+        const { url, ...rest } = track as any;
+        return {
+            ...rest,
+            url: DUMMY_URL,  // Placeholder so TrackPlayer doesn't crash on boot before URL is refreshed
+        } as Track;
+    }
+    
+    return track; // Local files: keep url as-is
+}
+
+export const usePlayerStore = create<PlayerStore>()(
+    persist(
+        (set, get) => ({
     currentTrack: null,
     isPlaying: false,
     queue: [],
@@ -131,10 +151,12 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
                 });
 
                 // Playback Error (Spiral Breaker)
-                TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackError, async (error) => {
+                TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackError, async (error: any) => {
                     console.error('[PlayerStore] Native Playback Error:', error);
 
                     const state = get();
+                    const isBadStatus = error.code === 'android-io-bad-http-status' || error.message?.includes('403') || error.message?.includes('410');
+                    
                     const newFailureCount = state.skipFailureCount + 1;
                     set({ skipFailureCount: newFailureCount });
 
@@ -144,13 +166,74 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
                         return;
                     }
 
+                    // --- REFRESH LOGIC ---
+                    if (isBadStatus && state.currentTrack && (state.currentTrack as any).source !== 'local') {
+                        console.log('[PlayerStore] Attempting to refresh expired URL...');
+                        const freshUrl = await get().resolveAudioUrl(state.currentTrack, true);
+                        
+                        if (freshUrl && freshUrl !== state.currentTrack.url) {
+                            const updatedTrack = { ...state.currentTrack, url: freshUrl };
+                            const activeIdx = state.currentIndex;
+                            
+                            if (activeIdx !== -1) {
+                                await TrackPlayer.remove(activeIdx);
+                                await TrackPlayer.add([updatedTrack], activeIdx);
+                                await TrackPlayer.skip(activeIdx);
+                                await TrackPlayer.play();
+                                
+                                set(s => {
+                                    const newQueue = [...s.queue];
+                                    newQueue[activeIdx] = updatedTrack;
+                                    return { 
+                                        currentTrack: updatedTrack,
+                                        queue: newQueue,
+                                        skipFailureCount: 0 // Reset since we fixed it
+                                    };
+                                });
+                                return;
+                            }
+                        }
+                    }
+
                     // --- SPIRAL BREAKER: Add delay before skipping ---
-                    // This prevents the "rapid-fire" skip loop if the server is down.
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     await get().playNext();
                 });
 
-                // Sync initial state
+                // --- PERSISTENCE RESTORATION ---
+                const state = get();
+                const nativeQueue = await TrackPlayer.getQueue();
+                
+                if (nativeQueue.length === 0 && state.queue.length > 0) {
+                    console.log('[PlayerStore] Restoring persisted queue:', state.queue.length, 'tracks');
+                    
+                    // Add all tracks to native player
+                    await TrackPlayer.add(state.queue);
+                    
+                    // Skip to last active index
+                    if (state.currentIndex >= 0 && state.currentIndex < state.queue.length) {
+                        try {
+                            await TrackPlayer.skip(state.currentIndex);
+                            
+                            // Immediately refresh current track URL so playback works
+                            const currentTrack = state.queue[state.currentIndex];
+                            const freshUrl = await get().resolveAudioUrl(currentTrack, true); // force=true → redirector
+                            if (freshUrl && freshUrl !== DUMMY_URL) {
+                                await TrackPlayer.load({ ...currentTrack, url: freshUrl });
+                            }
+
+                            // Ensure repeat mode is also restored
+                            let tpMode = RepeatMode.Off;
+                            if (state.repeatMode === 'track') tpMode = RepeatMode.Track;
+                            if (state.repeatMode === 'queue') tpMode = RepeatMode.Queue;
+                            await TrackPlayer.setRepeatMode(tpMode);
+                        } catch (e) {
+                            console.error('[PlayerStore] Restore skip/refresh failed:', e);
+                        }
+                    }
+                }
+
+                // Sync state AFTER restoration (or normal boot) to avoid wiping hydrated queue
                 await get().syncWithTrackPlayer();
             }
         } catch (error) {
@@ -179,7 +262,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // ═══════════════════════════════════════════
     // URL RESOLUTION
     // ═══════════════════════════════════════════
-    resolveAudioUrl: async (track: Track): Promise<string | null> => {
+    resolveAudioUrl: async (track: Track, force: boolean = false): Promise<string | null> => {
         // If we have a URL, check if it's local or needs resolution
         // If we DON'T have a URL but have an ID and source, we can still resolve
         const hasUrl = !!track.url && typeof track.url === 'string';
@@ -205,21 +288,14 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             // Silently fail if store is not accessible at this moment
         }
 
-        // 2. JioSaavn - Constant URLs (baked into metadata)
-        if ((track as any).source === "jiosaavn" || (track as any).source === "saavn") {
-            const url = (track as any).streamUrl || (track as any).audioUrl || track.url;
-            if (url && url.length > 10) {
-                // If it's already a full URL (possibly with proxy wrapper already), return it
-                return url;
-            }
-        }
-
-        // 4. External stream resolution
+        // 3. External stream resolution
         try {
             const { getPlayableUrl } = useStreamStore.getState();
 
-            // Force resolution if URL is missing or it's a YouTube track (which has expiring URLs)
-            const needsResolution = !track.url || track.url.length < 10 || (track as any).source === 'youtube';
+            // Force resolution if URL is missing, it's a YouTube track, or it's a JioSaavn track, or force is true
+            const isJioSaavn = (track as any).source === 'jiosaavn' || (track as any).source === 'saavn';
+            const isYouTube = (track as any).source === 'youtube';
+            const needsResolution = force || !track.url || track.url.length < 10 || isYouTube || isJioSaavn;
 
             if (needsResolution && (track as any).source) {
                 const url = await getPlayableUrl({
@@ -877,7 +953,15 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         if (!track || get().hasTrackedCurrentTrack) return;
 
         try {
-            const { axiosInstance } = await import('@/lib/axios');
+            const { axiosInstance, getAuthToken } = await import('@/lib/axios');
+
+            // Guard: do not send history requests before auth token is available.
+            // On cold-start restore, PlaybackActiveTrackChanged fires before Clerk resolves.
+            // Reset hasTrackedCurrentTrack so this will be retried on the next track change.
+            if (!getAuthToken()) {
+                if (__DEV__) console.log('[PlayerStore] trackHistory skipped: auth token not ready yet.');
+                return;
+            }
 
             set({ hasTrackedCurrentTrack: true });
 
@@ -930,4 +1014,48 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
             console.error('[PlayerStore] Reset failed:', error);
         }
     },
-}));
+}),
+{
+    name: 'vibra-player-storage',
+    storage: createJSONStorage(() => mmkvStorage),
+    version: 2,
+    migrate: (persistedState: any, version: number) => {
+        if (version === 0) {
+            // v0 → v1: Discard originalQueue to halve the queue payload size
+            const { originalQueue, ...rest } = persistedState;
+            return rest;
+        }
+        if (version === 1) {
+            // v1 → v2: MMKV migration. State shape is identical, just pass through.
+            return persistedState;
+        }
+        return persistedState;
+    },
+    partialize: (state) => ({
+        currentTrack: state.currentTrack ? sanitizeTrackForPersistence(state.currentTrack) : null,
+        queue: state.queue.map(sanitizeTrackForPersistence),
+        currentIndex: state.currentIndex,
+        currentContext: state.currentContext,
+        shuffleMode: state.shuffleMode,
+        repeatMode: state.repeatMode,
+    }),
+    onRehydrateStorage: () => (state) => {
+        if (__DEV__) {
+            const queueLength = state?.queue?.length ?? 0;
+            const track = state?.currentTrack?.title ?? 'none';
+            console.log(`[PlayerStore] Hydration complete. Queue: ${queueLength} tracks. Last track: "${track}".`);
+        }
+    }
+}
+)
+);
+
+// Trigger one-time async migration from AsyncStorage on first launch after this update.
+// MMKV hydrates synchronously before React renders, so by the time initPlayer() fires
+// in useEffect([]), state.queue is already populated — eliminating the hydration race.
+migrateStoreToMMKV('vibra-player-storage').then((migrated) => {
+    if (migrated) {
+        if (__DEV__) console.log('[PlayerStore] AsyncStorage → MMKV migration complete. Rehydrating...');
+        usePlayerStore.persist.rehydrate();
+    }
+});

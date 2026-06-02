@@ -12,14 +12,14 @@ const CARD_WIDTH = SCREEN_WIDTH * 0.45;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
-export const FeaturedPlaylistsSection = React.memo(() => {
+export const FeaturedPlaylistsSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     const router = useRouter();
     const topPlaylists = useStreamStore(s => s.homepageData?.topPlaylists);
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
             const id = item.externalId?.replace('jiosaavn_playlist_', '');
-            if (id) router.push(`/(tabs)/playlist/external/jiosaavn/${id}` as any);
+            if (id) router.push(`/(tabs)/playlist/external/jiosaavn/${id}?from=home` as any);
         },
         [router]
     );
@@ -30,9 +30,10 @@ export const FeaturedPlaylistsSection = React.memo(() => {
             subtitle={item.songCount ? `${item.songCount} songs` : item.description}
             imageUrl={item.imageUrl}
             onPress={() => handleNavigateExternal(item)}
+            onLongPress={() => onOptions?.(item, 'playlist')}
             index={index}
         />
-    ), [handleNavigateExternal]);
+    ), [handleNavigateExternal, onOptions]);
 
     if (!topPlaylists || topPlaylists.length === 0) return null;
 

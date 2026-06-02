@@ -106,7 +106,7 @@ const toggleStyles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
   },
-  optionText: { fontSize: 12, color: '#71717a', fontWeight: '700' },
+  optionText: { fontSize: 12, color: '#71717a', fontWeight: '600' },
   optionTextActive: { color: '#fff' },
 });
 
@@ -201,8 +201,7 @@ export default function AIPlaylistScreen() {
         <PlaylistResult
           playlist={generatedPlaylist}
           onClose={handleClose}
-          onRegenerate={() => resetParams()}
-        />
+          onRegenerate={() => resetParams()} visible={false}        />
       </View>
     );
   }
@@ -319,7 +318,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff', letterSpacing: -0.5 },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: '#fff', letterSpacing: -0.5 },
   scrollArea: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   stepContent: { flex: 1 },

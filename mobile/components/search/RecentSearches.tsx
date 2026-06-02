@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#121212',
+    backgroundColor: '#09090b',
     zIndex: 10,
   },
   header: {
@@ -151,16 +151,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 11,
   },
   title: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   clearAll: {
     color: '#b3b3b3',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '500',
   },
   listContent: {
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 9,
   },
   itemContent: {
     flex: 1,
@@ -179,10 +179,10 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   itemImage: {
-    width: 52,
-    height: 52,
+    width: 50,
+    height: 50,
     borderRadius: 4,
-    backgroundColor: '#282828',
+    backgroundColor: '#121212',
   },
   itemImageRound: {
     borderRadius: 26,
@@ -192,13 +192,13 @@ const styles = StyleSheet.create({
   },
   itemTitle: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
     marginBottom: 3,
   },
   itemSubtitle: {
     color: '#b3b3b3',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '400',
   },
   removeButton: {

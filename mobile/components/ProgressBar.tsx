@@ -11,7 +11,6 @@ import Animated, {
   clamp,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import * as Haptics from 'expo-haptics';
 
 interface ProgressBarProps {
   onSeek: (val: number) => void;
@@ -23,7 +22,7 @@ const HIT_SLOP = 5;
 
 const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
   const { position, duration } = useProgress(200);
-  const { currentTrack } = usePlayerStore();
+  const currentTrackId = usePlayerStore(state => state.currentTrack?.id);
 
   const sliderWidth = useSharedValue(0);
   const isSliding = useSharedValue(false);
@@ -32,7 +31,7 @@ const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
   useEffect(() => {
     // Reset progress immediately on track change to prevent flicker
     progress.value = 0;
-  }, [currentTrack?.id]);
+  }, [currentTrackId]);
 
   useEffect(() => {
     if (!isSliding.value && duration > 0) {
@@ -40,9 +39,6 @@ const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
     }
   }, [position, duration]);
 
-  const triggerHaptic = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  }, []);
 
   const seekTo = useCallback(
     (fraction: number) => {
@@ -59,7 +55,6 @@ const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
       isSliding.value = true;
       const fraction = clamp(e.x / sliderWidth.value, 0, 1);
       progress.value = fraction;
-      runOnJS(triggerHaptic)();
     })
     .onUpdate((e) => {
       const fraction = clamp(e.x / sliderWidth.value, 0, 1);
@@ -68,7 +63,6 @@ const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
     .onEnd(() => {
       isSliding.value = false;
       runOnJS(seekTo)(progress.value);
-      runOnJS(triggerHaptic)();
     })
     .onFinalize(() => {
       isSliding.value = false;
@@ -80,7 +74,6 @@ const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
       const fraction = clamp(e.x / sliderWidth.value, 0, 1);
       progress.value = fraction;
       runOnJS(seekTo)(fraction);
-      runOnJS(triggerHaptic)();
     });
 
   const composedGesture = Gesture.Race(panGesture, tapGesture);

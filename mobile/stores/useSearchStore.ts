@@ -1,8 +1,8 @@
-// stores/useSearchStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { axiosInstance } from '@/lib/axios';
+import { mmkvStorage } from '@/lib/mmkvStorage';
+import { migrateStoreToMMKV } from '@/lib/mmkvMigration';
 
 interface SearchSuggestions {
   songs: any[];
@@ -39,6 +39,9 @@ interface SearchStore {
   setAudioSearchResult: (result: { title: string; artist: string } | null) => void;
 }
 
+let suggestionAbortController: AbortController | null = null;
+let resultAbortController: AbortController | null = null;
+
 export const useSearchStore = create<SearchStore>()(
   persist(
     (set, get) => ({
@@ -57,18 +60,34 @@ export const useSearchStore = create<SearchStore>()(
           set({ suggestions: null, isSuggesting: false });
           return;
         }
+
+        suggestionAbortController?.abort();
+        suggestionAbortController = new AbortController();
+
         set({ isSuggesting: true });
         try {
-          const res = await axiosInstance.get('/stream/search/all', {
-            params: { q, limit: 5 },
+          const res = await axiosInstance.get('/stream/autocomplete', {
+            params: { q },
+            signal: suggestionAbortController.signal
           });
-          if (get().query === q) {
-            set({ suggestions: res.data });
+          
+          if (get().query.trim() !== '') {
+            // Group flat autocomplete array into categorized format for SearchResults
+            const items = res.data.suggestions || [];
+            set({
+              suggestions: {
+                songs: items.filter((i: any) => i.type === 'song'),
+                albums: items.filter((i: any) => i.type === 'album'),
+                artists: items.filter((i: any) => i.type === 'artist'),
+                playlists: items.filter((i: any) => i.type === 'playlist'),
+              }
+            });
           }
-        } catch (e) {
+        } catch (e: any) {
+          if (e.name === 'CanceledError') return;
           console.error('[SearchStore] fetchSuggestions failed:', e);
         } finally {
-          if (get().query === q) {
+          if (get().query.trim() !== '') {
             set({ isSuggesting: false });
           }
         }
@@ -76,13 +95,19 @@ export const useSearchStore = create<SearchStore>()(
 
       fetchResults: async (q) => {
         if (!q.trim()) return;
+
+        resultAbortController?.abort();
+        resultAbortController = new AbortController();
+
         set({ isSearching: true, results: null });
         try {
           const res = await axiosInstance.get('/stream/search/all', {
             params: { q, limit: 20 },
+            signal: resultAbortController.signal
           });
           set({ results: res.data });
-        } catch (e) {
+        } catch (e: any) {
+          if (e.name === 'CanceledError') return;
           console.error('[SearchStore] fetchResults failed:', e);
           set({ results: null });
         } finally {
@@ -119,10 +144,17 @@ export const useSearchStore = create<SearchStore>()(
     }),
     {
       name: 'search-storage',
-      storage: createJSONStorage(() => AsyncStorage),
+      storage: createJSONStorage(() => mmkvStorage),
       partialize: (state) => ({
         recentSearches: state.recentSearches,
       }),
     }
   )
 );
+
+// Trigger one-time async migration on first launch
+migrateStoreToMMKV("search-storage").then((migrated) => {
+    if (migrated) {
+        useSearchStore.persist.rehydrate();
+    }
+});

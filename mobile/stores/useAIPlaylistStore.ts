@@ -108,6 +108,7 @@ interface AIPlaylistStore {
   clearError: () => void;
   goBack: () => void;
   clearPlaylist: () => void;
+  updateGeneratedPlaylistTracks: (id: string, tracks: AIPlaylistTrack[]) => void;
 }
 
 const INITIAL_STATE = {
@@ -115,13 +116,7 @@ const INITIAL_STATE = {
   currentStep: 1,
   generationStage: 'idle' as GenerationStage,
   isGenerating: false,
-  messages: [
-    {
-      id: 'welcome',
-      type: 'ai' as const,
-      text: "Playlist Mode active. Describe the mood or occasion, and I'll curate your perfect soundtrack."
-    }
-  ],
+  messages: [],
   params: {},
   naturalQuery: '',
   chatQuery: '',
@@ -154,17 +149,6 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
       playlistMode: newMode,
       directMode: newMode ? get().directMode : false
     });
-
-    // Add welcome message for the mode
-    const msg: Message = {
-      id: Date.now().toString(),
-      type: 'ai',
-      text: newMode
-        ? "Switched to Playlist Mode. Tell me what kind of music you're looking for, and I'll build it! 🎵"
-        : "Switched to Chat Mode. Let's talk about music! 🎧"
-    };
-
-    set(state => ({ messages: [...state.messages, msg] }));
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   },
 
@@ -783,5 +767,27 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
     } else if (inputMode === 'manual' && currentStep === 1) {
       set({ inputMode: 'chat', currentStep: 0 });
     }
+  },
+
+  updateGeneratedPlaylistTracks: (id: string, tracks: AIPlaylistTrack[]) => {
+    set((state) => {
+      // 1. Update the current active playlist if matches
+      const updatedPlaylist = state.generatedPlaylist?._id === id
+        ? { ...state.generatedPlaylist, tracks }
+        : state.generatedPlaylist;
+
+      // 2. Update all messages containing this playlist
+      const updatedMessages = state.messages.map(m => {
+        if (m.type === 'playlist_card' && m.playlist?._id === id) {
+          return { ...m, playlist: { ...m.playlist, tracks } };
+        }
+        return m;
+      });
+
+      return {
+        generatedPlaylist: updatedPlaylist,
+        messages: updatedMessages
+      };
+    });
   },
 }));

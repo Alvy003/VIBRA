@@ -5,10 +5,11 @@ import {
     Text,
     TouchableOpacity,
     Dimensions,
-    Alert
+    Alert,
+    BackHandler
 } from 'react-native';
 import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useGlobalSearchParams } from 'expo-router';
 import { useStreamStore } from '@/stores/useStreamStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import Animated, {
@@ -39,9 +40,10 @@ import { FlashList as OriginalFlashList } from '@shopify/flash-list';
 const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
+import Colors from '@/constants/Colors';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#7B2CF5';
+const ACCENT_COLOR = Colors.accent;
 
 interface ExternalAlbumHeaderProps {
     album: any;
@@ -70,14 +72,14 @@ const ExternalAlbumHeader = React.memo<ExternalAlbumHeaderProps>(({
             <LinearGradient
                 colors={[
                     'transparent',
-                    'rgba(0,0,0,0.05)',
-                    'rgba(0,0,0,0.15)',
-                    'rgba(0,0,0,0.3)',
-                    'rgba(0,0,0,0.5)',
-                    'rgba(0,0,0,0.7)',
-                    'rgba(0,0,0,0.85)',
-                    '#000000',
-                    '#000000',
+                    'rgba(9,9,11,0.05)',
+                    'rgba(9,9,11,0.15)',
+                    'rgba(9,9,11,0.3)',
+                    'rgba(9,9,11,0.5)',
+                    'rgba(9,9,11,0.7)',
+                    'rgba(9,9,11,0.85)',
+                    Colors.background,
+                    Colors.background,
                 ]}
                 locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
                 style={{ paddingTop: 60, paddingBottom: 10 }}
@@ -100,10 +102,10 @@ const ExternalAlbumHeader = React.memo<ExternalAlbumHeaderProps>(({
                 </View>
 
                 <View className="w-full mt-5">
-                    <Text className="text-white text-[24px] font-bold mb-3 leading-tight tracking-tight" numberOfLines={1}>
+                    <Text className="text-white text-[24px] font-semibold mb-3 leading-tight tracking-tight" numberOfLines={1}>
                         {album.title}
                     </Text>
-                    <Text className="text-white text-sm font-bold mb-4" numberOfLines={1}>{album.artist}</Text>
+                    <Text className="text-white text-sm font-semibold mb-4" numberOfLines={1}>{album.artist}</Text>
                     <View className="flex-row items-center">
                         <Text className="text-zinc-400 text-[12px] font-medium tracking-wider">
                             Album <Text className="text-zinc-400 font-medium lowercase">• {album.year || '2024'}</Text>
@@ -153,7 +155,9 @@ const ExternalAlbumHeader = React.memo<ExternalAlbumHeaderProps>(({
 
 export default function ExternalAlbumScreen() {
     const { id } = useLocalSearchParams();
+    const { from } = useGlobalSearchParams();
     const router = useRouter();
+    const listRef = React.useRef<any>(null);
     const [isInitialLoading, setIsInitialLoading] = React.useState(true);
 
     const {
@@ -166,16 +170,59 @@ export default function ExternalAlbumScreen() {
     const { currentTrack, isPlaying, initializeQueue, pauseTrack } = usePlayerStore();
     const { downloadAlbum, downloadedAlbums, downloadedSongs } = useDownloadStore();
 
+    const handleBack = useCallback(() => {
+        // If we have a clear context of where we came from, use it to switch back to that tab
+        if (from === 'search') {
+            router.push('/(tabs)/search');
+            return;
+        } 
+        
+        if (from === 'library') {
+            router.push('/(tabs)/library');
+            return;
+        }
+
+        if (from === 'home') {
+            router.push('/(tabs)');
+            return;
+        }
+
+        if (router.canGoBack()) {
+            router.back();
+        } else {
+            router.replace('/(tabs)/library');
+        }
+    }, [from, router]);
+
     const artworkUrl = useMemo(() => resolveAssetUrl(album?.imageUrl), [album?.imageUrl]);
     const colors = useDynamicColors(artworkUrl);
 
+
     useEffect(() => {
         if (id) {
+            // Reset scroll position on ID change
+            listRef.current?.scrollToOffset({ offset: 0, animated: false });
+            
             setIsInitialLoading(true);
             fetchExternalAlbum('jiosaavn', id as string);
         }
         return () => clearDetail();
     }, [id]);
+
+    // Handle system back gesture
+    useEffect(() => {
+        const backAction = () => {
+            handleBack();
+            return true;
+        };
+
+        const backHandler = BackHandler.addEventListener(
+            'hardwareBackPress',
+            backAction
+        );
+
+        return () => backHandler.remove();
+    }, [handleBack]); // Depend on handleBack to avoid stale closures
 
     useEffect(() => {
         if (!isLoadingDetail && album) {
@@ -249,15 +296,8 @@ export default function ExternalAlbumScreen() {
         };
     });
 
-    const handleBack = () => {
-        if (router.canGoBack()) {
-            router.back();
-        } else {
-            router.replace('/(tabs)/library');
-        }
-    };
 
-    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : '#121212';
+    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : Colors.surface;
 
     // Offline/Cached Data Fallback
     const cachedAlbum = downloadedAlbums[id as string];
@@ -321,7 +361,7 @@ export default function ExternalAlbumScreen() {
         );
     }, [album, downloadAlbum]);
 
-    const renderHeader = useCallback(() => (
+    const headerComponent = useMemo(() => (
         <ExternalAlbumHeader
             album={displayAlbum}
             artworkUrl={artworkUrl}
@@ -361,7 +401,7 @@ export default function ExternalAlbumScreen() {
     }
 
     return (
-        <View className="flex-1 bg-black">
+        <View className="flex-1 mb-5" style={{ backgroundColor: Colors.background }}>
             <View
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
@@ -372,7 +412,7 @@ export default function ExternalAlbumScreen() {
                         className="w-10 h-10 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" />
+                        <ArrowLeft size={24} color={Colors.textPrimary} />
                     </TouchableOpacity>
                 </SafeAreaView>
             </View>
@@ -381,17 +421,17 @@ export default function ExternalAlbumScreen() {
                 style={[stickyHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }]}
                 pointerEvents="box-none"
             >
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#121212' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
 
                 <LinearGradient
-                    colors={[headerBaseColor, '#000000']}
+                    colors={[headerBaseColor, Colors.background]}
                     style={StyleSheet.absoluteFill}
                 />
 
                 <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
                     <View className="w-10 mr-2" />
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
-                        <Text className="text-white text-sm font-bold" numberOfLines={1}>
+                        <Text className="text-white text-sm font-semibold" numberOfLines={1}>
                             {album?.title}
                         </Text>
                     </Animated.View>
@@ -414,12 +454,13 @@ export default function ExternalAlbumScreen() {
             </Animated.View>
 
                 <AnimatedFlashList
+                    ref={listRef}
                     data={displaySongs}
                     renderItem={renderTrackItem}
                     keyExtractor={(item: any) => item.externalId || item.id}
                     onScroll={scrollHandler}
                     scrollEventThrottle={16}
-                    ListHeaderComponent={renderHeader}
+                    ListHeaderComponent={headerComponent}
                     estimatedItemSize={80}
                     contentContainerStyle={{ paddingBottom: 100 }}
                 />

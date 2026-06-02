@@ -1,8 +1,9 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { axiosInstance, setAuthToken } from "@/lib/axios";
 import * as Haptics from 'expo-haptics';
+import { mmkvStorage } from "@/lib/mmkvStorage";
+import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
 
 interface Song {
     _id: string;
@@ -50,6 +51,7 @@ interface MusicStore {
     recentlyPlayed: Song[];
     quickPicks: Song[];
     recentCollections: any[];
+    frequentCollections: any[];
 
 
     currentAlbum: Album | null;
@@ -61,6 +63,7 @@ interface MusicStore {
     fetchRecentlyPlayed: () => Promise<void>;
     fetchQuickPicks: () => Promise<void>;
     fetchRecentCollections: () => Promise<void>;
+    fetchFrequentCollections: () => Promise<void>;
     toggleLikeSong: (song: any) => Promise<boolean>;
     isSongLiked: (song: any) => boolean;
     isSongMatch: (track1: any, track2: any) => boolean;
@@ -81,6 +84,7 @@ export const useMusicStore = create<MusicStore>()(
             recentlyPlayed: [],
             quickPicks: [],
             recentCollections: [],
+            frequentCollections: [],
 
             fetchAlbums: async () => {
                 console.log("[MusicStore] Fetching albums from:", axiosInstance.defaults.baseURL + "/albums");
@@ -184,6 +188,15 @@ export const useMusicStore = create<MusicStore>()(
                     console.error("[MusicStore] Failed to fetch recent collections:", error.message);
                 }
             },
+            
+            fetchFrequentCollections: async () => {
+                try {
+                    const response = await axiosInstance.get("/history/frequent-collections?limit=6");
+                    set({ frequentCollections: Array.isArray(response.data) ? response.data : [] });
+                } catch (error: any) {
+                    console.error("[MusicStore] Failed to fetch frequent collections:", error.message);
+                }
+            },
 
             toggleLikeSong: async (track: any) => {
                 const prevState = get().likedSongs;
@@ -271,6 +284,7 @@ export const useMusicStore = create<MusicStore>()(
                     recentlyPlayed: [],
                     quickPicks: [],
                     recentCollections: [],
+                    frequentCollections: [],
                     currentAlbum: null,
                     musicError: null,
                     isLoading: false
@@ -280,14 +294,35 @@ export const useMusicStore = create<MusicStore>()(
         }),
         {
             name: 'vibra-music-storage',
-            storage: createJSONStorage(() => AsyncStorage),
+            storage: createJSONStorage(() => mmkvStorage),
+            version: 1,
+            migrate: (persistedState: any, version: number) => {
+                if (version === 0) {
+                    // Discard oversized server-truth data from legacy v0 persistence
+                    return {
+                        likedSongs: persistedState.likedSongs || [],
+                    };
+                }
+                return persistedState;
+            },
             partialize: (state) => ({
-                albums: state.albums,
-                featuredSongs: state.featuredSongs,
                 likedSongs: state.likedSongs,
-                recentCollections: state.recentCollections
             }),
+            onRehydrateStorage: () => (state) => {
+                if (__DEV__) {
+                    console.log(`[MusicStore] Hydration complete. Liked songs: ${state?.likedSongs?.length ?? 0}.`);
+                }
+            }
         }
     )
 );
+
+// Trigger one-time async migration from AsyncStorage on first launch.
+// likedSongs are now synchronously available on first render — no more heart-icon flicker.
+migrateStoreToMMKV('vibra-music-storage').then((migrated) => {
+    if (migrated) {
+        if (__DEV__) console.log('[MusicStore] AsyncStorage → MMKV migration complete. Rehydrating...');
+        useMusicStore.persist.rehydrate();
+    }
+});
 

@@ -11,6 +11,7 @@ import {
   Modal,
   StatusBar,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { Image } from 'expo-image';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -18,51 +19,44 @@ import { useUser, useClerk } from '@clerk/clerk-expo';
 import Animated, {
   FadeIn,
   FadeOut,
-  SlideInDown,
   SlideOutDown,
   useSharedValue,
   useAnimatedStyle,
 } from 'react-native-reanimated';
 import { useOnboardingStore, AVAILABLE_LANGUAGES } from '@/stores/useOnboardingStore';
 import { useStreamStore } from '@/stores/useStreamStore';
+import { useDownloadStore } from '@/stores/useDownloadStore';
 import { resetAllStores } from '@/stores/user';
 import {
   ArrowLeft,
   ChevronRight,
   User,
   Settings,
-  Shield,
   Globe,
   HardDrive,
-  LogOut,
   Bell,
   Download,
   Check,
   X,
-  Volume2,
-  Wifi,
-  Smartphone,
   Mail,
-  Eye,
   Info,
-  FileText,
-  ExternalLink,
 } from 'lucide-react-native';
+import Colors from '@/constants/Colors';
 
 // Disable expo-router header
 export const unstable_settings = {
   initialRouteName: 'profile',
 };
 
-// ─── Spotify Colors ───
+// ─── Centralized Colors ───
 const SPOTIFY = {
-  background: '#121212',
-  surface: '#1a1a1a',
-  divider: 'rgba(255,255,255,0.08)',
-  textPrimary: '#ffffff',
-  textSecondary: '#b3b3b3',
-  textMuted: '#727272',
-  green: '#7B2CF5',
+  background: Colors.background,
+  surface: Colors.surface,
+  divider: Colors.whiteAlpha08,
+  textPrimary: Colors.textPrimary,
+  textSecondary: Colors.textSecondary,
+  textMuted: Colors.textMuted,
+  green: Colors.accent,
   row: 'transparent',
 };
 
@@ -80,14 +74,15 @@ export default function ProfileScreen() {
 
   const { preferences, setLanguages } = useOnboardingStore();
   const { fetchHomepage, fetchDailyMix } = useStreamStore();
+  const { downloadedSongs, getStorageSize } = useDownloadStore();
+
+  const [storageSize, setStorageSize] = useState<number>(0);
 
   // Local state
   const [showLanguageModal, setShowLanguageModal] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [emailNotifications, setEmailNotifications] = useState(false);
-  const [dataSaver, setDataSaver] = useState(false);
-  const [gaplessPlayback, setGaplessPlayback] = useState(true);
-  const [autoplay, setAutoplay] = useState(true);
+
+  const downloadCount = Object.keys(downloadedSongs).length;
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -98,6 +93,31 @@ export default function ProfileScreen() {
       console.error('Logout error:', error);
     }
   }, [signOut, router, resetAllStores]);
+
+  const handleManageAccount = async () => {
+    try {
+      // Redirect to the web app's profile page where full Clerk UI is available
+      await WebBrowser.openBrowserAsync('https://vibra-969f.onrender.com/profile');
+    } catch (error) {
+      console.error('Error opening user profile:', error);
+    }
+  };
+
+  const loadStorageInfo = useCallback(async () => {
+    const size = await getStorageSize();
+    setStorageSize(size);
+  }, [getStorageSize]);
+
+  React.useEffect(() => {
+    loadStorageInfo();
+  }, [downloadedSongs, loadStorageInfo]);
+
+  const formatSize = (bytes: number) => {
+    if (bytes === 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    return `${(mb / 1024).toFixed(1)} GB`;
+  };
 
   const handleSaveLanguages = useCallback((languages: string[]) => {
     setLanguages(languages);
@@ -152,9 +172,8 @@ export default function ProfileScreen() {
             />
             <View style={styles.profileInfo}>
               <Text style={styles.profileName}>{user.fullName || 'User'}</Text>
-              <Text style={styles.profileSubtext}>View profile</Text>
+              <Text style={styles.profileSubtext}>{user.primaryEmailAddress?.emailAddress}</Text>
             </View>
-            <ChevronRight size={24} color={SPOTIFY.textMuted} />
           </TouchableOpacity>
 
           {/* ─── Account ─── */}
@@ -172,7 +191,7 @@ export default function ProfileScreen() {
           <SettingsRow
             icon={Settings}
             title="Manage account"
-            onPress={() => { }}
+            onPress={handleManageAccount}
           />
 
           {/* ─── Content and Display ─── */}
@@ -205,20 +224,21 @@ export default function ProfileScreen() {
             }
           />
 
-          {/* ─── Storage ─── */}
+          {/* Storage */}
           <SectionTitle title="Storage" />
           <SettingsRow
             icon={HardDrive}
-            title="Clear cache"
-            subtitle="Free up storage on your device"
-            onPress={() => { }}
+            title="Storage Used"
+            subtitle={`${formatSize(storageSize)} used by downloads`}
           />
 
           <SettingsRow
             icon={Download}
             title="Downloads"
-            subtitle="0 songs"
-            onPress={() => { }}
+            subtitle={`${downloadCount} song${downloadCount !== 1 ? 's' : ''}`}
+            onPress={() => {
+              router.push('/(tabs)/downloads');
+            }}
           />
 
           {/* ─── About ─── */}
@@ -486,14 +506,14 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: SPOTIFY.textPrimary,
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   headerSpacer: {
     width: 44,
   },
   headerDivider: {
-    height: 1,
-    backgroundColor: SPOTIFY.divider,
+    borderBottomWidth: 1,
+    borderBottomColor: SPOTIFY.divider,
   },
 
   // Scroll
@@ -516,15 +536,18 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
+    marginLeft: 10,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: SPOTIFY.divider,
   },
   profileInfo: {
     flex: 1,
-    marginLeft: 12,
   },
   profileName: {
     color: SPOTIFY.textPrimary,
     fontSize: 22,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   profileSubtext: {
     color: SPOTIFY.textSecondary,
@@ -541,7 +564,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: SPOTIFY.textPrimary,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.3,
   },
 
@@ -583,7 +606,7 @@ const styles = StyleSheet.create({
   },
 
   logoutButton: {
-    backgroundColor: '#fff',
+    backgroundColor: Colors.textPrimary,
     borderWidth: 0,
     borderRadius: 16,
     paddingVertical: 8,
@@ -593,9 +616,9 @@ const styles = StyleSheet.create({
   },
 
   logoutText: {
-    color: '#000',
+    color: Colors.background,
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.3,
   },
 
@@ -626,7 +649,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.7)',
   },
   modalContent: {
-    backgroundColor: '#282828',
+    backgroundColor: Colors.surface,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
     maxHeight: '85%',
@@ -649,7 +672,7 @@ const styles = StyleSheet.create({
   modalTitle: {
     color: SPOTIFY.textPrimary,
     fontSize: 17,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   modalHeaderSpacer: {
     width: 44,
@@ -707,9 +730,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#404040',
   },
   saveButtonText: {
-    color: '#000',
+    color: Colors.background,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     letterSpacing: 0.5,
   },
   saveButtonTextDisabled: {

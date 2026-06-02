@@ -4,14 +4,6 @@ import TrackPlayer, { Event, State, Capability, AppKilledPlaybackBehavior } from
 export async function PlaybackService() {
     // console.warn('[PlaybackService] Service is booting (Headless Context)...');
 
-    // Heartbeat for verification
-    setInterval(async () => {
-        try {
-            const state = await TrackPlayer.getPlaybackState();
-            // console.log('[PlaybackService] Heartbeat - State:', state.state);
-        } catch (e) { }
-    }, 5000);
-
     // --- RE-REGISTER CAPABILITIES FROM BACKGROUND ---
     // This helps Android 13/14 bridge the gap between main app and headless task
     try {

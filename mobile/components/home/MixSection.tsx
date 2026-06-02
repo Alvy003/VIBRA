@@ -2,6 +2,7 @@ import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { DiscoveryMixCard } from './DiscoveryMixCard';
 import { SectionHeader } from './SectionHeader';
+import Colors from '@/constants/Colors';
 
 export const MixSection = React.memo(() => {
     return (
@@ -9,7 +10,7 @@ export const MixSection = React.memo(() => {
             <SectionHeader
                 title="Made For You"
                 // subtitle="Your personal discovery mixes"
-                accentColor="#ec4899"
+                accentColor={Colors.accent}
             />
             <View style={styles.cardsContainer}>
                 <DiscoveryMixCard type="daily" />

@@ -20,7 +20,7 @@ export const PlaylistResultRow = React.memo(({ playlist }: PlaylistResultRowProp
     if (rawId) {
       const cleanId = rawId.replace(/^jiosaavn_playlist_/, '');
       // Playlists are only supported for JioSaavn source currently
-      router.push(`/(tabs)/playlist/external/jiosaavn/${cleanId}` as any);
+      router.push(`/(tabs)/playlist/external/jiosaavn/${cleanId}?from=search` as any);
     }
   };
 

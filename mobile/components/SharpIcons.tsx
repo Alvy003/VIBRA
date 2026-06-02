@@ -76,3 +76,66 @@ export const SharpDevice = ({ size = 24, color = '#fff', style }: SharpIconProps
     />
   </Svg>
 );
+export const SharpDownload = ({ size = 24, color = '#fff', style }: SharpIconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" style={style}>
+    <Path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill={color} />
+  </Svg>
+);
+
+export const SharpQueue = ({ size = 24, color = '#fff', style }: SharpIconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" style={style}>
+    <Path d="M3 17h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V5H3z" fill={color} />
+  </Svg>
+);
+
+export const SharpAddQueue = ({ size = 24, color = '#fff', style }: SharpIconProps) => (
+  <Svg width={size} height={size * 0.9} viewBox="0 0 51 46" style={style}>
+    {/* Plus icon - bigger */}
+    <Path
+      d="M0 7.5H14M7 0.5V14.5"
+      stroke={color}
+      strokeWidth="4.5"
+      strokeLinecap="round"
+      fill="none"
+    />
+    {/* Top Bar - pill/oval shape like queue icon */}
+    <Path
+      d="M18 8.31192C18 4.72048 21.3 1 25.5 1H41.5C45.7 1 49 4.72048 49 8.31192C49 12.8943 45.7 15.6146 41.5 15.6146H25.5C21.3 15.6146 18 12.8943 18 8.31192Z"
+      fill={color}
+    />
+    {/* Middle Bar */}
+    <Path
+      d="M0 26h48v5H0v-5z"
+      fill={color}
+    />
+    {/* Bottom Bar */}
+    <Path
+      d="M0 41h48v5H0v-5z"
+      fill={color}
+    />
+  </Svg>
+);
+
+export const QueueIcon = ({ size = 24, color = '#fff', style }: SharpIconProps) => (
+  <Svg width={size} height={size * 0.9} viewBox="0 0 51 46" style={style}>
+    <Path
+      fillRule="evenodd"
+      clipRule="evenodd"
+      d="M48.095 41.0054C48.095 40.8239 47.9421 40.6878 47.7513 40.6878C43.7911 40.6878 6.28846 40.6878 2.32826 40.6878C2.14695 40.6878 1.99426 40.8239 1.99426 41.0054C1.99426 41.9491 1.99426 44.7077 1.99426 45.6604C1.99426 45.8328 2.14695 45.978 2.32826 45.978C6.28846 45.978 43.7911 45.978 47.7513 45.978C47.9421 45.978 48.095 45.8328 48.095 45.6604V41.0054ZM48.095 26.6141C48.095 26.4417 47.9421 26.2965 47.7513 26.2965C43.7911 26.2965 6.28846 26.2965 2.32826 26.2965C2.14695 26.2965 1.99426 26.4417 1.99426 26.6141C1.99426 27.5669 1.99426 30.3254 1.99426 31.2691C1.99426 31.4415 2.14695 31.5867 2.32826 31.5867C6.28846 31.5867 43.7911 31.5867 47.7513 31.5867C47.9421 31.5867 48.095 31.4415 48.095 31.2691V26.6141ZM0 8.31192C0 3.72048 3.91249 0 8.73152 0H41.3957C46.2148 0 50.175 3.72048 50.175 8.31192C50.175 12.8943 46.2148 16.6146 41.3957 16.6146H8.73152C3.91249 16.6146 0 12.8943 0 8.31192ZM5.56307 8.31192C5.56307 6.6423 6.98522 5.29925 8.73152 5.29925H41.3957C43.142 5.29925 44.5642 6.6423 44.5642 8.31192C44.5642 9.97246 43.142 11.3244 41.3957 11.3244H8.73152C6.98522 11.3244 5.56307 9.97246 5.56307 8.31192Z"
+      fill={color}
+    />
+  </Svg>
+);
+
+export const SharpPlus = ({ size = 24, color = '#fff', style }: SharpIconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" style={style}>
+    <Path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" fill={color} />
+  </Svg>
+);
+
+export const SharpCheck = ({ size = 24, color = '#fff', style }: SharpIconProps) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" style={style}>
+    <Path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" fill={color} />
+  </Svg>
+);
+

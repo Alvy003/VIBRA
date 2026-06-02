@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { PremiumCard } from '@/components/PremiumCard';
 import { useStreamStore } from '@/stores/useStreamStore';
 import { SectionHeader } from './SectionHeader';
+import Colors from '@/constants/Colors';
 import { ExternalItem } from './types';
 import { Dimensions } from 'react-native';
 
@@ -12,14 +13,14 @@ const CARD_WIDTH = SCREEN_WIDTH * 0.45;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
-export const NewReleasesSection = React.memo(() => {
+export const NewReleasesSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     const router = useRouter();
     const newAlbums = useStreamStore(s => s.homepageData?.newAlbums);
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
             const id = item.externalId?.replace('jiosaavn_album_', '');
-            if (id) router.push(`/(tabs)/album/external/jiosaavn/${id}` as any);
+            if (id) router.push(`/(tabs)/album/external/jiosaavn/${id}?from=home` as any);
         },
         [router]
     );
@@ -30,9 +31,10 @@ export const NewReleasesSection = React.memo(() => {
             subtitle={item.artist}
             imageUrl={item.imageUrl}
             onPress={() => handleNavigateExternal(item)}
+            onLongPress={() => onOptions?.(item, 'album')}
             index={index}
         />
-    ), [handleNavigateExternal]);
+    ), [handleNavigateExternal, onOptions]);
 
     if (!newAlbums || newAlbums.length === 0) return null;
 
@@ -40,7 +42,7 @@ export const NewReleasesSection = React.memo(() => {
         <View style={styles.sectionContainer}>
             <SectionHeader
                 title="New Releases"
-                accentColor="#f59e0b"
+                accentColor={Colors.accent}
             />
             <FlatList
                 horizontal

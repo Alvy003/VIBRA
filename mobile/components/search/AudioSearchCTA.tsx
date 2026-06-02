@@ -6,6 +6,7 @@ import Animated, { FadeInDown } from 'react-native-reanimated';
 import { AudioLines, Sparkles } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { SEARCH_COLORS, RADIUS } from '@/constants/design';
+import Colors from '@/constants/Colors';
 
 interface AudioSearchCTAProps {
   onPress: () => void;
@@ -28,14 +29,14 @@ export const AudioSearchCTA = React.memo(({ onPress }: AudioSearchCTAProps) => {
         style={styles.touchable}
       >
         <LinearGradient
-          colors={['rgba(147, 51, 234, 0.15)', 'rgba(147, 51, 234, 0.05)']}
+          colors={[Colors.primaryAlpha15, Colors.primaryLight]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.gradient}
         >
           <View style={styles.iconContainer}>
             <View style={styles.iconBg}>
-              <AudioLines size={24} color="#9333ea" />
+              <AudioLines size={24} color={Colors.primaryDark} />
             </View>
             <View style={styles.sparkle}>
               <Sparkles size={14} color="#f59e0b" fill="#f59e0b" />
@@ -69,7 +70,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(147, 51, 234, 0.2)',
+    borderColor: Colors.primaryAlpha15,
   },
   gradient: {
     flexDirection: 'row',
@@ -84,7 +85,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(147, 51, 234, 0.2)',
+    backgroundColor: Colors.primaryAlpha15,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -99,7 +100,7 @@ const styles = StyleSheet.create({
   title: {
     color: SEARCH_COLORS.textPrimary,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     marginBottom: 2,
   },
   subtitle: {
@@ -111,13 +112,13 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(147, 51, 234, 0.2)',
+    backgroundColor: Colors.primaryAlpha15,
     alignItems: 'center',
     justifyContent: 'center',
   },
   arrowText: {
-    color: '#9333ea',
+    color: Colors.primaryDark,
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

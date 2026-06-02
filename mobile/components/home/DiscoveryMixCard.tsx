@@ -7,6 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { RADIUS } from '@/constants/design';
 import { useStreamStore } from '@/stores/useStreamStore';
 import { MixCover } from './MixCover';
+import Colors from '@/constants/Colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_SIZE = (SCREEN_WIDTH - 48) / 2; // 2 columns with padding
@@ -24,14 +25,14 @@ export const DiscoveryMixCard = React.memo(({ type }: DiscoveryMixCardProps) => 
     const isEligible = isWeekly ? weeklyMix?.eligible : !!(dailyMix && dailyMix.length > 0);
 
     const firstSong = mixData && mixData.length > 0 ? mixData[0] : null;
-    const accentColor = isWeekly ? '#7B2CF5' : '#ec4899';
+    const accentColor = isWeekly ? Colors.accent : Colors.accent; // Both use central accent for consistency
     const label = isWeekly ? 'Weekly Mix' : 'Daily Mix';
 
     const handlePress = () => {
         Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         router.push({
             pathname: "/(tabs)/playlist/[id]" as any,
-            params: { id: `${type}-mix` }
+            params: { id: `${type}-mix`, from: 'home' }
         });
     };
 
@@ -77,7 +78,7 @@ const styles = StyleSheet.create({
     },
     card: {
         flex: 1,
-        backgroundColor: '#09090b',
+        backgroundColor: Colors.background,
         position: 'relative',
     },
     labelBar: {
@@ -94,7 +95,7 @@ const styles = StyleSheet.create({
         opacity: 0.9,
     },
     labelText: {
-        color: '#fff',
+        color: Colors.textPrimary,
         fontSize: 16,
         fontWeight: '900',
         paddingHorizontal: 10,
@@ -105,13 +106,13 @@ const styles = StyleSheet.create({
     },
     lockedOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: Colors.blackAlpha50,
         justifyContent: 'flex-end',
         padding: 10,
     },
     progressBar: {
         height: 3,
-        backgroundColor: 'rgba(255,255,255,0.2)',
+        backgroundColor: Colors.whiteAlpha20,
         borderRadius: 1.5,
         overflow: 'hidden',
         marginBottom: 35, // Positioned above the label bar area

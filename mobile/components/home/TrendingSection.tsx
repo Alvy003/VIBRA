@@ -10,6 +10,7 @@ import { SectionHeader } from './SectionHeader';
 import { SongItem } from './types';
 import { Dimensions } from 'react-native';
 import { resolveAssetUrl } from '@/lib/url';
+import Colors from '@/constants/Colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.38;
@@ -52,7 +53,7 @@ export const TrendingSection = React.memo(() => {
             <SectionHeader
                 title="Trending Now"
                 subtitle="What everyone's listening to"
-                accentColor="#f97316"
+                accentColor={Colors.accent}
             />
 
             {/* Highlighted #1 Trending Card */}
@@ -74,7 +75,7 @@ export const TrendingSection = React.memo(() => {
                     />
                     <View style={styles.highlightInfo}>
                         <View style={styles.trendingBadge}>
-                            <TrendingUp size={11} color="#f97316" />
+                            <TrendingUp size={11} color={Colors.accent} />
                             <Text style={styles.trendingBadgeText}>#1 TRENDING</Text>
                         </View>
                         <Text numberOfLines={1} style={styles.highlightTitle}>
@@ -118,11 +119,11 @@ const styles = StyleSheet.create({
     highlightCard: {
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#18181b',
+        backgroundColor: Colors.surfaceLighter,
         borderRadius: 16,
         padding: 12,
         borderWidth: 1,
-        borderColor: 'rgba(255,255,255,0.05)',
+        borderColor: Colors.whiteAlpha08,
     },
     highlightImage: {
         width: 64,
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 4,
-        backgroundColor: 'rgba(249, 115, 22, 0.15)',
+        backgroundColor: Colors.primaryAlpha15,
         alignSelf: 'flex-start',
         paddingHorizontal: 6,
         paddingVertical: 3,
@@ -146,30 +147,30 @@ const styles = StyleSheet.create({
         marginBottom: 6,
     },
     trendingBadgeText: {
-        color: '#f97316',
+        color: Colors.accent,
         fontSize: 9,
         fontWeight: '800',
         letterSpacing: 0.5,
     },
     highlightTitle: {
-        color: '#fff',
+        color: Colors.textPrimary,
         fontSize: 16,
-        fontWeight: '700',
+        fontWeight: '600',
         marginBottom: 2,
     },
     highlightArtist: {
-        color: '#a1a1aa',
+        color: Colors.textSecondary,
         fontSize: 13,
     },
     playCircle: {
         width: 40,
         height: 40,
         borderRadius: 20,
-        backgroundColor: '#9333ea',
+        backgroundColor: Colors.primary,
         alignItems: 'center',
         justifyContent: 'center',
         marginLeft: 12,
-        shadowColor: '#9333ea',
+        shadowColor: Colors.primary,
         shadowOpacity: 0.4,
         shadowRadius: 8,
         shadowOffset: { width: 0, height: 4 },

@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { axiosInstance } from "@/lib/axios";
+import { mmkvStorage } from "@/lib/mmkvStorage";
+import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
 
 interface Playlist {
     _id: string;
@@ -24,6 +25,7 @@ interface PlaylistStore {
     removeTrackFromPlaylist: (playlistId: string, songId: string) => Promise<void>;
     createPlaylist: (name: string, description?: string) => Promise<any>;
     updatePlaylist: (id: string, name: string, description?: string) => Promise<void>;
+    deletePlaylist: (id: string) => Promise<void>;
 }
 
 export const usePlaylistStore = create<PlaylistStore>()(
@@ -151,7 +153,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
 
             updatePlaylist: async (id, name, description) => {
                 try {
-                    const response = await axiosInstance.patch(`/playlists/${id}`, {
+                    const response = await axiosInstance.put(`/playlists/${id}`, {
                         name,
                         description
                     });
@@ -164,11 +166,30 @@ export const usePlaylistStore = create<PlaylistStore>()(
                     throw error;
                 }
             },
+
+            deletePlaylist: async (id: string) => {
+                try {
+                    await axiosInstance.delete(`/playlists/${id}`);
+                    set(state => ({
+                        playlists: state.playlists.filter(p => p._id !== id)
+                    }));
+                } catch (error: any) {
+                    console.error("[PlaylistStore] deletePlaylist failed:", error);
+                    throw error;
+                }
+            },
         }),
         {
             name: 'vibra-playlist-storage',
-            storage: createJSONStorage(() => AsyncStorage),
+            storage: createJSONStorage(() => mmkvStorage),
             partialize: (state) => ({ playlists: state.playlists }),
         }
     )
 );
+
+// Trigger one-time async migration on first launch
+migrateStoreToMMKV("vibra-playlist-storage").then((migrated) => {
+    if (migrated) {
+        usePlaylistStore.persist.rehydrate();
+    }
+});

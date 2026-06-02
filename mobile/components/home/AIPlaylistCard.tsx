@@ -19,11 +19,12 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface AIPlaylistCardProps {
   index?: number;
+  noAnim?: boolean;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export const AIPlaylistCard = React.memo(({ index = 0 }: AIPlaylistCardProps) => {
+export const AIPlaylistCard = React.memo(({ index = 0, noAnim = false }: AIPlaylistCardProps) => {
   const router = useRouter();
   const glowValue = useSharedValue(0);
   const pressedScale = useSharedValue(1);
@@ -61,7 +62,7 @@ export const AIPlaylistCard = React.memo(({ index = 0 }: AIPlaylistCardProps) =>
 
   return (
     <Animated.View 
-      entering={FadeInDown.delay(index * 100).duration(600)}
+      entering={noAnim ? undefined : FadeInDown.delay(index * 100).duration(600)}
       style={styles.outerContainer}
     >
       <AnimatedPressable
@@ -86,7 +87,7 @@ export const AIPlaylistCard = React.memo(({ index = 0 }: AIPlaylistCardProps) =>
         <View style={styles.content}>
             <View style={styles.leftSection}>
               <View style={styles.iconContainer}>
-                 <Sparkles size={16} color="#7B2CF5" fill="rgba(123, 44, 245, 0.4)" />
+                 <Sparkles size={16} color="#ffffff" fill="rgba(255, 255, 255, 0.3)" />
               </View>
               <View style={styles.textStack}>
                 <Text style={styles.title}>Describe your vibe...</Text>
@@ -152,7 +153,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(167, 139, 250, 0.25)',
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   textStack: {
     justifyContent: 'center',
@@ -160,8 +161,7 @@ const styles = StyleSheet.create({
   title: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontWeight: '600',
   },
   subtitle: {
     color: 'rgba(255, 255, 255, 0.5)',

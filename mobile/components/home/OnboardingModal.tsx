@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
   primaryButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   timeTag: {
     color: THEME.zinc600,
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: '#fff',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   headerSubtitle: {
     color: THEME.zinc600,

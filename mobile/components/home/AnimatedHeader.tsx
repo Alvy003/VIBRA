@@ -1,7 +1,7 @@
 // components/home/AnimatedHeader.tsx
 import React from 'react';
-import { View, TouchableOpacity, StyleSheet } from 'react-native';
-import { Image } from 'expo-image';
+import { View, StyleSheet } from 'react-native';
+import { UserProfileIcon } from '../UserProfileIcon';
 import Animated, {
   useAnimatedStyle,
   interpolate,
@@ -9,7 +9,6 @@ import Animated, {
   SharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import { COLORS } from '@/constants/design';
 
 interface AnimatedHeaderProps {
@@ -18,7 +17,6 @@ interface AnimatedHeaderProps {
 }
 
 export const AnimatedHeader = React.memo(({ scrollY, userImageUrl }: AnimatedHeaderProps) => {
-  const router = useRouter();
   const insets = useSafeAreaInsets();
 
   // Fade content (avatar) as user scrolls
@@ -77,22 +75,7 @@ export const AnimatedHeader = React.memo(({ scrollY, userImageUrl }: AnimatedHea
 
           {/* Right side - avatar */}
           <View style={styles.right}>
-            <TouchableOpacity
-              onPress={() => router.push('/profile' as any)}
-              style={styles.avatarButton}
-              activeOpacity={0.7}
-            >
-              <Image
-                source={{
-                  uri: userImageUrl || 'https://avatar.iran.liara.run/public/boy',
-                  width: 100,
-                  height: 100
-                }}
-                style={styles.avatar}
-                cachePolicy="memory-disk"
-                transition={200}
-              />
-            </TouchableOpacity>
+            <UserProfileIcon size={36} />
           </View>
         </View>
       </Animated.View>
@@ -112,7 +95,7 @@ const styles = StyleSheet.create({
   },
   background: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(9, 9, 11, 0.85)', // Same as COLORS.background but translucent
+    backgroundColor: 'rgba(9, 9, 11, 0.85)', // We keep the explicit RGBA for the backdrop transparency
   },
   contentWrapper: {
     flex: 1,
@@ -121,8 +104,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
   left: {
     flexDirection: 'row',
@@ -133,17 +116,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-  },
-  avatarButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    overflow: 'hidden',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.1)',
-  },
-  avatar: {
-    width: '100%',
-    height: '100%',
   },
 });

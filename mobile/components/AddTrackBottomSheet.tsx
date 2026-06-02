@@ -10,11 +10,8 @@ import {
     BackHandler,
 } from 'react-native';
 import {
-    BottomSheetModal,
-    BottomSheetBackdrop,
     BottomSheetFlatList,
     BottomSheetTextInput,
-    BottomSheetView
 } from '@gorhom/bottom-sheet';
 import {
     Plus,
@@ -28,9 +25,11 @@ import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { resolveAssetUrl } from '@/lib/url';
 import { CreatePlaylistModal } from './library/CreatePlaylistModal';
+import BottomSheet from './BottomSheet';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Colors from '@/constants/Colors';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -46,7 +45,6 @@ export interface AddTrackBottomSheetRef {
 const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomSheetProps>(
     ({ onClose }, ref) => {
         const insets = useSafeAreaInsets();
-        const bottomSheetModalRef = useRef<BottomSheetModal>(null);
         const { playlists, createPlaylist, addTrackToPlaylist, removeTrackFromPlaylist, fetchUserPlaylists } = usePlaylistStore();
         const { likedSongs, toggleLikeSong, isSongLiked, isSongMatch } = useMusicStore();
 
@@ -61,11 +59,10 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                 setSearchQuery('');
                 setIsCreateModalVisible(false);
                 fetchUserPlaylists();
-                bottomSheetModalRef.current?.present();
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setIsSheetOpen(true);
             },
             close: () => {
-                bottomSheetModalRef.current?.dismiss();
+                setIsSheetOpen(false);
             }
         }));
 
@@ -73,7 +70,7 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
         React.useEffect(() => {
             const backAction = () => {
                 if (isSheetOpen) {
-                    bottomSheetModalRef.current?.dismiss();
+                    setIsSheetOpen(false);
                     return true;
                 }
                 return false;
@@ -91,7 +88,7 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
             setIsSheetOpen(index >= 0);
         }, []);
 
-        const snapPoints = useMemo(() => ['100%'], []);
+        const snapPoints = useMemo(() => ['96.5%'], []);
         const topInset = insets.top;
 
         const filteredPlaylists = useMemo(() => {
@@ -112,7 +109,7 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
             if (!targetTrack) return;
             const inPlaylist = playlist.songs?.some((s: any) => isSongMatch(targetTrack, s));
 
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
             try {
                 if (inPlaylist) {
                     const idToRemove = targetTrack._id || targetTrack.externalId || targetTrack.id;
@@ -130,23 +127,10 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
             try {
                 const newPlaylist = await createPlaylist(name);
                 await addTrackToPlaylist(newPlaylist._id, targetTrack);
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error) {
                 console.error("Failed to create and add to playlist", error);
             }
         };
-
-        const renderBackdrop = useCallback(
-            (props: any) => (
-                <BottomSheetBackdrop
-                    {...props}
-                    disappearsOnIndex={-1}
-                    appearsOnIndex={0}
-                    opacity={0.6}
-                />
-            ),
-            []
-        );
 
         const renderItem = ({ item }: { item: any }) => {
             const inPlaylist = item.songs?.some((s: any) => isSongMatch(targetTrack, s));
@@ -167,7 +151,7 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                             />
                         ) : (
                             <View style={styles.playlistPlaceholder}>
-                                <Music size={24} color="#52525b" />
+                                <Music size={24} color={Colors.textMuted} />
                             </View>
                         )}
                     </View>
@@ -177,9 +161,9 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                     </View>
                     <View style={[styles.checkCircle, inPlaylist && styles.checkCircleActive]}>
                         {inPlaylist ? (
-                            <Check size={16} color="#18181b" strokeWidth={3} />
+                            <Check size={16} color={Colors.surfaceLighter} strokeWidth={3} />
                         ) : (
-                            <Plus size={16} color="#71717a" strokeWidth={2} />
+                            <Plus size={16} color={Colors.textMuted} strokeWidth={2} />
                         )}
                     </View>
                 </TouchableOpacity>
@@ -187,22 +171,52 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
         };
 
         return (
-            <BottomSheetModal
-                ref={bottomSheetModalRef}
-                index={0}
-                snapPoints={snapPoints}
-                enablePanDownToClose={true}
-                enableContentPanningGesture={true}
-                topInset={topInset}
-                backdropComponent={renderBackdrop}
-                onDismiss={() => {
+            <BottomSheet
+                isOpen={isSheetOpen}
+                onClose={() => {
                     setIsSheetOpen(false);
                     onClose?.();
                 }}
-                onChange={handleSheetChanges}
-                backgroundStyle={{ backgroundColor: '#09090b' }}
-                handleIndicatorStyle={{ backgroundColor: '#3f3f46', width: 40 }}
+                snapPoints={snapPoints}
+                enablePanDownToClose={true}
+                enableContentPanningGesture={true}
+                onIndexChange={handleSheetChanges}
+                backgroundColor={Colors.background}
+                showHandle={true}
             >
+                <View style={styles.stickyHeader}>
+                    {/* Header */}
+                    <View style={styles.header}>
+                        <Text style={styles.headerTitle}>Save in</Text>
+                        <TouchableOpacity
+                            onPress={() => setIsCreateModalVisible(true)}
+                            style={styles.newPlaylistButton}
+                        >
+                            <Text style={styles.newPlaylistText}>New playlist</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* Search Bar */}
+                    <View style={styles.searchContainer}>
+                        <View style={styles.searchWrapper}>
+                            <Search size={18} color={Colors.textMuted} style={styles.searchIcon} />
+                            <BottomSheetTextInput
+                                style={styles.searchInput}
+                                placeholder="Find playlist"
+                                placeholderTextColor={Colors.textMuted}
+                                value={searchQuery}
+                                onChangeText={setSearchQuery}
+                                selectionColor={Colors.accent}
+                            />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity onPress={() => setSearchQuery('')}>
+                                    <X size={18} color={Colors.textMuted} />
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+                </View>
+
                 <BottomSheetFlatList
                     data={filteredPlaylists}
                     keyExtractor={(item: any) => item._id}
@@ -211,38 +225,6 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                     contentContainerStyle={styles.listContent}
                     ListHeaderComponent={
                         <View style={styles.headerContainer}>
-                            {/* Header */}
-                            <View style={styles.header}>
-                                <Text style={styles.headerTitle}>Save in</Text>
-                                <TouchableOpacity
-                                    onPress={() => setIsCreateModalVisible(true)}
-                                    style={styles.newPlaylistButton}
-                                >
-                                    <Text style={styles.newPlaylistText}>New playlist</Text>
-                                </TouchableOpacity>
-                            </View>
-
-                            {/* Search Bar */}
-                            <View style={styles.searchContainer}>
-                                <View style={styles.searchWrapper}>
-                                    <Search size={18} color="#71717a" style={styles.searchIcon} />
-                                    <BottomSheetTextInput
-                                        style={styles.searchInput}
-                                        placeholder="Find playlist"
-                                        placeholderTextColor="#71717a"
-                                        value={searchQuery}
-                                        onChangeText={setSearchQuery}
-                                    />
-                                    {searchQuery.length > 0 && (
-                                        <TouchableOpacity onPress={() => setSearchQuery('')}>
-                                            <X size={18} color="#71717a" />
-                                        </TouchableOpacity>
-                                    )}
-                                </View>
-                            </View>
-
-                            {/* Create Modal is now separate */}
-
                             {/* Liked Songs Item */}
                             <TouchableOpacity
                                 style={styles.playlistItem}
@@ -250,10 +232,10 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                                 activeOpacity={0.7}
                             >
                                 <LinearGradient
-                                    colors={['#7B2CF5', '#6D28D9']}
+                                    colors={[Colors.primaryDark, Colors.accent]}
                                     style={styles.likedSongsIcon}
                                 >
-                                    <Heart size={20} color="white" fill="white" />
+                                    <Heart size={20} color={Colors.white} fill={Colors.white} />
                                 </LinearGradient>
                                 <View style={styles.playlistInfo}>
                                     <Text style={styles.playlistName}>Liked Songs</Text>
@@ -261,13 +243,12 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                                 </View>
                                 <View style={[styles.checkCircle, isLiked && styles.checkCircleActive]}>
                                     {isLiked ? (
-                                        <Check size={16} color="#18181b" strokeWidth={3} />
+                                        <Check size={16} color={Colors.surfaceLighter} strokeWidth={3} />
                                     ) : (
-                                        <Plus size={16} color="#71717a" strokeWidth={2} />
+                                        <Plus size={16} color={Colors.textMuted} strokeWidth={2} />
                                     )}
                                 </View>
                             </TouchableOpacity>
-                            <View style={styles.divider} />
                         </View>
                     }
                     ListEmptyComponent={
@@ -281,7 +262,7 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                     onClose={() => setIsCreateModalVisible(false)}
                     onCreate={handleCreatePlaylist}
                 />
-            </BottomSheetModal>
+            </BottomSheet>
         );
     }
 );
@@ -291,6 +272,11 @@ AddTrackBottomSheet.displayName = 'AddTrackBottomSheet';
 const styles = StyleSheet.create({
     headerContainer: {
         // No padding here to avoid double padding on list items
+    },
+    stickyHeader: {
+        backgroundColor: Colors.background,
+        paddingTop: 8,
+        zIndex: 10,
     },
     contentContainer: {
         flex: 1,
@@ -304,18 +290,18 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
     },
     headerTitle: {
-        color: 'white',
+        color: Colors.textPrimary,
         fontSize: 18,
-        fontWeight: 'bold',
+        fontWeight: '600',
     },
     newPlaylistButton: {
         paddingVertical: 4,
         paddingHorizontal: 8,
     },
     newPlaylistText: {
-        color: '#7B2CF5',
+        color: Colors.accent,
         fontSize: 11,
-        fontWeight: '500',
+        fontWeight: '600',
     },
     searchContainer: {
         flexDirection: 'row',
@@ -327,7 +313,7 @@ const styles = StyleSheet.create({
     searchWrapper: {
         flex: 1,
         height: 35,
-        backgroundColor: '#171718ff',
+        backgroundColor: Colors.surfaceLighter,
         borderRadius: 4,
         flexDirection: 'row',
         alignItems: 'center',
@@ -338,9 +324,9 @@ const styles = StyleSheet.create({
     },
     searchInput: {
         flex: 1,
-        color: 'white',
+        color: Colors.textPrimary,
         fontSize: 13,
-        fontWeight: '800',
+        fontWeight: '600',
         padding: 0,
     },
     listContent: {
@@ -355,8 +341,8 @@ const styles = StyleSheet.create({
     playlistImageContainer: {
         width: 52,
         height: 52,
-        borderRadius: 4,
-        backgroundColor: '#18181b',
+        borderRadius: 2,
+        backgroundColor: Colors.surfaceLighter,
         overflow: 'hidden',
         marginRight: 14,
     },
@@ -373,7 +359,7 @@ const styles = StyleSheet.create({
     likedSongsIcon: {
         width: 52,
         height: 52,
-        borderRadius: 4,
+        borderRadius: 2,
         alignItems: 'center',
         justifyContent: 'center',
         marginRight: 14,
@@ -382,13 +368,13 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     playlistName: {
-        color: 'white',
+        color: Colors.textPrimary,
         fontSize: 16,
-        fontWeight: '500',
+        fontWeight: '400',
     },
     playlistCount: {
-        color: '#a1a1aa',
-        fontSize: 13,
+        color: Colors.textMuted,
+        fontSize: 12,
         marginTop: 2,
     },
     checkCircle: {
@@ -401,61 +387,16 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     checkCircleActive: {
-        backgroundColor: '#7B2CF5',
-        borderColor: '#7B2CF5',
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#18181b',
-        marginVertical: 12,
+        backgroundColor: Colors.accent,
+        borderColor: Colors.accent,
     },
     emptyContainer: {
         paddingTop: 40,
         alignItems: 'center',
     },
     emptyText: {
-        color: '#52525b',
+        color: Colors.textMuted,
         fontSize: 16,
-    },
-    createOverlay: {
-        backgroundColor: '#18181b',
-        borderRadius: 12,
-        padding: 16,
-        marginBottom: 16,
-        borderWidth: 1,
-        borderColor: '#27272a',
-    },
-    createInput: {
-        color: 'white',
-        fontSize: 18,
-        fontWeight: '600',
-        paddingVertical: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: '#3f3f46',
-        marginBottom: 16,
-    },
-    createActions: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 12,
-    },
-    cancelBtn: {
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-    },
-    cancelBtnText: {
-        color: 'white',
-        fontWeight: '600',
-    },
-    createBtn: {
-        backgroundColor: '#7B2CF5',
-        paddingVertical: 8,
-        paddingHorizontal: 20,
-        borderRadius: 20,
-    },
-    createBtnText: {
-        color: 'white',
-        fontWeight: '600',
     },
 });
 

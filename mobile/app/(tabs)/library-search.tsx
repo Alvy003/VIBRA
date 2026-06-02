@@ -19,6 +19,7 @@ import { useMusicStore } from '@/stores/useMusicStore';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { useDownloadStore } from '@/stores/useDownloadStore';
 import { resolveAssetUrl } from '@/lib/url';
+import Colors from '@/constants/Colors';
 
 const { width } = Dimensions.get('window');
 
@@ -93,11 +94,11 @@ export default function LibrarySearchScreen() {
                     const isAlbum = item.type === 'album';
 
                     if (item.id === 'liked-songs') {
-                        router.push('/favorites' as any);
+                        router.push('/favorites?from=library' as any);
                         return;
                     }
                     if (item.id === 'downloads') {
-                        router.push('/(tabs)/downloads' as any);
+                        router.push('/(tabs)/downloads?from=library' as any);
                         return;
                     }
 
@@ -106,11 +107,11 @@ export default function LibrarySearchScreen() {
 
                     let route = '';
                     if (isAlbum) {
-                        route = item.externalId ? `/(tabs)/album/external/jiosaavn/${id}` : `/(tabs)/album/${id}`;
+                        route = item.externalId ? `/(tabs)/album/external/jiosaavn/${id}?from=library` : `/(tabs)/album/${id}?from=library`;
                     } else if (isPlaylist) {
-                        route = item.externalId ? `/(tabs)/playlist/external/jiosaavn/${id}` : `/(tabs)/playlist/${id}`;
+                        route = item.externalId ? `/(tabs)/playlist/external/jiosaavn/${id}?from=library` : `/(tabs)/playlist/${id}?from=library`;
                     } else if (isArtist) {
-                        route = item.externalId ? `/(tabs)/artist/external/jiosaavn/${id}` : `/(tabs)/artist/${id}`;
+                        route = item.externalId ? `/(tabs)/artist/external/jiosaavn/${id}?from=library` : `/(tabs)/artist/${id}?from=library`;
                     }
 
                     if (route) router.push(route as any);
@@ -125,7 +126,7 @@ export default function LibrarySearchScreen() {
                             styles.specialIcon,
                             item.id === 'liked-songs' ? styles.likedBg : styles.downloadBg
                         ]}>
-                            <item.icon size={24} color="#fff" fill={item.id === 'liked-songs' ? "#fff" : "none"} />
+                            <item.icon size={24} color={Colors.textPrimary} fill={item.id === 'liked-songs' ? Colors.textPrimary : "none"} />
                         </View>
                     ) : (
                         resolvedUri ? (
@@ -136,7 +137,7 @@ export default function LibrarySearchScreen() {
                             />
                         ) : (
                             <View style={styles.placeholderIcon}>
-                                {isArtist ? <User size={24} color="#52525b" /> : <Music size={24} color="#52525b" />}
+                                {isArtist ? <User size={24} color={Colors.textSecondary} /> : <Music size={24} color={Colors.textSecondary} />}
                             </View>
                         )
                     )}
@@ -155,7 +156,7 @@ export default function LibrarySearchScreen() {
         <SafeAreaView style={styles.container}>
             <View style={styles.header}>
                 <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-                    <ArrowLeft size={24} color="#fff" />
+                    <ArrowLeft size={24} color={Colors.textPrimary} />
                 </TouchableOpacity>
                 <View style={styles.searchContainer}>
                     <TextInput
@@ -165,11 +166,11 @@ export default function LibrarySearchScreen() {
                         placeholder="Search Your Library"
                         placeholderTextColor="#a1a1aa"
                         autoFocus
-                        selectionColor="#7B2CF5"
+                        selectionColor={Colors.accent}
                     />
                     {query.length > 0 && (
                         <TouchableOpacity onPress={() => setQuery('')}>
-                            <X size={20} color="#a1a1aa" />
+                            <X size={20} color={Colors.textSecondary} />
                         </TouchableOpacity>
                     )}
                 </View>
@@ -182,15 +183,23 @@ export default function LibrarySearchScreen() {
                 </View>
             ) : (
                 <FlatList
-                    data={filteredItems}
-                    keyExtractor={(item, index) => item.id || item._id || index.toString()}
-                    renderItem={renderItem}
-                    contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={
-                        <View style={styles.noResults}>
-                            <Text style={styles.noResultsText}>No results found for "{query}"</Text>
-                        </View>
-                    }
+                data={filteredItems}
+                keyExtractor={(item, index) => item.id || item._id || index.toString()}
+                renderItem={renderItem}
+                contentContainerStyle={[
+                    styles.listContent,
+                    { flexGrow: 1 }
+                ]}
+                ListEmptyComponent={
+                    <View style={styles.noResults}>
+                    <Text style={styles.emptyTitle}>
+                        Couldn't find results for "{query}"
+                    </Text>
+                    <Text style={styles.emptySubtitle}>
+                        Try searching again using different spelling or keyword.
+                    </Text>
+                    </View>
+                }
                 />
             )}
         </SafeAreaView>
@@ -200,14 +209,15 @@ export default function LibrarySearchScreen() {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#121212',
+        backgroundColor: Colors.background,
     },
     header: {
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: '#282828',
+        backgroundColor: Colors.background,
+        borderBottomWidth: 2,
     },
     backButton: {
         marginRight: 12,
@@ -216,7 +226,7 @@ const styles = StyleSheet.create({
         flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: '#3e3e3e',
+        backgroundColor: Colors.surface,
         borderRadius: 4,
         paddingHorizontal: 12,
         height: 40,
@@ -227,6 +237,12 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
     },
+    noResults: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingHorizontal: 40,
+    },
     emptyContainer: {
         flex: 1,
         justifyContent: 'center',
@@ -236,13 +252,13 @@ const styles = StyleSheet.create({
     emptyTitle: {
         color: '#fff',
         fontSize: 20,
-        fontWeight: '700',
+        fontWeight: '600',
         marginBottom: 8,
         textAlign: 'center',
     },
     emptySubtitle: {
         color: '#a1a1aa',
-        fontSize: 14,
+        fontSize: 12,
         textAlign: 'center',
         lineHeight: 20,
     },
@@ -284,7 +300,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     likedBg: {
-        backgroundColor: '#5038a0',
+        backgroundColor: Colors.primaryDark,
     },
     downloadBg: {
         backgroundColor: '#06b6d4',
@@ -296,19 +312,11 @@ const styles = StyleSheet.create({
     title: {
         color: '#fff',
         fontSize: 15,
-        fontWeight: '600',
+        fontWeight: '500',
     },
     subtitle: {
         color: '#a1a1aa',
         fontSize: 13,
         marginTop: 2,
     },
-    noResults: {
-        paddingTop: 40,
-        alignItems: 'center',
-    },
-    noResultsText: {
-        color: '#a1a1aa',
-        fontSize: 14,
-    }
 });

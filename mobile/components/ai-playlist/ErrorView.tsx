@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#fff',
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
   },
   backButton: {
     flexDirection: 'row',

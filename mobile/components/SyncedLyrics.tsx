@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   lyricText: {
     color: '#fff',
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: '600',
     textAlign: 'center',
     lineHeight: 32,
     letterSpacing: -0.5,

@@ -1,11 +1,12 @@
-import React, { useEffect, useState, useCallback, useMemo, memo } from 'react';
+import React, { useEffect, useState, useCallback, useMemo, memo, useRef } from 'react';
 import {
     StyleSheet,
     View,
     Text,
     TouchableOpacity,
     Dimensions,
-    Alert
+    Alert,
+    Share
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -22,15 +23,15 @@ import {
     ArrowLeft,
     Play,
     Pause,
-    Heart,
-    MoreVertical,
-    Share2,
     CircleArrowDown,
-    Check
+    Share2,
+    MoreVertical
 } from 'lucide-react-native';
+import { SharpPlay, SharpPause, SharpShuffle, SharpPlus, SharpCheck } from '@/components/SharpIcons';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
 import { useDownloadStore } from '@/stores/useDownloadStore';
-import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { resolveAssetUrl } from '@/lib/url';
@@ -39,9 +40,10 @@ import { FlashList as OriginalFlashList } from '@shopify/flash-list';
 const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
+import Colors from '@/constants/Colors';
 
 const { width } = Dimensions.get('window');
-const ACCENT_COLOR = '#7B2CF5';
+const ACCENT_COLOR = Colors.accent;
 
 // ─── AlbumHeader MUST be defined outside the screen function ─────────────────
 // Defining it inside would cause React to create a new component type every render
@@ -50,11 +52,15 @@ interface AlbumHeaderProps {
     currentAlbum: any;
     artworkUrl: string | null | undefined;
     colors: any;
+    isSaved: boolean;
     isAlbumDownloaded: boolean;
     isCurrentAlbumPlaying: boolean;
+    onToggleSave: () => void;
     onDownload: () => void;
     onPlay: () => void;
     onPause: () => void;
+    onOptions: () => void;
+    onShare: () => void;
     width: number;
 }
 
@@ -62,11 +68,15 @@ const AlbumHeader = memo<AlbumHeaderProps>(({
     currentAlbum,
     artworkUrl,
     colors,
+    isSaved,
     isAlbumDownloaded,
     isCurrentAlbumPlaying,
+    onToggleSave,
     onDownload,
     onPlay,
     onPause,
+    onOptions,
+    onShare,
     width,
 }) => (
     <View style={{ backgroundColor: colors.primary }}>
@@ -79,8 +89,8 @@ const AlbumHeader = memo<AlbumHeaderProps>(({
                     'rgba(0,0,0,0.5)',
                     'rgba(0,0,0,0.7)',
                     'rgba(0,0,0,0.85)',
-                    '#000000',
-                    '#000000',
+                    Colors.background,
+                    Colors.background,
                 ]}
                 locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
                 style={{ paddingTop: 60, paddingBottom: 10 }}
@@ -117,8 +127,14 @@ const AlbumHeader = memo<AlbumHeaderProps>(({
 
             <View className="px-6 pt-8 pb-4 flex-row items-center justify-between">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
-                    <TouchableOpacity activeOpacity={0.7}>
-                        <Heart size={22} color="#b3b3b3" />
+                    <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
+                        {isSaved ? (
+                            <View style={{ width: 22, height: 22, backgroundColor: ACCENT_COLOR, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
+                                <SharpCheck size={14} color="black" />
+                            </View>
+                        ) : (
+                            <SharpPlus size={24} color="#b3b3b3" />
+                        )}
                     </TouchableOpacity>
                     <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
                         {isAlbumDownloaded ? (
@@ -127,10 +143,10 @@ const AlbumHeader = memo<AlbumHeaderProps>(({
                             <CircleArrowDown size={24} color="#b3b3b3" />
                         )}
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7}>
+                    <TouchableOpacity onPress={onShare} activeOpacity={0.7}>
                         <Share2 size={22} color="#b3b3b3" />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7}>
+                    <TouchableOpacity onPress={onOptions} activeOpacity={0.7}>
                         <MoreVertical size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                 </View>
@@ -162,6 +178,8 @@ export default function AlbumScreen() {
     const { currentAlbum, fetchAlbumById, isLoading, musicError } = useMusicStore();
     const { currentTrack, isPlaying, initializeQueue, pauseTrack } = usePlayerStore();
     const { downloadAlbum, downloadedAlbums } = useDownloadStore();
+    const { isItemSaved, toggleSaveItem } = useSavedItemsStore();
+    const optionsRef = useRef<CollectionOptionsRef>(null);
 
     const artworkUrl = useMemo(() => resolveAssetUrl(currentAlbum?.imageUrl), [currentAlbum?.imageUrl]);
     const colors = useDynamicColors(artworkUrl);
@@ -253,7 +271,7 @@ export default function AlbumScreen() {
         }
     };
 
-    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : '#121212';
+    const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : Colors.surface;
 
     const songs = (currentAlbum?.songs || []) as any[];
     const isCurrentAlbumPlaying = songs.some((s: any) => s._id === currentTrack?.id) && isPlaying;
@@ -306,19 +324,36 @@ export default function AlbumScreen() {
         );
     }, [songs, currentAlbum, downloadAlbum]);
 
+    const isSaved = isItemSaved(id as string);
+
+    const handleShare = useCallback(async () => {
+        if (!currentAlbum) return;
+        try {
+            const cleanId = (id as string).replace(/^jiosaavn_album_/, '');
+            const message = `Check out this album "${currentAlbum.title}" on Vibra!\n\nListen here: https://vibra-969f.onrender.com/album/${cleanId}`;
+            await Share.share({ message, title: currentAlbum.title });
+        } catch (error) {
+            console.error('Error sharing album:', error);
+        }
+    }, [currentAlbum, id]);
+
     const renderHeader = useCallback(() => (
         <AlbumHeader
             currentAlbum={currentAlbum}
             artworkUrl={artworkUrl}
             colors={colors}
+            isSaved={isSaved}
             isAlbumDownloaded={isAlbumDownloaded}
             isCurrentAlbumPlaying={isCurrentAlbumPlaying}
+            onToggleSave={() => toggleSaveItem({ ...currentAlbum, id, type: 'album' })}
             onDownload={handleDownloadAlbum}
             onPlay={handlePlayAlbum}
             onPause={pauseTrack}
+            onOptions={() => optionsRef.current?.open(currentAlbum, 'album')}
+            onShare={handleShare}
             width={width}
         />
-    ), [currentAlbum, artworkUrl, colors, isAlbumDownloaded, isCurrentAlbumPlaying, handleDownloadAlbum, handlePlayAlbum, pauseTrack]);
+    ), [currentAlbum, artworkUrl, colors, isSaved, isAlbumDownloaded, isCurrentAlbumPlaying, handleDownloadAlbum, handlePlayAlbum, pauseTrack, handleShare]);
 
     const displaySongs = useMemo(() => {
         return (currentAlbum?.songs || []).map((s: any) => ({
@@ -353,7 +388,7 @@ export default function AlbumScreen() {
     }
 
     return (
-        <View className="flex-1 bg-black">
+        <View className="flex-1" style={{ backgroundColor: Colors.background }}>
             {/* 1. Sticky Back Button */}
             <View
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
@@ -365,7 +400,7 @@ export default function AlbumScreen() {
                         className="w-10 h-10 items-center justify-center"
                         activeOpacity={0.7}
                     >
-                        <ArrowLeft size={24} color="#ffffff" />
+                        <ArrowLeft size={24} color={Colors.textPrimary} />
                     </TouchableOpacity>
                 </SafeAreaView>
             </View>
@@ -376,11 +411,11 @@ export default function AlbumScreen() {
                 pointerEvents="box-none"
             >
                 {/* Opaque Background Layer */}
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#121212' }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
 
                 {/* Gradient Layer for depth */}
                 <LinearGradient
-                    colors={[headerBaseColor, '#000000']}
+                    colors={[headerBaseColor, Colors.background]}
                     style={StyleSheet.absoluteFill}
                 />
 
@@ -419,6 +454,7 @@ export default function AlbumScreen() {
                     estimatedItemSize={80}
                     contentContainerStyle={{ paddingBottom: 100 }}
                 />
+                <CollectionOptions ref={optionsRef} />
         </View>
     );
 }

@@ -20,7 +20,7 @@ export const ArtistResultRow = React.memo(({ artist }: ArtistResultRowProps) => 
     // All search results are external (JioSaavn)
     if (rawId) {
       const cleanId = rawId.replace('jiosaavn_artist_', '');
-      router.push(`/(tabs)/artist/external/jiosaavn/${cleanId}` as any);
+      router.push(`/(tabs)/artist/external/jiosaavn/${cleanId}?from=search` as any);
     }
   };
 
