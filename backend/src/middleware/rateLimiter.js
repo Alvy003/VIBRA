@@ -28,3 +28,33 @@ export const aiRateLimiter = rateLimit({
   standardHeaders: true, 
   legacyHeaders: false,
 });
+
+/**
+ * Global API Rate Limiter
+ * Safety net for all API endpoints.
+ */
+export const globalRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 100, // 100 requests per minute
+  message: {
+    success: false,
+    message: "Too many requests from this IP, please try again after a minute.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+/**
+ * Search Rate Limiter
+ * Specifically protects external JioSaavn/YouTube search calls.
+ */
+export const searchRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // 30 searches per minute is plenty for a human
+  message: {
+    success: false,
+    message: "Search limit reached. Please wait a moment.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});

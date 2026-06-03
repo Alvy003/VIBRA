@@ -9,12 +9,19 @@ export const authCallback = async (req, res, next) => {
 
 		if (!user) {
 			// signup
+			const name = `${firstName || ""} ${lastName || ""}`.trim();
 			await User.create({
 				clerkId: id,
-				fullName: `${firstName || ""} ${lastName || ""}`.trim(),
-				imageUrl,
+				fullName: name || "User",
+				imageUrl: imageUrl || "https://res.cloudinary.com/default-profile.png",
 			});
-		}
+		} else if (!user.fullName || user.fullName === "User" || user.fullName.trim() === "") {
+      // Repair hollow user
+			const name = `${firstName || ""} ${lastName || ""}`.trim();
+			if (name) user.fullName = name;
+			if (imageUrl) user.imageUrl = imageUrl;
+			await user.save();
+    }
 
 		res.status(200).json({ success: true });
 	} catch (error) {

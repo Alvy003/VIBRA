@@ -81,7 +81,15 @@ export default {
       'expo-secure-store',
       // Using our local manual plugin instead of the broken library plugin
       './plugins/withTrackPlayer.js',
-      './plugins/withAudioDeviceModule.js'
+      './plugins/withAudioDeviceModule.js',
+      [
+        '@sentry/react-native/expo',
+        {
+          url: 'https://sentry.io/',
+          project: process.env.SENTRY_PROJECT || '4511495325810768',
+          organization: process.env.SENTRY_ORG || 'vibra-uh'
+        }
+      ]
     ],
     experiments: {
       typedRoutes: true

@@ -581,9 +581,9 @@ const ChatPage = () => {
                           {isUserTyping && selectedUser && (
                             <div className="flex items-end gap-2 py-1 justify-start px-[4%]">
                               <Avatar className="size-7 shrink-0 shadow-sm ring-1 ring-white/10">
-                                <AvatarImage src={selectedUser.imageUrl} />
+                                <AvatarImage src={selectedUser.imageUrl || undefined} />
                               </Avatar>
-                              <TypingIndicator userName={selectedUser.fullName.split(' ')[0]} />
+                              <TypingIndicator userName={(selectedUser.fullName || "User").split(' ')[0]} />
                             </div>
                           )}
                         </AnimatePresence>

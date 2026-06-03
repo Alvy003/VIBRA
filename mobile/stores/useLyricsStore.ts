@@ -1,6 +1,7 @@
 // stores/useLyricsStore.ts
 import { create } from 'zustand';
-import { fetchLyrics, fetchLyricsFallback, LyricLine } from '@/lib/lyrics';
+import { LyricLine } from '@/lib/lyrics';
+import { axiosInstance } from '@/lib/axios';
 
 export type LyricsState = 
   | { status: 'idle' }
@@ -77,11 +78,20 @@ export const useLyricsStore = create<LyricsStore>((set, get) => ({
     get().activeRequests.set(trackId, controller);
 
     try {
-      const result = await fetchLyrics(title, artist, duration, controller.signal);
+      const response = await axiosInstance.get('/stream/lyrics', {
+        params: {
+          trackId,
+          title,
+          artist,
+          duration,
+        },
+        signal: controller.signal,
+      });
 
       // Check if request was aborted
       if (controller.signal.aborted) return;
 
+      const result = response.data;
       let finalState: LyricsState;
 
       if (result.syncedLyrics && result.syncedLyrics.length > 0) {
@@ -97,19 +107,7 @@ export const useLyricsStore = create<LyricsStore>((set, get) => ({
           source: result.source,
         };
       } else {
-        // Try lyrics.ovh fallback
-        const fallbackLyrics = await fetchLyricsFallback(title, artist, controller.signal);
-        if (controller.signal.aborted) return;
-        
-        if (fallbackLyrics) {
-          finalState = {
-            status: 'plain',
-            text: fallbackLyrics,
-            source: 'lyrics.ovh',
-          };
-        } else {
-          finalState = { status: 'not_found' };
-        }
+        finalState = { status: 'not_found' };
       }
 
       set((state) => {

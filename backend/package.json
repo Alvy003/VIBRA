@@ -16,6 +16,7 @@
   "type": "module",
   "dependencies": {
     "@clerk/express": "^1.7.31",
+    "@upstash/redis": "^1.38.0",
     "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
     "dotenv": "^16.0.0",

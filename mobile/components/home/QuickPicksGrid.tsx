@@ -83,15 +83,23 @@ const QuickPickCard = React.memo(({
     >
       {/* Artwork */}
       <View style={styles.artworkContainer}>
-          <Image
-            source={{ uri: resolvedUri }}
-            style={styles.artwork}
-            contentFit="cover"
-            transition={200}
-            cachePolicy="memory-disk"
-          />
-          {/* Subtle Overlay */}
-          <View style={styles.imageOverlay} />
+          {resolvedUri ? (
+            <>
+              <Image
+                source={{ uri: resolvedUri, width: 100, height: 100 }}
+                style={styles.artwork}
+                contentFit="cover"
+                transition={150}
+                cachePolicy="memory-disk"
+              />
+              {/* Subtle Overlay */}
+              <View style={styles.imageOverlay} />
+            </>
+          ) : (
+            <View style={styles.artworkFallback}>
+              <Play size={16} color="rgba(255,255,255,0.3)" fill="rgba(255,255,255,0.3)" />
+            </View>
+          )}
       </View>
 
       {/* Text content */}
@@ -244,6 +252,14 @@ const styles = StyleSheet.create({
   artwork: {
     width: '100%',
     height: '100%',
+  },
+  // Neutral fallback when artwork is missing — consistent placeholder philosophy
+  artworkFallback: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: COLORS.surfaceLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   playOverlay: {
     ...StyleSheet.absoluteFillObject,

@@ -400,17 +400,21 @@ export const generateAIPlaylist = async (req, res) => {
         const { tracks: discoveredTracks } = await extractionFn(discoveryResult.id);
         console.log(`[AI Playlist] Extracted ${discoveredTracks.length} tracks from ${discoveryResult.source}.`);
         
-        for (const track of discoveredTracks.slice(0, 30)) {
-          if (finalTracks.length >= size + 5) break;
-          const matched = await matchTrackOnJioSaavn(track.title, track.artist, discoveryResult.source);
-          if (matched) {
-            const key = `${matched.title.toLowerCase()}_${matched.artist.toLowerCase()}`;
-            if (!existingKeySet.has(key)) {
-              finalTracks.push(matched);
-              existingKeySet.add(key);
-              const art = matched.artist.toLowerCase();
-              artistCounts[art] = (artistCounts[art] || 0) + 1;
-            }
+        // Optimization: Use concurrent matching instead of sequential for-loop
+        const matchedFromDiscovery = await matchTracksOnJioSaavn(
+          discoveredTracks.slice(0, 30), 
+          intent.language, 
+          size + 5, 
+          discoveryResult.source
+        );
+
+        for (const matched of matchedFromDiscovery) {
+          const key = `${matched.title.toLowerCase()}_${matched.artist.toLowerCase()}`;
+          if (!existingKeySet.has(key)) {
+            finalTracks.push(matched);
+            existingKeySet.add(key);
+            const art = matched.artist.toLowerCase();
+            artistCounts[art] = (artistCounts[art] || 0) + 1;
           }
         }
       } catch (err) {

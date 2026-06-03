@@ -245,7 +245,7 @@ const UsersList = () => {
     const s = q.trim().toLowerCase();
     return users.filter(
       (u) =>
-        u.fullName.toLowerCase().includes(s) ||
+        u.fullName?.toLowerCase().includes(s) ||
         u.email?.toLowerCase()?.includes(s)
     );
   }, [users, q]);
@@ -372,9 +372,9 @@ const UsersList = () => {
                         {/* Avatar section */}
                         <div className="relative shrink-0">
                           <Avatar className="size-10 sm:size-10">
-                            <AvatarImage src={user.imageUrl} />
+                            <AvatarImage src={user.imageUrl || undefined} />
                             <AvatarFallback className="bg-zinc-800 text-zinc-400">
-                              {user.fullName[0]}
+                              {user.fullName?.[0] || 'U'}
                             </AvatarFallback>
                           </Avatar>
                           <div
@@ -387,7 +387,7 @@ const UsersList = () => {
                         <div className="flex-1 min-w-0 flex justify-between items-start">
                           <div className="flex-1 min-w-0">
                             <p className="max-w-[160px] truncate text-white font-normal text-[14.5px]">
-                              {user.fullName}
+                              {user.fullName || "Unknown User"}
                             </p>
                             
                             {/* Message preview - NO animation to prevent jump */}

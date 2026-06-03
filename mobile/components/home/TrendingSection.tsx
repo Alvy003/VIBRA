@@ -101,6 +101,10 @@ export const TrendingSection = React.memo(() => {
                 renderItem={renderTrendingSong}
                 snapToInterval={ITEM_SIZE}
                 decelerationRate="fast"
+                initialNumToRender={4}
+                maxToRenderPerBatch={4}
+                windowSize={3}
+                removeClippedSubviews={true}
                 getItemLayout={(_, index) => ({
                     length: ITEM_SIZE,
                     offset: ITEM_SIZE * index,

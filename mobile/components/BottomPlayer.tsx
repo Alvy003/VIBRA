@@ -38,6 +38,7 @@ import { SharpPlay, SharpPause } from './SharpIcons';
 import DeviceSelector, { DeviceSelectorRef, DeviceIcon } from './DeviceSelector';
 import { useNativeAudioDevices } from '@/hooks/useNativeAudioDevices';
 import { SaveToPlaylistButton } from './SaveToPlaylistButton';
+import { resolveAssetUrl } from '@/lib/url';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -445,7 +446,7 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
                     <Animated.View style={[styles.artworkContainer, artworkAnimStyle]}>
                       {displayTrack?.artwork ? (
                         <Image
-                          source={displayTrack.artwork}
+                          source={typeof displayTrack.artwork === 'string' ? { uri: resolveAssetUrl(displayTrack.artwork), width: 86, height: 86 } : displayTrack.artwork}
                           style={styles.artwork}
                           contentFit="cover"
                           cachePolicy="memory-disk"

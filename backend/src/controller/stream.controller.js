@@ -10,6 +10,8 @@ import {
 } from "../services/lastfm.service.js";
 import { generatePlaylistMetadata } from "../services/groq.service.js";
 import AIPlaylist from "../models/AIPlaylist.model.js";
+import { getCache, setCache, normalizeQueryKey } from "../lib/cacheService.js";
+
 
 // ============================================================================
 // EXISTING ENDPOINTS (kept as-is with minor cleanup)
@@ -170,7 +172,7 @@ export const proxyAudio = async (req, res) => {
       "Connection": "keep-alive",
     };
 
-    console.log(`[Proxy] Requesting: ${url}`);
+    // console.log(`[Proxy] Requesting: ${url}`);
     if (req.headers.range) console.log(`[Proxy] Range: ${req.headers.range}`);
 
     const response = await fetch(url, {
@@ -178,7 +180,7 @@ export const proxyAudio = async (req, res) => {
       signal: controller.signal,
     });
 
-    console.log(`[Proxy] Upstream Status: ${response.status}`);
+    // console.log(`[Proxy] Upstream Status: ${response.status}`);
 
     if (!response.ok && response.status !== 206) {
       console.error(`[Proxy] Upstream Failure: ${response.status}`);
@@ -266,8 +268,32 @@ export const getExternalAlbum = async (req, res) => {
     const { source, id } = req.params;
 
     if (source === "jiosaavn") {
+      const cacheKey = `vibra:album:${id}`;
+
+      let cachedData = null;
+      try {
+        cachedData = await getCache(cacheKey);
+      } catch (err) {
+        console.warn(`[Cache Fallback] album: ${id} (Redis read error, falling back to live fetch)`);
+      }
+
+      if (cachedData) {
+        // console.log(`[Cache Hit] album: ${id}`);
+        return res.json(cachedData);
+      }
+
+      // console.log(`[Cache Miss] album: ${id}`);
+
       const album = await jiosaavn.getAlbum(id);
       if (!album) return res.status(404).json({ message: "Album not found" });
+
+      try {
+        // TTL is 6 hours = 21600 seconds
+        await setCache(cacheKey, album, 21600);
+      } catch (err) {
+        console.warn(`[Cache Fallback] album: ${id} (Redis write error, failed to write cache)`);
+      }
+
       return res.json(album);
     }
 
@@ -304,7 +330,22 @@ export const searchAll = async (req, res) => {
     const songLimit = Math.min(parseInt(limit) || 10, 25);
     const otherLimit = Math.min(parseInt(limit) || 6, 10);
 
-    // console.log(`[Stream] Unified search: "${query}"`);
+    const normalizedQuery = normalizeQueryKey(query);
+    const cacheKey = `vibra:search:${normalizedQuery}:${songLimit}`;
+
+    let cachedData = null;
+    try {
+      cachedData = await getCache(cacheKey);
+    } catch (err) {
+      console.warn(`[Cache Fallback] search: "${query}" (Redis read error, falling back to live fetch)`);
+    }
+
+    if (cachedData) {
+      // console.log(`[Cache Hit] search: "${query}" (limit: ${songLimit})`);
+      return res.json(cachedData);
+    }
+
+    // console.log(`[Cache Miss] search: "${query}" (limit: ${songLimit})`);
 
     // Search all categories in parallel
     const [songs, albums, playlists, artists] = await Promise.allSettled([
@@ -321,9 +362,12 @@ export const searchAll = async (req, res) => {
       artists: artists.status === "fulfilled" ? artists.value : [],
     };
 
-    // console.log(
-    //   `[Stream] Unified search results: ${result.songs.length} songs, ${result.albums.length} albums, ${result.playlists.length} playlists, ${result.artists.length} artists`
-    // );
+    try {
+      // TTL is 5 minutes = 300 seconds
+      await setCache(cacheKey, result, 300);
+    } catch (err) {
+      console.warn(`[Cache Fallback] search: "${query}" (Redis write error, failed to write cache)`);
+    }
 
     res.json(result);
   } catch (error) {
@@ -443,47 +487,49 @@ export const getExternalArtist = async (req, res) => {
  * Get homepage discovery data (trending, new releases, charts, playlists)
  * GET /api/stream/home
  */
-
-// In-memory cache for homepage data (keyed by language)
-const homepageCache = new Map();
-const HOMEPAGE_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
-
 export const getHomepageData = async (req, res) => {
   try {
-    const { languages } = req.query;
+    const { languages, refresh } = req.query;
     const langKey = languages || "hindi,english";
+    const cacheKey = `vibra:homepage:${langKey}`;
+    const forceRefresh = refresh === "true";
 
-    // Check cache first
-    const cached = homepageCache.get(langKey);
-    if (cached && Date.now() - cached.time < HOMEPAGE_CACHE_TTL) {
-     // console.log(`[Stream] Homepage cache hit for: ${langKey}`);
-      return res.json(cached.data);
+    let cachedData = null;
+    if (!forceRefresh) {
+      try {
+        cachedData = await getCache(cacheKey);
+      } catch (err) {
+        console.warn(`[Cache Fallback] homepage: ${langKey} (Redis read error, falling back to live fetch)`);
+      }
     }
 
-    // console.log(`[Stream] Fetching homepage for languages: ${langKey}`);
+    if (cachedData) {
+      // console.log(`[Cache Hit] homepage: ${langKey}`);
+      return res.json(cachedData);
+    }
+
+    // console.log(`[Cache Miss] homepage: ${langKey}${forceRefresh ? " (force refresh)" : ""}`);
 
     // Use search-based approach for accurate language results
     const data = await jiosaavn.getHomepageBySearch(langKey);
 
-    if (data) {
-      homepageCache.set(langKey, { data, time: Date.now() });
+    const homepageResponse = data || {
+      newAlbums: [],
+      topPlaylists: [],
+      charts: [],
+      trending: [],
+    };
 
-      // Clean up old cache entries (keep max 10 language combos)
-      if (homepageCache.size > 10) {
-        const oldest = [...homepageCache.entries()]
-          .sort((a, b) => a[1].time - b[1].time)[0];
-        if (oldest) homepageCache.delete(oldest[0]);
+    if (data) {
+      try {
+        // TTL is 30 minutes = 1800 seconds
+        await setCache(cacheKey, homepageResponse, 21,600);
+      } catch (err) {
+        console.warn(`[Cache Fallback] homepage: ${langKey} (Redis write error, failed to write cache)`);
       }
     }
 
-    res.json(
-      data || {
-        newAlbums: [],
-        topPlaylists: [],
-        charts: [],
-        trending: [],
-      }
-    );
+    res.json(homepageResponse);
   } catch (error) {
     console.error("[Stream] Homepage error:", error);
     res.json({
@@ -701,8 +747,38 @@ export const getAutocomplete = async (req, res) => {
       return res.json({ suggestions: [] });
     }
 
-    const suggestions = await jiosaavn.autocomplete(q.trim());
-    res.json({ suggestions });
+    const query = q.trim();
+    const normalizedQuery = normalizeQueryKey(query);
+    const cacheKey = `vibra:autocomplete:${normalizedQuery}`;
+
+    let cachedData = null;
+    try {
+      cachedData = await getCache(cacheKey);
+    } catch (err) {
+      console.warn(`[Cache Fallback] autocomplete: "${query}" (Redis read error, falling back to live fetch)`);
+    }
+
+    if (cachedData) {
+      // console.log(`[Cache Hit] autocomplete: "${query}"`);
+      return res.json(cachedData);
+    }
+
+    // console.log(`[Cache Miss] autocomplete: "${query}"`);
+
+    const suggestions = await jiosaavn.autocomplete(query);
+    const responseData = { suggestions: suggestions || [] };
+
+    // Do not cache empty responses
+    if (suggestions && suggestions.length > 0) {
+      try {
+        // TTL is 15 minutes = 900 seconds
+        await setCache(cacheKey, responseData, 900);
+      } catch (err) {
+        console.warn(`[Cache Fallback] autocomplete: "${query}" (Redis write error, failed to write cache)`);
+      }
+    }
+
+    res.json(responseData);
   } catch (error) {
     console.error("[Stream] Autocomplete error:", error);
     res.json({ suggestions: [] });
@@ -1184,5 +1260,306 @@ export const getWeeklyMix = async (req, res) => {
   } catch (error) {
     console.error("[Stream] Weekly Mix critical failure:", error);
     res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// ============================================================================
+// PHASE 2 REDIS CACHING: LYRICS & ARTIST METADATA
+// ============================================================================
+
+function cleanLyricsTitle(title) {
+  return title
+    .replace(/\s*\(.*?\)\s*/g, ' ')
+    .replace(/\s*\[.*?\]\s*/g, ' ')
+    .replace(/\s*-\s*(Official|Music|Video|Audio|Lyric|Lyrics|HD|HQ|4K).*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanLyricsArtist(artist) {
+  return artist
+    .split(/[,&]/)[0]
+    .replace(/\s*\(.*?\)\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseLRC(lrc) {
+  if (!lrc) return null;
+  const lines = [];
+  const regex = /\[(\d{2}):(\d{2})\.(\d{2,3})\]\s*(.*)/;
+
+  for (const line of lrc.split('\n')) {
+    const match = line.match(regex);
+    if (match) {
+      const minutes = parseInt(match[1], 10);
+      const seconds = parseInt(match[2], 10);
+      const ms = parseInt(match[3].padEnd(3, '0'), 10);
+      const time = minutes * 60 + seconds + ms / 1000;
+      const text = match[4].trim();
+      if (text) {
+        lines.push({ time, text });
+      }
+    }
+  }
+
+  return lines.sort((a, b) => a.time - b.time);
+}
+
+async function fetchLyricsBackend(title, artist, duration) {
+  const cleanedTitle = cleanLyricsTitle(title);
+  const cleanedArtist = cleanLyricsArtist(artist);
+
+  // 1. Try exact match first from LrcLib
+  try {
+    const params = new URLSearchParams({
+      artist_name: cleanedArtist,
+      track_name: cleanedTitle,
+      ...(duration ? { duration: String(Math.round(duration)) } : {}),
+    });
+
+    const res = await fetch(`https://lrclib.net/api/get?${params}`, {
+      headers: { 'User-Agent': 'Vibra Music App v1.0' },
+      timeout: 5000,
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      return {
+        syncedLyrics: data.syncedLyrics ? parseLRC(data.syncedLyrics) : null,
+        plainLyrics: data.plainLyrics || null,
+        source: 'lrclib',
+      };
+    }
+  } catch (e) {
+    console.error('[Lyrics Backend] Exact match failed:', e.message);
+  }
+
+  // 2. Try search fallback from LrcLib
+  try {
+    const params = new URLSearchParams({
+      q: `${cleanedArtist} ${cleanedTitle}`,
+    });
+
+    const res = await fetch(`https://lrclib.net/api/search?${params}`, {
+      headers: { 'User-Agent': 'Vibra Music App v1.0' },
+      timeout: 6000,
+    });
+
+    if (res.ok) {
+      const results = await res.json();
+      if (results.length > 0) {
+        const best = results[0];
+        return {
+          syncedLyrics: best.syncedLyrics ? parseLRC(best.syncedLyrics) : null,
+          plainLyrics: best.plainLyrics || null,
+          source: 'lrclib',
+        };
+      }
+    }
+  } catch (e) {
+    console.error('[Lyrics Backend] Search failed:', e.message);
+  }
+
+  // 3. Try lyrics.ovh fallback
+  try {
+    const res = await fetch(
+      `https://api.lyrics.ovh/v1/${encodeURIComponent(cleanedArtist)}/${encodeURIComponent(cleanedTitle)}`,
+      { timeout: 5000 }
+    );
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.lyrics) {
+        return {
+          syncedLyrics: null,
+          plainLyrics: data.lyrics,
+          source: 'lyrics.ovh',
+        };
+      }
+    }
+  } catch (e) {
+    console.error('[Lyrics Backend] lyrics.ovh fallback failed:', e.message);
+  }
+
+  return { syncedLyrics: null, plainLyrics: null, source: '' };
+}
+
+export const getLyrics = async (req, res) => {
+  try {
+    const { trackId, title, artist, duration } = req.query;
+    if (!title || !artist) {
+      return res.status(400).json({ message: "Title and artist are required" });
+    }
+
+    const songId = trackId || `${normalizeQueryKey(artist)}:${normalizeQueryKey(title)}`;
+    const cacheKey = `vibra:lyrics:${songId}`;
+
+    let cachedData = null;
+    try {
+      cachedData = await getCache(cacheKey);
+    } catch (err) {
+      console.warn(`[Cache Fallback] lyrics: ${songId} (Redis read error, falling back to live fetch)`);
+    }
+
+    if (cachedData) {
+      // console.log(`[Cache Hit] lyrics: ${songId}`);
+      return res.json(cachedData);
+    }
+
+    // console.log(`[Cache Miss] lyrics: ${songId}`);
+
+    const result = await fetchLyricsBackend(title, artist, duration);
+
+    // Skip caching empty/invalid responses
+    if (result && (result.syncedLyrics || result.plainLyrics)) {
+      try {
+        // TTL is 24 hours = 86400 seconds
+        await setCache(cacheKey, result, 86400);
+      } catch (err) {
+        console.warn(`[Cache Fallback] lyrics: ${songId} (Redis write error, failed to write cache)`);
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("[Stream] Lyrics controller error:", error);
+    res.json({ syncedLyrics: null, plainLyrics: null, source: "" });
+  }
+};
+
+function extractPrimaryArtist(artistString) {
+  return artistString
+    .split(/\s*(?:,|\bfeat\b\.?|\bft\b\.?|&|\+|\/|;|\|)\s*/i)[0]
+    .replace(/\(.*?\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .trim();
+}
+
+function cleanBio(bio) {
+  if (!bio) return "";
+  return bio
+    .replace(/<a href=".*?">Read more on Last\.fm<\/a>\.?/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/\.{2,}/g, '.')
+    .replace(/\s*\.\s*$/, '')
+    .trim();
+}
+
+async function fetchArtistInfoBackend(primaryArtist, originalName) {
+  let artistInfo = { name: primaryArtist };
+  let imageUrl;
+
+  // Deezer search for image
+  try {
+    const deezerResponse = await fetch(
+      `https://api.deezer.com/search/artist?q=${encodeURIComponent(primaryArtist)}&limit=1`,
+      { timeout: 5000 }
+    );
+    if (deezerResponse.ok) {
+      const deezerData = await deezerResponse.json();
+      if (deezerData.data?.[0]) {
+        const deezerArtist = deezerData.data[0];
+        imageUrl = deezerArtist.picture_xl || deezerArtist.picture_big || deezerArtist.picture_medium;
+        if (imageUrl?.includes('d.radio.net') || imageUrl?.includes('/images/artist//')) {
+          imageUrl = undefined;
+        }
+      }
+    }
+  } catch (deezerError) {
+    console.warn('[Artist Backend] Deezer fetch failed:', deezerError.message);
+  }
+
+  // Last.fm search for bio & statistics
+  const LASTFM_API_KEY = process.env.LASTFM_API_KEY;
+  if (LASTFM_API_KEY) {
+    try {
+      const lastfmResponse = await fetch(
+        `http://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=${encodeURIComponent(primaryArtist)}&api_key=${LASTFM_API_KEY}&format=json`,
+        { timeout: 5000 }
+      );
+      if (lastfmResponse.ok) {
+        const lastfmData = await lastfmResponse.json();
+        if (lastfmData.artist) {
+          const artist = lastfmData.artist;
+          let shortBio;
+          let fullBio;
+
+          if (artist.bio?.summary) {
+            fullBio = cleanBio(artist.bio.summary);
+            const sentences = fullBio.match(/[^.!?]+[.!?]+/g);
+            if (sentences && sentences.length > 0) {
+              shortBio = sentences.slice(0, 2).join(' ').substring(0, 120).trim();
+              if (fullBio.length > 120) shortBio += '…';
+            } else {
+              shortBio = fullBio.substring(0, 120).trim();
+              if (fullBio.length > 120) shortBio += '…';
+            }
+          }
+
+          artistInfo = {
+            name: artist.name || originalName,
+            bio: shortBio,
+            fullBio: fullBio,
+            imageUrl: imageUrl,
+            listeners: artist.stats?.listeners ? parseInt(artist.stats.listeners, 10) : undefined,
+          };
+        } else {
+          artistInfo = { name: originalName, imageUrl };
+        }
+      }
+    } catch (lastfmError) {
+      console.warn('[Artist Backend] Last.fm fetch failed:', lastfmError.message);
+      artistInfo = { name: originalName, imageUrl };
+    }
+  } else {
+    artistInfo = { name: originalName, imageUrl };
+  }
+
+  return artistInfo;
+}
+
+export const getArtistInfo = async (req, res) => {
+  try {
+    const { artistName } = req.query;
+    if (!artistName) {
+      return res.status(400).json({ message: "Artist name is required" });
+    }
+
+    const primaryArtist = extractPrimaryArtist(artistName);
+    const normalizedArtist = normalizeQueryKey(primaryArtist);
+    const cacheKey = `vibra:artist:${normalizedArtist}`;
+
+    let cachedData = null;
+    try {
+      cachedData = await getCache(cacheKey);
+    } catch (err) {
+      console.warn(`[Cache Fallback] artist: "${artistName}" (Redis read error, falling back to live fetch)`);
+    }
+
+    if (cachedData) {
+      // console.log(`[Cache Hit] artist: "${artistName}"`);
+      return res.json(cachedData);
+    }
+
+    // console.log(`[Cache Miss] artist: "${artistName}"`);
+
+    const result = await fetchArtistInfoBackend(primaryArtist, artistName);
+
+    // Skip caching failed/empty responses
+    if (result && result.name) {
+      try {
+        // TTL is 12 hours = 43200 seconds
+        await setCache(cacheKey, result, 43200);
+      } catch (err) {
+        console.warn(`[Cache Fallback] artist: "${artistName}" (Redis write error, failed to write cache)`);
+      }
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error("[Stream] Artist info controller error:", error);
+    res.json({ name: artistName });
   }
 };

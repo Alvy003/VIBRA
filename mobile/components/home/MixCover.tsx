@@ -15,7 +15,7 @@ const GRAIN_TEXTURE = require('../../assets/images/grain.jpg');
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 // ─── Floating Orb (replaces GeometricShape + AnimatedBlob) ───────────────────
-const FloatingOrb = ({
+const FloatingOrb = React.memo(({
     color,
     size,
     initialPos,
@@ -100,16 +100,22 @@ const FloatingOrb = ({
             />
         </Animated.View>
     );
-};
+});
+
+FloatingOrb.displayName = 'FloatingOrb';
 
 // ─── Noise Overlay ────────────────────────────────────────────────────────────
-const NoiseOverlay = () => (
+const NoiseOverlay = React.memo(() => (
     <Image
         source={GRAIN_TEXTURE}
         style={[StyleSheet.absoluteFill, { opacity: 0.06 }]}
         contentFit="cover"
+        cachePolicy="memory"
+        priority="low"
     />
-);
+));
+
+NoiseOverlay.displayName = 'NoiseOverlay';
 
 // ─── Time Context ─────────────────────────────────────────────────────────────
 const getTimeContext = () => {

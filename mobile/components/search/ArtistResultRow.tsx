@@ -4,6 +4,9 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import * as Haptics from 'expo-haptics';
+import { User } from 'lucide-react-native';
+import { resolveAssetUrl } from '@/lib/url';
+import Colors from '@/constants/Colors';
 
 interface ArtistResultRowProps {
   artist: any;
@@ -30,13 +33,21 @@ export const ArtistResultRow = React.memo(({ artist }: ArtistResultRowProps) => 
       style={styles.container}
       activeOpacity={0.7}
     >
-      <Image
-        source={artist.imageUrl}
-        style={styles.artwork}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        transition={150}
-      />
+      <View style={styles.artworkContainer}>
+        {artist.imageUrl ? (
+          <Image
+            source={{ uri: resolveAssetUrl(artist.imageUrl), width: 100, height: 100 }}
+            style={styles.artwork}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
+        ) : (
+          <View style={styles.artworkFallback}>
+            <User size={24} color={Colors.textMuted} />
+          </View>
+        )}
+      </View>
       <View style={styles.info}>
         <Text style={styles.name} numberOfLines={1}>
           {artist.title || artist.name}
@@ -55,11 +66,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
-  artwork: {
+  artworkContainer: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#282828',
+    overflow: 'hidden',
+    backgroundColor: Colors.surfaceLighter,
+  },
+  artwork: {
+    width: '100%',
+    height: '100%',
+  },
+  artworkFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   info: {
     flex: 1,

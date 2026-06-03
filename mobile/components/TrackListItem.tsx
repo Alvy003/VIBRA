@@ -59,9 +59,11 @@ export const TrackListItem = React.memo(({
         {!!artwork ? (
           <>
             <Image
-              source={{ uri: resolveAssetUrl(artwork) }}
+              source={{ uri: resolveAssetUrl(artwork), width: 100, height: 100 }}
               style={styles.image}
               contentFit="cover"
+              cachePolicy="memory-disk"
+              recyclingKey={artwork || trackId}
               transition={200}
             />
             {/* Subtle Overlay */}

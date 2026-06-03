@@ -56,7 +56,9 @@ export default function HomeScreen() {
   const [mountLevel, setMountLevel] = useState(0);
   
   const isLoading = useMusicStore(s => s.isLoading);
-  const featuredSongsLength = useMusicStore(s => Array.isArray(s.featuredSongs) ? s.featuredSongs.length : 0);
+  const featuredSongs = useMusicStore(s => s.featuredSongs) || [];
+  const quickPicks = useMusicStore(s => s.quickPicks) || [];
+  const featuredSongsLength = featuredSongs.length;
   const isPreferencesLoaded = useOnboardingStore(s => s.isPreferencesLoaded);
   const completedOnboarding = useOnboardingStore(s => s.preferences.completedOnboarding);
   // Reactive selectors — avoid stale getState() snapshots captured at mount time
@@ -76,6 +78,37 @@ export default function HomeScreen() {
     },
   });
 
+  // ─── Image Prefetching for Above-Fold Content ───
+  useEffect(() => {
+    if (featuredSongs.length > 0 || quickPicks.length > 0) {
+      try {
+        const { Image } = require('expo-image');
+        const { resolveAssetUrl } = require('@/lib/url');
+        const targets = quickPicks.length > 0 ? quickPicks.slice(0, 6) : featuredSongs.slice(0, 6);
+        let prefetchedCount = 0;
+        targets.forEach((item: any) => {
+          if (item?.imageUrl) {
+            const resolvedUrl = resolveAssetUrl(item.imageUrl);
+            if (resolvedUrl) {
+              Image.prefetch(resolvedUrl);
+              prefetchedCount++;
+            }
+          }
+        });
+        if (prefetchedCount > 0) {
+          const Sentry = require('@sentry/react-native');
+          Sentry.addBreadcrumb({
+            category: 'homepage_prefetch',
+            message: `Prefetched homepage above-fold artwork count: ${prefetchedCount}`,
+            level: 'info',
+          });
+        }
+      } catch (err) {
+        // Silently catch prefetch errors
+      }
+    }
+  }, [featuredSongs, quickPicks]);
+
   // ─── Data Initial Load ───
   useEffect(() => {
     if (!isLoaded) return;
@@ -89,11 +122,14 @@ export default function HomeScreen() {
 
   // ─── Progressive Mounting ───
   useEffect(() => {
-    // If we already have cached data (homepageData reactive selector, not stale snapshot),
-    // snap directly to full mount level to avoid progressive pop-in on revisit.
+    // If we already have cached data, stagger the rendering slightly: mount level 2 (above-fold content)
+    // immediately, and level 3 (below-fold components) 150ms later to avoid startup thread block.
     if (hasHomepageData || featuredSongsLength > 0) {
-      setMountLevel(3);
-      return;
+      setMountLevel(2);
+      const timer = setTimeout(() => {
+        setMountLevel(3);
+      }, 150);
+      return () => clearTimeout(timer);
     }
 
     const task = InteractionManager.runAfterInteractions(() => {
@@ -151,13 +187,13 @@ export default function HomeScreen() {
     }],
   }));
 
-  // Show skeletons only when actively loading AND no data exists yet.
-  // Do NOT gate on isPreferencesLoaded for returning users (they have MMKV data).
-  // The previous fix (language invalidation) causes a brief re-fetch; we must not
-  // show the skeleton during that second fetch if content is already visible.
-  const showSkeletons = (isLoading && featuredSongsLength === 0) ||
-    (isLoadingHomepage && !hasHomepageData) ||
-    (!isPreferencesLoaded && !completedOnboarding && !hasHomepageData);
+  // ─── Stale-while-revalidate skeleton strategy ───
+  // Show skeleton ONLY when we have truly zero data to display.
+  // Once content is rendered, NEVER replace it with a skeleton during background
+  // re-fetches — this eliminates the double-loading perception entirely.
+  // Warm users (MMKV cache) will almost never see a skeleton.
+  const hasAnyContent = featuredSongsLength > 0 || hasHomepageData;
+  const showSkeletons = !hasAnyContent && (isLoading || isLoadingHomepage || !isPreferencesLoaded);
 
   return (
     <View style={styles.container}>

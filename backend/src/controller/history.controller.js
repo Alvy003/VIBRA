@@ -287,6 +287,67 @@ export const getRecentCollections = async (req, res, next) => {
   }
 };
 
+// Get frequently played collections (most-played albums/playlists/artists)
+export const getFrequentCollections = async (req, res, next) => {
+  try {
+    const userId = req.auth.userId;
+    const limit = parseInt(req.query.limit) || 8;
+
+    // 1. Aggregate play history to find top collections
+    // We group by context.id (Playlist/Album) or externalData.albumId
+    // Filter out discovery mixes (Daily/Weekly Mix)
+    const stats = await PlayHistory.aggregate([
+      { 
+        $match: { 
+          userId,
+          "context.id": { $exists: true, $ne: null, $nin: ["daily-mix", "weekly-mix"] },
+          "context.type": { $in: ["album", "playlist", "artist"] },
+          "externalData.imageUrl": { $exists: true, $ne: "" }
+        } 
+      },
+      { $sort: { playedAt: -1 } },
+      {
+        $group: {
+          _id: {
+            id: "$context.id",
+            type: "$context.type",
+            source: { $ifNull: ["$externalData.source", "jiosaavn"] }
+          },
+          playCount: { $sum: 1 },
+          lastPlayedAt: { $max: "$playedAt" },
+          latestMetadata: { $first: "$$ROOT" }
+        }
+      },
+      { $sort: { playCount: -1, lastPlayedAt: -1 } },
+      { $limit: limit }
+    ]);
+
+    const results = stats.map(s => {
+      const id = s._id.id;
+      const type = s._id.type;
+      const source = s._id.source;
+      const meta = s.latestMetadata.externalData || {};
+      const context = s.latestMetadata.context || {};
+      
+      return {
+        _id: id,
+        type,
+        source,
+        title: context.title || meta.album || "Untitled Collection",
+        artist: type === 'album' ? (meta.artist || "Various Artists") : "Playlist",
+        imageUrl: meta.imageUrl || "",
+        playCount: s.playCount,
+        lastPlayedAt: s.lastPlayedAt
+      };
+    });
+
+    res.json(results);
+  } catch (error) {
+    console.error("Error fetching frequent collections:", error);
+    next(error);
+  }
+};
+
 // Clear history
 export const clearHistory = async (req, res, next) => {
   try {

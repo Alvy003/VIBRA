@@ -5,7 +5,17 @@ export const getAllUsers = async (req, res, next) => {
   try {
     const currentUserId = req.auth.userId;
     const users = await User.find({ clerkId: { $ne: currentUserId } });
-    res.status(200).json(users);
+    
+    // Self-healing: ensure all users have a name for the UI
+    const sanitizedUsers = users.map(user => {
+      const u = user.toObject();
+      if (!u.fullName || u.fullName.trim() === "") {
+        u.fullName = "Vibra User";
+      }
+      return u;
+    });
+
+    res.status(200).json(sanitizedUsers);
   } catch (error) {
     next(error);
   }
@@ -311,7 +321,7 @@ export const updateUserPreferences = async (req, res, next) => {
     const user = await User.findOneAndUpdate(
       { clerkId: userId },
       { $set: update },
-      { new: true, upsert: true }
+      { new: true }
     );
     
     res.json(user.preferences);

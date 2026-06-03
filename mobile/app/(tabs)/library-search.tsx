@@ -131,9 +131,10 @@ export default function LibrarySearchScreen() {
                     ) : (
                         resolvedUri ? (
                             <Image
-                                source={{ uri: resolvedUri }}
+                                source={{ uri: resolvedUri, width: 100, height: 100 }}
                                 style={styles.image}
                                 contentFit="cover"
+                                cachePolicy="memory-disk"
                             />
                         ) : (
                             <View style={styles.placeholderIcon}>
@@ -183,13 +184,17 @@ export default function LibrarySearchScreen() {
                 </View>
             ) : (
                 <FlatList
-                data={filteredItems}
-                keyExtractor={(item, index) => item.id || item._id || index.toString()}
-                renderItem={renderItem}
-                contentContainerStyle={[
-                    styles.listContent,
-                    { flexGrow: 1 }
-                ]}
+                    data={filteredItems}
+                    keyExtractor={(item, index) => item.id || item._id || index.toString()}
+                    renderItem={renderItem}
+                    initialNumToRender={10}
+                    maxToRenderPerBatch={10}
+                    windowSize={5}
+                    removeClippedSubviews={true}
+                    contentContainerStyle={[
+                        styles.listContent,
+                        { flexGrow: 1 }
+                    ]}
                 ListEmptyComponent={
                     <View style={styles.noResults}>
                     <Text style={styles.emptyTitle}>

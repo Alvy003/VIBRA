@@ -1,5 +1,6 @@
 import axios from "axios";
 import Constants from "expo-constants";
+import * as Sentry from "@sentry/react-native";
 
 let authToken: string | null = null;
 
@@ -41,14 +42,50 @@ axiosInstance.interceptors.request.use(
     }
 );
 
-// Add response interceptor for debugging 401s
+// Add response interceptor for debugging 401s and capturing API errors in Sentry
 axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
+        // Ignore aborted/cancelled requests
+        if (axios.isCancel(error)) {
+            return Promise.reject(error);
+        }
+
+        const status = error.response?.status;
+        const configUrl = error.config?.url || '';
+        const method = error.config?.method?.toUpperCase() || 'UNKNOWN';
+
+        // Expected 401 on startup when the user is not yet logged in/synced
+        const isExpected401 = status === 401 && !authToken;
+
+        if (!isExpected401) {
+            const sanitizeUrl = (url: string): string => {
+                if (!url) return url;
+                return url.replace(/https?:\/\/[^\s"'`<>]*saavncdn[^\s"'`<>]+/gi, '[CDN_URL_SANITIZED]');
+            };
+            const sanitizedUrl = sanitizeUrl(configUrl);
+
+            Sentry.captureException(error, {
+                tags: {
+                    operation: 'api_request',
+                    api_status: status ? String(status) : 'network_error',
+                    api_method: method,
+                    api_endpoint: sanitizedUrl.split('?')[0],
+                },
+                extra: {
+                    status: status,
+                    url: sanitizedUrl,
+                    statusText: error.response?.statusText,
+                    errorCode: error.code,
+                    errorMessage: error.message,
+                }
+            });
+        }
+
+        if (status === 401) {
             if (authToken) {
                 console.warn("[Axios] 401 Unauthorized error - Token might be expired or invalid", {
-                    url: error.config?.url,
+                    url: configUrl,
                     hasToken: true
                 });
             } else {

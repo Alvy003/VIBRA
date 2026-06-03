@@ -128,7 +128,7 @@ export function EmptyConversation({ user }: { user: any }) {
       >
         <div className="w-24 h-24 rounded-full bg-gradient-to-br from-violet-600 to-violet-800 flex items-center justify-center mb-6 shadow-xl shadow-violet-600/20">
           <Avatar className="size-20 ring-4 ring-[#0a0a0f]">
-            <AvatarImage src={user.imageUrl} />
+            <AvatarImage src={user.imageUrl || undefined} />
           </Avatar>
         </div>
         <motion.div
@@ -142,9 +142,9 @@ export function EmptyConversation({ user }: { user: any }) {
       </motion.div>
       
       <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="text-center">
-        <h3 className="text-xl font-semibold text-white mb-2">{user.fullName}</h3>
+        <h3 className="text-xl font-semibold text-white mb-2">{user.fullName || "User"}</h3>
         <p className="text-zinc-400 text-sm max-w-xs leading-relaxed">
-          This is the very beginning of your conversation with <span className="text-violet-400">{user.fullName.split(' ')[0]}</span>. Send a message to say hi!
+          This is the very beginning of your conversation with <span className="text-violet-400">{(user.fullName || "User").split(' ')[0]}</span>. Send a message to say hi!
         </p>
       </motion.div>
     </div>

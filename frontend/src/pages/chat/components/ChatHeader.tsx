@@ -141,7 +141,7 @@ const ChatHeader = ({
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="relative shrink-0">
                 <Avatar className="size-10 ring-2 ring-[#2a2a35]/50">
-                  <AvatarImage src={selectedUser.imageUrl} />
+                  <AvatarImage src={selectedUser.imageUrl || undefined} />
                   <AvatarFallback className="bg-zinc-800 text-zinc-400">
                     {selectedUser.fullName?.[0] || "U"}
                   </AvatarFallback>

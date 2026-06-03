@@ -26,7 +26,8 @@ import historyRoutes from "./routes/history.route.js";
 import streamRoutes from "./routes/stream.route.js";
 import savedItemRoutes from "./routes/savedItem.route.js";
 import aiPlaylistRoutes from './routes/aiPlaylist.routes.js';
-import { aiRateLimiter } from './middleware/rateLimiter.js';
+import configRoutes from "./routes/config.routes.js";
+import { aiRateLimiter, globalRateLimiter } from './middleware/rateLimiter.js';
 
 dotenv.config();
 
@@ -156,6 +157,7 @@ fs.unlink(path.join(tempDir, file), () => {});
 });
 
 // API routes
+app.use("/api", globalRateLimiter);
 app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
@@ -170,6 +172,7 @@ app.use("/api/history", historyRoutes);
 app.use("/api/stream", streamRoutes);
 app.use("/api/library/saved", savedItemRoutes);
 app.use('/api/ai-playlists', aiRateLimiter, aiPlaylistRoutes);
+app.use("/api/config", configRoutes);
 
 // Production static (place AFTER /uploads so SPA doesn’t eat /uploads/voice)
 if (process.env.NODE_ENV === "production") {

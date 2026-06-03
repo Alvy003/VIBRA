@@ -52,6 +52,8 @@ interface PlayerStore {
 
   _resolvingUrl: boolean;
   _urlCache: Map<string, { url: string; expiresAt: number }>;
+  _lastActionTime: number;
+  _isActionInProgress: boolean;
 
   initializeQueue: (songs: Song[], startIndexOrSong?: number | Song, autoplay?: boolean) => void;
   playAlbum: (songs: Song[], startIndex?: number) => void;
@@ -139,6 +141,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   _resolvingUrl: false,
   _urlCache: new Map(),
+  _lastActionTime: 0,
+  _isActionInProgress: false,
 
   resolveAudioUrl: async (song: Song): Promise<string | null> => {
     // Local songs - URL is already permanent
@@ -279,107 +283,118 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   playNext: async () => {
     const state = get();
+    if (state._isActionInProgress) return;
+    set({ _isActionInProgress: true });
 
-    // Handle repeat - SAME AS YOUR CURRENT CODE
-    if (state.isRepeat && state.currentSong) {
+    try {
+      const now = Date.now();
+      if (now - state._lastActionTime < 300) return;
+      set({ _lastActionTime: now });
+
+      // Handle repeat - SAME AS YOUR CURRENT CODE
+      if (state.isRepeat && state.currentSong) {
+        set({
+          isPlaying: true,
+          hasTrackedCurrentSong: false,
+          currentTime: 0,
+        });
+        return;
+      }
+
+      let nextSong: Song | null = null;
+
+      // 1-4: EXACTLY THE SAME queue logic as your current code
+      if (state.nextUpQueue.length > 0) {
+        const newNextUp = [...state.nextUpQueue];
+        nextSong = newNextUp.shift()!;
+        set({ nextUpQueue: newNextUp });
+      } else if (state.currentIndex + 1 < state.mainQueue.length) {
+        const newIndex = state.currentIndex + 1;
+        nextSong = state.mainQueue[newIndex];
+        set({ currentIndex: newIndex });
+      } else if (state.laterQueue.length > 0) {
+        const newLater = [...state.laterQueue];
+        nextSong = newLater.shift()!;
+        set({ laterQueue: newLater });
+      }
+
+      if (!nextSong) {
+        await get().autoRefillQueue();
+        const refreshed = get();
+        if (refreshed.laterQueue.length > 0) {
+          const newLater = [...refreshed.laterQueue];
+          nextSong = newLater.shift()!;
+          set({ laterQueue: newLater });
+        }
+      }
+
+      if (!nextSong) return;
+
+      // Safety check - SAME AS YOUR CURRENT CODE
+      if (nextSong._id === state.currentSong?._id) {
+        const afterState = get();
+        if (afterState.nextUpQueue.length > 0) {
+          const skip = [...afterState.nextUpQueue];
+          nextSong = skip.shift()!;
+          set({ nextUpQueue: skip });
+        } else if (afterState.currentIndex + 1 < afterState.mainQueue.length) {
+          const newIdx = afterState.currentIndex + 1;
+          nextSong = afterState.mainQueue[newIdx];
+          set({ currentIndex: newIdx });
+        } else if (afterState.laterQueue.length > 0) {
+          const skip = [...afterState.laterQueue];
+          nextSong = skip.shift()!;
+          set({ laterQueue: skip });
+        } else {
+          return;
+        }
+      }
+
+      // *** NEW: Resolve URL for external songs before playing ***
+      if (nextSong.source === "youtube" && nextSong.videoId) {
+        const resolvedUrl = await get().resolveAudioUrl(nextSong);
+        if (resolvedUrl) {
+          nextSong = { ...nextSong, audioUrl: resolvedUrl };
+        } else {
+          // Skip this song if URL resolution fails, try next
+          console.error("Failed to resolve URL, skipping:", nextSong.title);
+          // Remove from wherever it was and try again
+          set({
+            currentSong: state.currentSong, // Keep current
+          });
+          get()._rebuildDisplay();
+          // Recursively try next
+          await get().playNext();
+          return;
+        }
+      }
+
       set({
+        currentSong: nextSong,
         isPlaying: true,
         hasTrackedCurrentSong: false,
         currentTime: 0,
       });
-      return;
-    }
 
-    let nextSong: Song | null = null;
+      get()._rebuildDisplay();
+      emitActivity(`Playing ${nextSong.title} by ${nextSong.artist}`);
+      get().saveToCache();
 
-    // 1-4: EXACTLY THE SAME queue logic as your current code
-    if (state.nextUpQueue.length > 0) {
-      const newNextUp = [...state.nextUpQueue];
-      nextSong = newNextUp.shift()!;
-      set({ nextUpQueue: newNextUp });
-    } else if (state.currentIndex + 1 < state.mainQueue.length) {
-      const newIndex = state.currentIndex + 1;
-      nextSong = state.mainQueue[newIndex];
-      set({ currentIndex: newIndex });
-    } else if (state.laterQueue.length > 0) {
-      const newLater = [...state.laterQueue];
-      nextSong = newLater.shift()!;
-      set({ laterQueue: newLater });
-    }
+      // Pre-emptive refill — keep at least 5 songs buffered ahead
+      const postState = get();
+      const upcomingCount =
+        postState.nextUpQueue.length +
+        Math.max(0, postState.mainQueue.length - (postState.currentIndex + 1)) +
+        postState.laterQueue.length;
 
-    if (!nextSong) {
-      await get().autoRefillQueue();
-      const refreshed = get();
-      if (refreshed.laterQueue.length > 0) {
-        const newLater = [...refreshed.laterQueue];
-        nextSong = newLater.shift()!;
-        set({ laterQueue: newLater });
+      if (upcomingCount < 5) {
+        get().autoRefillQueue();
       }
-    }
-
-    if (!nextSong) return;
-
-    // Safety check - SAME AS YOUR CURRENT CODE
-    if (nextSong._id === state.currentSong?._id) {
-      const afterState = get();
-      if (afterState.nextUpQueue.length > 0) {
-        const skip = [...afterState.nextUpQueue];
-        nextSong = skip.shift()!;
-        set({ nextUpQueue: skip });
-      } else if (afterState.currentIndex + 1 < afterState.mainQueue.length) {
-        const newIdx = afterState.currentIndex + 1;
-        nextSong = afterState.mainQueue[newIdx];
-        set({ currentIndex: newIdx });
-      } else if (afterState.laterQueue.length > 0) {
-        const skip = [...afterState.laterQueue];
-        nextSong = skip.shift()!;
-        set({ laterQueue: skip });
-      } else {
-        return;
-      }
-    }
-
-    // *** NEW: Resolve URL for external songs before playing ***
-    if (nextSong.source === "youtube" && nextSong.videoId) {
-      const resolvedUrl = await get().resolveAudioUrl(nextSong);
-      if (resolvedUrl) {
-        nextSong = { ...nextSong, audioUrl: resolvedUrl };
-      } else {
-        // Skip this song if URL resolution fails, try next
-        console.error("Failed to resolve URL, skipping:", nextSong.title);
-        // Remove from wherever it was and try again
-        set({
-          currentSong: state.currentSong, // Keep current
-        });
-        get()._rebuildDisplay();
-        // Recursively try next
-        await get().playNext();
-        return;
-      }
-    }
-
-    set({
-      currentSong: nextSong,
-      isPlaying: true,
-      hasTrackedCurrentSong: false,
-      currentTime: 0,
-    });
-
-    get()._rebuildDisplay();
-    emitActivity(`Playing ${nextSong.title} by ${nextSong.artist}`);
-    get().saveToCache();
-
-    // Pre-emptive refill — keep at least 8 songs buffered ahead
-    const postState = get();
-    const upcomingCount =
-      postState.nextUpQueue.length +
-      Math.max(0, postState.mainQueue.length - (postState.currentIndex + 1)) +
-      postState.laterQueue.length;
-
-    if (upcomingCount < 8) {
-      get().autoRefillQueue();
+    } finally {
+      set({ _isActionInProgress: false });
     }
   },
+
 
   // MODIFY playSong to handle external songs:
   playSong: (song: Song) => {
@@ -550,7 +565,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // Proactively refill if queue is thin
     const upcomingAfterInit =
       Math.max(0, songs.length - 1 - startIndex);
-    if (upcomingAfterInit < 8) {
+    if (upcomingAfterInit < 5) {
       get().autoRefillQueue();
     }
   },
@@ -578,7 +593,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
     // Proactively refill if album has few remaining tracks
     const remaining = songs.length - 1 - idx;
-    if (remaining < 8) {
+    if (remaining < 5) {
       get().autoRefillQueue();
     }
   },
@@ -645,18 +660,29 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
 
   playPrevious: () => {
     const state = get();
-    if (state.mainQueue.length > 0 && state.currentIndex > 0) {
-      const prevIdx = state.currentIndex - 1;
-      const prev = state.mainQueue[prevIdx];
-      set({
-        currentIndex: prevIdx,
-        currentSong: prev,
-        hasTrackedCurrentSong: false,
-        currentTime: 0,
-      });
-      get()._rebuildDisplay();
-      set({ isPlaying: true });
-      get().saveToCache();
+    if (state._isActionInProgress) return;
+    set({ _isActionInProgress: true });
+
+    try {
+      const now = Date.now();
+      if (now - state._lastActionTime < 300) return;
+      set({ _lastActionTime: now });
+
+      if (state.mainQueue.length > 0 && state.currentIndex > 0) {
+        const prevIdx = state.currentIndex - 1;
+        const prev = state.mainQueue[prevIdx];
+        set({
+          currentIndex: prevIdx,
+          currentSong: prev,
+          hasTrackedCurrentSong: false,
+          currentTime: 0,
+        });
+        get()._rebuildDisplay();
+        set({ isPlaying: true });
+        get().saveToCache();
+      }
+    } finally {
+      set({ _isActionInProgress: false });
     }
   },
 
@@ -791,7 +817,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       Math.max(0, state.mainQueue.length - (state.currentIndex + 1)) +
       state.laterQueue.length;
 
-    if (totalUpcoming >= 8) return;
+    if (totalUpcoming >= 5) return;
 
     set({ _isRefilling: true });
 

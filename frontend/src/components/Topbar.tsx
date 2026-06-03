@@ -1,6 +1,7 @@
 // src/components/Topbar.tsx
 import { SignedIn, SignedOut, useUser } from "@clerk/clerk-react";
 import { LayoutDashboardIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import SignInOAuthButtons from "./SignInOAuthButtons";
 import { useAuthStore } from "@/stores/useAuthStore";
@@ -8,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { buttonVariants } from "./ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAppUpdate } from "@/hooks/useAppUpdate";
+import { useConfigStore } from "@/stores/useConfigStore";
 
 type TopbarProps = {
   className?: string;
@@ -17,6 +19,16 @@ const Topbar = ({ className }: TopbarProps) => {
   const { isAdmin } = useAuthStore();
   const { user } = useUser();
   const { updateAvailable } = useAppUpdate(true);
+  const { config, fetchConfig } = useConfigStore();
+  const [isAndroid, setIsAndroid] = useState(false);
+
+  useEffect(() => {
+    fetchConfig();
+    const ua = navigator.userAgent.toLowerCase();
+    if (ua.includes("android")) {
+      setIsAndroid(true);
+    }
+  }, []);
 
   return (
     <div
@@ -25,14 +37,27 @@ const Topbar = ({ className }: TopbarProps) => {
         className
       )}
     >
-      <Link to="/" className="flex items-center gap-2 hover:opacity-90 transition-opacity duration-300">
-        <img src="/vibra.png" className="w-8 h-8" alt="Vibra logo" />
-        <span className="text-base font-semibold tracking-wide font-[Poppins,sans-serif] hover:text-violet-100 transition-colors duration-300">
-          VIBRA
-        </span>
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link to="/" className="flex items-center gap-1 hover:opacity-90 transition-opacity duration-300">
+          <img src="/vibra.png" className="md:w-8 md:h-8 w-7 h-7" alt="Vibra logo" />
+          <span className="md:text-base text-sm font-semibold font-[Poppins,sans-serif] hover:text-violet-100 transition-colors duration-300">
+            VIBRA
+          </span>
+        </Link>
+      </div>
 
       <div className="flex items-center gap-2">
+
+        {/* --- Install Button --- */}
+        {isAndroid && config?.apkLink && (
+          <a
+            href={config.apkLink}
+            className="flex items-center gap-1.5 mr-1 px-2.5 py-1.5 rounded-full bg-white/90 transition-all duration-200 active:scale-95 group shadow-lg shadow-white/5"
+          >
+            <span className="text-[10px] font-semibold text-black tracking-wider">Get App</span>
+          </a>
+        )}
+
         {isAdmin && (
           <Link
             to="/admin"

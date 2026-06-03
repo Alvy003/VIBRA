@@ -27,6 +27,7 @@ import Animated, {
   withSpring,
   runOnJS,
   Easing,
+  useAnimatedScrollHandler,
 } from 'react-native-reanimated';
 import { GestureDetector, Gesture, ScrollView as RNGHScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,6 +41,7 @@ import { useArtistStore } from '@/stores/useArtistStore';
 import TrackProgressObserver from './TrackProgressObserver';
 import TimeDisplay from './TimeDisplay';
 import LyricsPreviewCard from './player/LyricsPreviewCard';
+import { resolveAssetUrl } from '@/lib/url';
 import Colors from '@/constants/Colors';
 import ArtistModal from './player/ArtistModal';
 import LyricsModal from './player/LyricsModal';
@@ -109,7 +111,12 @@ const ArtistCard = React.memo(
       <View style={styles.artistCardWrapper}>
         {!!imageToUse && (
           <View style={styles.artistImageContainer}>
-            <Image source={imageToUse} style={styles.artistImage} contentFit="cover" />
+            <Image
+              source={typeof imageToUse === 'string' ? { uri: resolveAssetUrl(imageToUse), width: 400, height: 400 } : imageToUse}
+              style={styles.artistImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+            />
             <LinearGradient
               colors={['transparent', 'rgba(9,9,11,0.8)']}
               locations={[0.5, 1]}
@@ -258,15 +265,32 @@ export default function FullScreenPlayer({
     return currentLyricsState?.status === 'synced' || currentLyricsState?.status === 'plain';
   }, [currentLyricsState]);
 
+  const lastValidGradientRef = useRef<readonly [string, string, string, string] | null>(null);
+
   const gradientColors = useMemo(() => {
+    // Priority 1: current track's confirmed gradient (not loading)
     if (trackColors.gradient && !trackColors.isLoading) {
+      lastValidGradientRef.current = trackColors.gradient;
       return trackColors.gradient;
     }
-    if (initialColors?.gradient) {
-      // Properly create a tuple type
-      const [c0, c1, c2] = initialColors.gradient;
-      return [c0, c1, c2, '#09090b'] as const;
+    // Priority 2: current track's gradient even while loading (stale is better than default)
+    // This prevents the DEFAULT_GRADIENT blue flash during color extraction
+    if (trackColors.gradient) {
+      lastValidGradientRef.current = trackColors.gradient;
+      return trackColors.gradient;
     }
+    // Priority 3: last valid gradient from the previous track (stale persistence)
+    if (lastValidGradientRef.current) {
+      return lastValidGradientRef.current;
+    }
+    // Priority 4: colors passed from BottomPlayer at open time
+    if (initialColors?.gradient) {
+      const [c0, c1, c2] = initialColors.gradient;
+      const parsed = [c0, c1, c2, '#09090b'] as const;
+      lastValidGradientRef.current = parsed;
+      return parsed;
+    }
+    // Priority 5: last resort default (only on very first open with no data at all)
     return DEFAULT_GRADIENT as unknown as readonly [string, string, string, string];
   }, [trackColors.gradient, trackColors.isLoading, initialColors?.gradient]);
 
@@ -322,13 +346,14 @@ export default function FullScreenPlayer({
     }
   };
 
-  const scrollHandler = useCallback((event: any) => {
-    'worklet';
-    scrollY.value = event.nativeEvent.contentOffset.y;
-    const THRESHOLD = ARTWORK_SIZE + 160;
-    stickyHeaderOpacity.value = scrollY.value > THRESHOLD ? 1 : 0;
-    stickyHeaderTranslateY.value = scrollY.value > THRESHOLD ? 0 : -60;
-  }, []);
+  const scrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      scrollY.value = event.contentOffset.y;
+      const THRESHOLD = ARTWORK_SIZE + 160;
+      stickyHeaderOpacity.value = scrollY.value > THRESHOLD ? 1 : 0;
+      stickyHeaderTranslateY.value = scrollY.value > THRESHOLD ? 0 : -60;
+    },
+  });
 
   // ─── Effects ───
   useEffect(() => {
@@ -357,13 +382,15 @@ export default function FullScreenPlayer({
     if (trackColors.gradient) {
       if (gradientAnimationRef.current) clearTimeout(gradientAnimationRef.current);
       if (!hasAnimatedInitial.current) {
+        // First appearance: fade in from transparent
         hasAnimatedInitial.current = true;
         gradientOpacity.value = withTiming(1, { duration: initialColors?.gradient ? 400 : 600 });
       } else {
-        gradientOpacity.value = 0.6;
+        // Subsequent track changes: keep opacity at 1, crossfade via color update only.
+        // No opacity snap — gradient stays visible and smoothly transitions.
         gradientAnimationRef.current = setTimeout(() => {
-          gradientOpacity.value = withTiming(1, { duration: 500 });
-        }, 50);
+          gradientOpacity.value = withTiming(1, { duration: 600 });
+        }, 80);
       }
     }
     return () => { if (gradientAnimationRef.current) clearTimeout(gradientAnimationRef.current); };
@@ -565,9 +592,11 @@ export default function FullScreenPlayer({
                       {prevTrack && (
                         <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
                           <Image
-                            source={prevTrack.artwork}
+                            source={typeof prevTrack.artwork === 'string' ? { uri: resolveAssetUrl(prevTrack.artwork), width: 300, height: 300 } : prevTrack.artwork}
                             style={styles.artwork}
                             contentFit="cover"
+                            cachePolicy="memory-disk"
+                            recyclingKey={prevTrack.id}
                           />
                         </Animated.View>
                       )}
@@ -600,9 +629,11 @@ export default function FullScreenPlayer({
                       {nextTrack && (
                         <Animated.View style={[{ width: ARTWORK_SIZE, height: ARTWORK_SIZE }, sideArtworkOpacity]}>
                           <Image
-                            source={nextTrack.artwork}
+                            source={typeof nextTrack.artwork === 'string' ? { uri: resolveAssetUrl(nextTrack.artwork), width: 300, height: 300 } : nextTrack.artwork}
                             style={styles.artwork}
                             contentFit="cover"
+                            cachePolicy="memory-disk"
+                            recyclingKey={nextTrack.id}
                           />
                         </Animated.View>
                       )}

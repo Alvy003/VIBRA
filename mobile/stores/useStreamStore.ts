@@ -117,7 +117,10 @@ export const useStreamStore = create<StreamStore>()((set, get) => ({
         try {
             const languages = useOnboardingStore.getState().getLanguageString();
             const res = await axiosInstance.get("/stream/home", {
-                params: { languages },
+                params: { 
+                    languages,
+                    ...(forceRefresh ? { refresh: "true" } : {})
+                },
             });
             set({ homepageData: res.data });
         } catch (error) {

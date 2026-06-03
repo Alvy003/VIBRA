@@ -3,7 +3,7 @@ import { View, StyleSheet, Keyboard, ScrollView, TouchableOpacity, Text, BackHan
 import { StatusBar } from 'expo-status-bar';
 import { Plus, List as ListIcon, Search, Download, Music, Heart, LayoutGrid, ArrowUpDown, User as UserIcon, X } from 'lucide-react-native';
 import Animated, { FadeIn, Layout } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSearchStore, RecentSearchItem } from '@/stores/useSearchStore';
 import { SearchHeader } from '@/components/search/SearchHeader';
 import { BrowseCategories } from '@/components/search/BrowseCategories';
@@ -13,6 +13,7 @@ import { AudioSearchModal } from '@/components/search/AudioSearchModal';
 import Colors from '@/constants/Colors';
 
 export default function SearchScreen() {
+  const insets = useSafeAreaInsets();
   const query = useSearchStore((s) => s.query);
   const setQuery = useSearchStore((s) => s.setQuery);
   const fetchSuggestions = useSearchStore((s) => s.fetchSuggestions);
@@ -86,7 +87,7 @@ export default function SearchScreen() {
   }, [isFocused, handleBlur]);
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: isFocused ? Colors.surface : Colors.background }]} edges={['top']}>
+    <View style={[styles.root, { backgroundColor: isFocused ? Colors.surface : Colors.background }]} pointerEvents="box-none">
       <StatusBar
         style="light"
         backgroundColor={isFocused ? Colors.surface : Colors.background}
@@ -159,7 +160,7 @@ export default function SearchScreen() {
         onClose={() => setMicModalVisible(false)}
         onResult={handleAudioResult}
       />
-    </SafeAreaView>
+      </View>
   );
 }
 

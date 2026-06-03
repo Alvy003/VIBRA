@@ -6,6 +6,8 @@ import { Album, Music, ListMusic } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SongsTabContent from "./components/SongsTabContent";
 import AlbumsTabContent from "./components/AlbumsTabContent";
+import SettingsTabContent from "./components/SettingsTabContent";
+import { Settings } from "lucide-react";
 import { useEffect } from "react";
 import { useMusicStore } from "@/stores/useMusicStore";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -63,6 +65,13 @@ const AdminPage = () => {
                 <ListMusic className="mr-2 size-4" />
                 Playlists
               </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className="data-[state=active]:bg-violet-600 data-[state=active]:text-black px-4 py-2 text-sm font-medium transition-all"
+              >
+                <Settings className="mr-2 size-4" />
+                Settings
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="songs" className="mt-4">
@@ -73,6 +82,9 @@ const AdminPage = () => {
             </TabsContent>
             <TabsContent value="playlists">
               {/* Coming soon */}
+            </TabsContent>
+            <TabsContent value="settings" className="mt-4">
+              <SettingsTabContent />
             </TabsContent>
           </Tabs>
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
@@ -63,6 +63,9 @@ export default function LibraryScreen() {
 
     const { downloadedSongs, downloadedPlaylists, downloadedAlbums } = useDownloadStore();
     const downloadCount = Object.keys(downloadedSongs).length;
+
+    // useSafeAreaInsets for stable header layout — avoids async SafeAreaView jump
+    const insets = useSafeAreaInsets();
 
     const filteredData = useMemo(() => {
         const items: any[] = [];
@@ -208,10 +211,12 @@ export default function LibraryScreen() {
     };
 
     return (
-        <SafeAreaView style={{ flex: 1, backgroundColor: Colors.background }}>
-            <View className="py-4 flex-row items-center justify-between" style={{ paddingHorizontal: 16, paddingVertical: 14 }}>
+        <View style={{ flex: 1, backgroundColor: Colors.background }}>
+            {/* Header — explicit paddingTop from insets prevents the async SafeAreaView
+                layout jump that happens when insets resolve after the first paint */}
+            <View style={{ paddingTop: insets.top + 14, paddingBottom: 14, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
                 <View className="flex-row items-center gap-3">
-                    <Text className="text-white text-2xl font-extrabold">Your Library</Text>
+                    <Text className="text-white text-2xl font-extrabold tracking-wide">Your Library</Text>
                 </View>
                 <View className="flex-row items-center gap-6">
                     <TouchableOpacity onPress={() => router.push('/(tabs)/library-search?from=library' as any)}>
@@ -333,6 +338,10 @@ export default function LibraryScreen() {
                 renderItem={renderItem}
                 numColumns={viewMode === 'grid' ? 2 : 1}
                 columnWrapperStyle={viewMode === 'grid' ? { paddingHorizontal: 16, justifyContent: 'space-between' } : undefined}
+                initialNumToRender={8}
+                maxToRenderPerBatch={8}
+                windowSize={5}
+                removeClippedSubviews={true}
                 contentContainerStyle={{
                     paddingHorizontal: viewMode === 'list' ? 4 : 0,
                     paddingTop: 0,
@@ -380,7 +389,7 @@ export default function LibraryScreen() {
                 }}
             />
             <CollectionOptions ref={optionsRef} />
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -422,9 +431,10 @@ const LibraryListItem = React.memo(({ item, onPress, onLongPress }: any) => {
                     <View className="w-full h-full items-center justify-center">
                         {!!resolvedUri ? (
                             <Image
-                                source={{ uri: resolvedUri }}
+                                source={{ uri: resolvedUri, width: 80, height: 80 }}
                                 style={{ width: '100%', height: '100%' }}
                                 contentFit="cover"
+                                cachePolicy="memory-disk"
                             />
                         ) : (
                             isArtist ? <UserIcon size={32} color={Colors.textSecondary} /> : <Music size={24} color={Colors.textSecondary} />
@@ -484,9 +494,10 @@ const LibraryGridItem = React.memo(({ item, onPress, onLongPress }: any) => {
                     <View className="w-full h-full items-center justify-center">
                         {!!resolvedUri ? (
                             <Image
-                                source={{ uri: resolvedUri }}
+                                source={{ uri: resolvedUri, width: 180, height: 180 }}
                                 style={{ width: '100%', height: '100%' }}
                                 contentFit="cover"
+                                cachePolicy="memory-disk"
                             />
                         ) : (
                             isArtist ? <UserIcon size={48} color={Colors.textSecondary} /> : <Music size={40} color={Colors.textSecondary} />

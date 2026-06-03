@@ -557,14 +557,14 @@ useEffect(() => {
               label="Playlists"
               isActive={libraryFilter === "playlists"}
               onClick={() => setLibraryFilter("playlists")}
-              count={playlists.length + savedPlaylists.length + albums.length + 1}
+              // count={playlists.length + savedPlaylists.length + albums.length + 1}
             />
             </SignedIn>
             <FilterChip
               label="Albums"
               isActive={libraryFilter === "albums"}
               onClick={() => setLibraryFilter("albums")}
-              count={savedAlbums.length}
+              // count={savedAlbums.length}
             />
           </div>
 

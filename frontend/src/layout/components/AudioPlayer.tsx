@@ -251,6 +251,11 @@ const AudioPlayer = () => {
     const startVolume = audio.volume;
 
     isSwitchingRef.current = true;
+    
+    // Forcefully abort any pending browser playback/loading
+    audio.pause();
+    audio.src = "";
+    audio.load();
 
     // Helper: check if this switch was superseded. Always cleans up before returning.
     const isCancelled = () => switchIdRef.current !== thisSwitchId;
@@ -262,7 +267,6 @@ const AudioPlayer = () => {
           if (isCancelled()) {
             // Restore volume so the winner switch starts from correct level
             audio.volume = startVolume;
-            isSwitchingRef.current = false;
             return;
           }
           audio.volume = (startVolume * i) / steps;
@@ -273,7 +277,6 @@ const AudioPlayer = () => {
 
       if (isCancelled()) {
         audio.volume = startVolume;
-        isSwitchingRef.current = false;
         return;
       }
 
@@ -289,7 +292,6 @@ const AudioPlayer = () => {
       audio.load();
 
       if (isCancelled()) {
-        isSwitchingRef.current = false;
         return;
       }
 
@@ -300,7 +302,6 @@ const AudioPlayer = () => {
       }
 
       if (isCancelled()) {
-        isSwitchingRef.current = false;
         return;
       }
 
@@ -329,10 +330,9 @@ const AudioPlayer = () => {
       }
     } catch (e) {
       console.warn("Smooth switch failed", e);
-      // Always clean up on error
-      isSwitchingRef.current = false;
       audio.volume = startVolume;
       if (!isCancelled()) {
+        isSwitchingRef.current = false;
         audio.src = newSrc;
         audio.load();
         if (shouldPlay) audio.play().catch(() => {});

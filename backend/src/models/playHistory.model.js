@@ -24,7 +24,7 @@ const playHistorySchema = new mongoose.Schema({
   },
 
   context: {
-    type: { type: String, enum: ["album", "playlist", "artist", "discovery"] },
+    type: { type: String, enum: ["album", "playlist", "artist", "discovery", "search", "chat"] },
     id: String,
     title: String,
   },

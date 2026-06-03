@@ -5,6 +5,9 @@ import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useSearchStore } from '@/stores/useSearchStore';
+import { Music } from 'lucide-react-native';
+import { resolveAssetUrl } from '@/lib/url';
+import Colors from '@/constants/Colors';
 import SongOptions from '../SongOptions';
 
 // Placeholder URL - resolveAudioUrl will replace this with a fresh redirector URL at play time
@@ -62,13 +65,21 @@ export const SongResultRow = React.memo(({ song, searchQuery }: SongResultRowPro
       style={styles.container}
       activeOpacity={0.7}
     >
-      <Image
-        source={song.imageUrl}
-        style={styles.artwork}
-        contentFit="cover"
-        cachePolicy="memory-disk"
-        transition={150}
-      />
+      <View style={styles.artworkContainer}>
+        {song.imageUrl ? (
+          <Image
+            source={{ uri: resolveAssetUrl(song.imageUrl), width: 100, height: 100 }}
+            style={styles.artwork}
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            transition={150}
+          />
+        ) : (
+          <View style={styles.artworkFallback}>
+            <Music size={20} color={Colors.textMuted} />
+          </View>
+        )}
+      </View>
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={1}>
           {song.title}
@@ -90,11 +101,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 8,
   },
-  artwork: {
+  artworkContainer: {
     width: 48,
     height: 48,
     borderRadius: 4,
-    backgroundColor: '#282828',
+    overflow: 'hidden',
+    backgroundColor: Colors.surfaceLighter,
+  },
+  artwork: {
+    width: '100%',
+    height: '100%',
+  },
+  artworkFallback: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   info: {
     flex: 1,

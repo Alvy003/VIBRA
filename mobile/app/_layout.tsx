@@ -3,7 +3,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState, useNavigationContainerRef } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState, useCallback } from 'react'; // Added useCallback
 import 'react-native-reanimated';
@@ -14,6 +14,97 @@ import * as SecureStore from 'expo-secure-store';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors'; // Added Colors import
+import * as Sentry from '@sentry/react-native';
+
+const reactNavigationIntegration = Sentry.reactNavigationIntegration();
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || 'https://025040216b5dea5b8eeebc2cbdb8d9b2@o4511495279673344.ingest.de.sentry.io/4511495316897872';
+
+Sentry.init({
+  dsn: SENTRY_DSN,
+  debug: false,
+  tracesSampleRate: __DEV__ ? 1.0 : 0.05,
+  integrations: [
+    reactNavigationIntegration,
+  ],
+  // Filter out unwanted errors and sanitize URLs
+  beforeSend(event, hint) {
+    try {
+      const message = event.message || '';
+      const exceptionValue = event.exception?.values?.[0]?.value || '';
+      const exceptionType = event.exception?.values?.[0]?.type || '';
+
+      // 1. Ignore AbortController cancellation errors and benign noise
+      const isCanceled = 
+        message.includes('canceled') || 
+        message.includes('ERR_CANCELED') || 
+        message.includes('AbortError') || 
+        exceptionValue.includes('canceled') || 
+        exceptionValue.includes('ERR_CANCELED') ||
+        exceptionValue.includes('AbortError') ||
+        exceptionValue.includes('canceled request') ||
+        exceptionType.includes('AbortError');
+
+      if (isCanceled) {
+        return null;
+      }
+
+      // Ignore harmless React warnings (we don't want JS warnings to spam Sentry)
+      if (
+        message.includes('React state update') || 
+        exceptionValue.includes('React state update')
+      ) {
+        return null;
+      }
+
+      // 2. Sanitize sensitive data from the event object
+      const sanitizeString = (str: string): string => {
+        if (!str) return str;
+        // Sanitize signed JioSaavn / saavncdn CDN URLs
+        let sanitized = str.replace(/https?:\/\/[^\s"'`<>]*saavncdn[^\s"'`<>]+/gi, '[CDN_URL_SANITIZED]');
+        // Sanitize authorization headers (e.g. Bearer tokens)
+        sanitized = sanitized.replace(/Bearer\s+[a-zA-Z0-9\-._~+/]+=*/gi, 'Bearer [REDACTED]');
+        return sanitized;
+      };
+
+      const sanitizeObject = (obj: any): any => {
+        if (!obj) return obj;
+        if (typeof obj === 'string') {
+          return sanitizeString(obj);
+        }
+        if (Array.isArray(obj)) {
+          return obj.map(sanitizeObject);
+        }
+        if (typeof obj === 'object') {
+          const result: any = {};
+          for (const key in obj) {
+            if (Object.prototype.hasOwnProperty.call(obj, key)) {
+              if (['authorization', 'token', 'auth', 'cookie', 'audioUrl', 'streamUrl', 'url'].includes(key.toLowerCase())) {
+                if (typeof obj[key] === 'string') {
+                  result[key] = sanitizeString(obj[key]);
+                } else {
+                  result[key] = '[REDACTED]';
+                }
+              } else {
+                result[key] = sanitizeObject(obj[key]);
+              }
+            }
+          }
+          return result;
+        }
+        return obj;
+      };
+
+      return sanitizeObject(event);
+    } catch (e) {
+      // If sanitization fails, return original event rather than dropping the crash report,
+      // but log fallback warning to Sentry tag.
+      event.tags = { ...event.tags, sanitization_error: 'true' };
+      return event;
+    }
+  },
+});
+
+Sentry.setTag('build_type', __DEV__ ? 'development' : 'production');
 
 const tokenCache = {
   async getToken(key: string) {
@@ -131,7 +222,14 @@ function InitialLayout({ onReady }: { onReady: () => void }) {
 
 // Track player background service is now managed natively inside /index.js
 
-export default function RootLayout() {
+function RootLayout() {
+  const navigationRef = useNavigationContainerRef();
+
+  useEffect(() => {
+    if (navigationRef) {
+      reactNavigationIntegration.registerNavigationContainer(navigationRef);
+    }
+  }, [navigationRef]);
 
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
@@ -169,3 +267,5 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);

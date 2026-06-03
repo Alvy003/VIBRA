@@ -280,14 +280,14 @@ const savedPlaylists = savedItems.filter((i) => i.type === "playlist");
               label="Playlists"
               isActive={libraryFilter === "playlists"}
               onClick={() => setLibraryFilter("playlists")}
-              count={playlists.length + savedPlaylists.length + albums.filter(a => a.isActive !== false).length + (likedSongs?.length > 0 ? 1 : 0)}
+              // count={playlists.length + savedPlaylists.length + albums.filter(a => a.isActive !== false).length + (likedSongs?.length > 0 ? 1 : 0)}
             />
             </SignedIn>
             <FilterChip
               label="Albums"
               isActive={libraryFilter === "albums"}
               onClick={() => setLibraryFilter("albums")}
-              count={savedAlbums.length}
+              // count={savedAlbums.length}
             />
           </div>
 

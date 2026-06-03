@@ -10,6 +10,8 @@ import TrackPlayer, {
 } from 'react-native-track-player';
 import { useStreamStore } from './useStreamStore';
 import { setupPlayer } from '@/lib/trackPlayerSetup';
+import * as Sentry from '@sentry/react-native';
+import { AppState } from 'react-native';
 
 const DUMMY_URL = 'https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3';
 const MOBILE_UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36";
@@ -108,6 +110,20 @@ export const usePlayerStore = create<PlayerStore>()(
         const currentIsReady = get().isPlayerReady;
         if (currentIsReady) return;
 
+        // Set initial app_state Sentry tag based on restored queue existence
+        const hasRestoredQueue = get().queue.length > 0;
+        Sentry.setTag('app_state', hasRestoredQueue ? 'restored_session' : 'cold_start');
+
+        // Dynamically update app_state tag on AppState changes
+        try {
+            Sentry.setTag('app_state', AppState.currentState);
+            AppState.addEventListener('change', (nextAppState) => {
+                Sentry.setTag('app_state', nextAppState);
+            });
+        } catch (e) {
+            // Silently ignore AppState listener failure
+        }
+
         try {
             const success = await setupPlayer();
             set({ isPlayerReady: success });
@@ -125,6 +141,10 @@ export const usePlayerStore = create<PlayerStore>()(
                             currentIndex: index ?? get().currentIndex,
                             hasTrackedCurrentTrack: false
                         });
+
+                        // Set Sentry context tags for current track
+                        Sentry.setTag('playback_source', get().currentContext?.type || 'unknown');
+                        Sentry.setTag('provider', (track as any).source || 'unknown');
 
                         // ─── RESOLUTION NOT NEEDED (Stable Redirect Strategy) ───
                         // The getPlayableUrl now returns a stable backend redirector URL
@@ -155,6 +175,26 @@ export const usePlayerStore = create<PlayerStore>()(
                     console.error('[PlayerStore] Native Playback Error:', error);
 
                     const state = get();
+
+                    // Capture playback error in Sentry with full context (without sensitive URL)
+                    Sentry.captureException(error, {
+                        tags: {
+                            playback_source: state.currentContext?.type || 'unknown',
+                            provider: (state.currentTrack as any)?.source || 'unknown',
+                            playback_error_code: error.code || 'unknown',
+                        },
+                        extra: {
+                            trackId: state.currentTrack?.id,
+                            trackTitle: state.currentTrack?.title,
+                            trackArtist: state.currentTrack?.artist,
+                            queueLength: state.queue.length,
+                            currentIndex: state.currentIndex,
+                            skipFailureCount: state.skipFailureCount,
+                            playbackState: state.playbackState,
+                            nativeErrorMessage: error.message,
+                        }
+                    });
+
                     const isBadStatus = error.code === 'android-io-bad-http-status' || error.message?.includes('403') || error.message?.includes('410');
                     
                     const newFailureCount = state.skipFailureCount + 1;
@@ -229,6 +269,16 @@ export const usePlayerStore = create<PlayerStore>()(
                             await TrackPlayer.setRepeatMode(tpMode);
                         } catch (e) {
                             console.error('[PlayerStore] Restore skip/refresh failed:', e);
+                            Sentry.captureException(e, {
+                                tags: {
+                                    operation: 'queue_restoration',
+                                    app_state: 'restored_session',
+                                },
+                                extra: {
+                                    queueLength: state.queue.length,
+                                    currentIndex: state.currentIndex,
+                                }
+                            });
                         }
                     }
                 }
@@ -238,6 +288,9 @@ export const usePlayerStore = create<PlayerStore>()(
             }
         } catch (error) {
             console.error('[PlayerStore] Init failed:', error);
+            Sentry.captureException(error, {
+                tags: { operation: 'player_init' }
+            });
             set({ isPlayerReady: false });
         }
     },
@@ -311,6 +364,18 @@ export const usePlayerStore = create<PlayerStore>()(
             return track.url || null;
         } catch (error) {
             console.error('[PlayerStore] resolveAudioUrl error:', error);
+            Sentry.captureException(error, {
+                tags: {
+                    operation: 'resolveAudioUrl',
+                    provider: (track as any)?.source || 'unknown',
+                    playback_source: get().currentContext?.type || 'unknown',
+                },
+                extra: {
+                    trackId: track.id,
+                    trackTitle: track.title,
+                    trackArtist: track.artist,
+                }
+            });
         }
 
         return track.url;
@@ -326,6 +391,19 @@ export const usePlayerStore = create<PlayerStore>()(
             const playableUrl = await get().resolveAudioUrl(track);
             if (!playableUrl) {
                 console.error('[PlayerStore] Could not resolve URL for:', track.title);
+                Sentry.captureMessage(`Stream resolution returned null: ${track.title}`, {
+                    level: 'error',
+                    tags: {
+                        operation: 'playTrack_resolution_fail',
+                        provider: (track as any)?.source || 'unknown',
+                        playback_source: context?.type || get().currentContext?.type || 'unknown',
+                    },
+                    extra: {
+                        trackId: track.id,
+                        trackTitle: track.title,
+                        trackArtist: track.artist,
+                    }
+                });
                 return;
             }
 
@@ -362,6 +440,17 @@ export const usePlayerStore = create<PlayerStore>()(
             });
         } catch (error) {
             console.error('[PlayerStore] playTrack error:', error);
+            Sentry.captureException(error, {
+                tags: {
+                    operation: 'playTrack',
+                    provider: (track as any)?.source || 'unknown',
+                    playback_source: context?.type || get().currentContext?.type || 'unknown',
+                },
+                extra: {
+                    trackId: track.id,
+                    trackTitle: track.title,
+                }
+            });
         }
     },
 
@@ -527,6 +616,16 @@ export const usePlayerStore = create<PlayerStore>()(
 
         } catch (error) {
             console.error('[PlayerStore] initializeQueue error:', error);
+            Sentry.captureException(error, {
+                tags: {
+                    operation: 'initializeQueue',
+                    playback_source: context?.type || 'unknown',
+                },
+                extra: {
+                    tracksCount: tracks.length,
+                    startIndex,
+                }
+            });
         }
     },
 
@@ -555,6 +654,26 @@ export const usePlayerStore = create<PlayerStore>()(
                     // Pre-fetch Lyrics
                     if (track.title && track.artist) {
                         lyricsStore.fetchLyrics(track.id, track.title, track.artist, track.duration);
+                    }
+
+                    // Pre-fetch Artwork for the very next track (i === 1) to make transitions instantaneous
+                    if (i === 1 && track.artwork) {
+                        try {
+                            const { Image } = require('expo-image');
+                            const { resolveAssetUrl } = require('@/lib/url');
+                            const resolvedArtworkUrl = resolveAssetUrl(track.artwork);
+                            if (resolvedArtworkUrl) {
+                                Image.prefetch(resolvedArtworkUrl);
+                                Sentry.addBreadcrumb({
+                                    category: 'image_prefetch',
+                                    message: `Prefetched next track artwork: ${track.title}`,
+                                    level: 'info',
+                                    data: { url: resolvedArtworkUrl }
+                                });
+                            }
+                        } catch (err) {
+                            // Silently ignore prefetch errors
+                        }
                     }
 
                     // Pre-resolve URLs
@@ -1039,7 +1158,14 @@ export const usePlayerStore = create<PlayerStore>()(
         shuffleMode: state.shuffleMode,
         repeatMode: state.repeatMode,
     }),
-    onRehydrateStorage: () => (state) => {
+    onRehydrateStorage: () => (state, error) => {
+        if (error) {
+            console.error('[PlayerStore] Hydration failed:', error);
+            Sentry.captureException(error, {
+                tags: { operation: 'store_hydration' }
+            });
+            return;
+        }
         if (__DEV__) {
             const queueLength = state?.queue?.length ?? 0;
             const track = state?.currentTrack?.title ?? 'none';

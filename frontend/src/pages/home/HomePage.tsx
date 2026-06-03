@@ -20,7 +20,7 @@ import {
   Star,
   BarChart3,
   WifiOff,
-  Trophy,
+  // Trophy,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -507,8 +507,8 @@ const HomePage = () => {
 
   const {
     homepageData,
-    dailyMix,
-    weeklyMix,
+    // dailyMix,
+    // weeklyMix,
     fetchHomepage,
     fetchDailyMix,
     fetchWeeklyMix,
@@ -1118,7 +1118,7 @@ const HomePage = () => {
         </SignedIn>
 
         {/* ─── Daily Mix (External) ─── */}
-        {dailyMix && dailyMix.length > 0 && (
+        {/* {dailyMix && dailyMix.length > 0 && (
           <LazySection fallbackHeight={280}>
             <section>
               <SectionHeader icon={Sparkles} title="Daily Mix" gradient="bg-gradient-to-br from-pink-500/20 to-rose-500/20" />
@@ -1137,10 +1137,10 @@ const HomePage = () => {
               </ResponsiveRail>
             </section>
           </LazySection>
-        )}
+        )} */}
 
         {/* ─── Weekly Mix (The Weekend Vibe) ─── */}
-        {weeklyMix && (
+        {/* {weeklyMix && (
           <LazySection fallbackHeight={280}>
             <section>
               <SectionHeader 
@@ -1189,7 +1189,7 @@ const HomePage = () => {
               )}
             </section>
           </LazySection>
-        )}
+        )} */}
 
         {/* Fallback: Internal Daily Mix + Trending — only when JioSaavn unavailable */}
         {showFallbackSections && (

@@ -2,6 +2,7 @@
 import fetch from "node-fetch";
 
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:5000";
+const SEARCH_PROXY_URL = process.env.SEARCH_PROXY_URL || "";
 
 // function proxyUrl(originalUrl) {
 //   if (!originalUrl) return null;
@@ -39,7 +40,12 @@ function interleaveArrays(arrays) {
 
 async function jiosaavnFetch(url) {
   try {
-    const res = await fetch(url, {
+    let finalUrl = url;
+    if (SEARCH_PROXY_URL) {
+      finalUrl = `${SEARCH_PROXY_URL}?url=${encodeURIComponent(url)}`;
+    }
+
+    const res = await fetch(finalUrl, {
       headers: {
         'Accept': 'application/json, text/plain, */*',
         'Accept-Language': 'en-US,en;q=0.9',

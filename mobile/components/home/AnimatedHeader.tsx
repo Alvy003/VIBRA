@@ -75,7 +75,7 @@ export const AnimatedHeader = React.memo(({ scrollY, userImageUrl }: AnimatedHea
 
           {/* Right side - avatar */}
           <View style={styles.right}>
-            <UserProfileIcon size={36} />
+            <UserProfileIcon size={34} />
           </View>
         </View>
       </Animated.View>

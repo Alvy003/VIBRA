@@ -1,5 +1,5 @@
 const Colors = {
-  accent: '#aa68fbff',
+  accent: '#A970FF',
   primary: '#B57EDC',
   primaryDark: '#7B2CF5',
   primaryLight: 'rgba(139, 92, 246, 0.3)', // Used in glow effects

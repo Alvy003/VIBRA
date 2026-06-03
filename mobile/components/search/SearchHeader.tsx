@@ -20,6 +20,7 @@ import { Search, X, AudioLines, ArrowLeft } from 'lucide-react-native';
 import { SlideInLeft, SlideOutLeft } from 'react-native-reanimated';
 import { useSearchStore } from '@/stores/useSearchStore';
 import { UserProfileIcon } from '../UserProfileIcon';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Colors from '@/constants/Colors';
 
 interface SearchHeaderProps {
@@ -35,6 +36,7 @@ export const SearchHeader = React.memo(({
   onBlur,
   isFocused,
 }: SearchHeaderProps) => {
+  const insets = useSafeAreaInsets();
   const query = useSearchStore((s) => s.query);
   const setQuery = useSearchStore((s) => s.setQuery);
   const fetchSuggestions = useSearchStore((s) => s.fetchSuggestions);
@@ -124,7 +126,7 @@ export const SearchHeader = React.memo(({
   }));
 
   return (
-    <Animated.View style={[styles.container, containerStyle]}>
+    <Animated.View style={[styles.container, { paddingTop: insets.top + 14 }, containerStyle]}>
       {/* Title - Collapses when focused */}
       <Animated.View style={[styles.titleContainer, titleStyle]}>
         <Text className="text-white text-2xl font-extrabold tracking-wide">Search</Text>
@@ -200,7 +202,6 @@ SearchHeader.displayName = 'SearchHeader';
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 16,
-    paddingVertical: 14,
     backgroundColor: Colors.background,
   },
   titleContainer: {

@@ -289,8 +289,10 @@ export default function ChatScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
 
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.header} className="border-b-2 border-black">
+      <View style={styles.safeArea}>
+        {/* Header — paddingTop from insets applied directly to prevent SafeAreaView's
+            async layout jump when switching to this tab for the first time */}
+        <View style={[styles.header, { paddingTop: insets.top + 14 }]} className="border-b-2 border-black">
           <View style={styles.headerTitleContainer}>
             <Text className="text-white text-2xl font-extrabold tracking-wide">Vibra AI</Text>
           </View>
@@ -432,7 +434,7 @@ export default function ChatScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
-      </SafeAreaView>
+      </View>
       <BottomSheet
         ref={bottomSheetRef}
         isOpen={showImportModal}

@@ -1,8 +1,8 @@
 // components/home/HomeSkeleton.tsx
-import React, { useEffect, useMemo } from 'react';
+import React from 'react';
 import { View, StyleSheet, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RADIUS, COLORS, TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
+import { RADIUS, COLORS } from '@/constants/design';
 import { Skeleton } from '../Skeleton';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -16,17 +16,12 @@ const CAROUSEL_CARD_WIDTH = SCREEN_WIDTH * 0.38;
 const ShimmerBone = Skeleton;
 
 
-// ─── Hero Skeleton (Pattern + Quick Picks Grid) ───
+// ─── Hero Skeleton (Quick Picks Grid — neutral dark placeholder) ───
 export const HeroSkeleton = React.memo(() => {
   const insets = useSafeAreaInsets();
-  const timeOfDay = useMemo(() => getTimeOfDay(), []);
-  const accentColor = TIME_GRADIENTS[timeOfDay].accent;
 
   return (
     <View style={[styles.heroContainer, { paddingTop: insets.top + 60 }]}>
-      {/* Subtle gradient hint */}
-      <View style={[styles.heroGradientHint, { backgroundColor: accentColor }]} />
-      
       {/* Quick Picks Header Skeleton */}
       <View style={styles.sectionHeader}>
         <ShimmerBone width={3} height={18} borderRadius={RADIUS.xs} />
@@ -58,16 +53,13 @@ export const HeroSkeleton = React.memo(() => {
   );
 });
 
-// ─── Carousel Skeleton ───
+// ─── Carousel Skeleton (neutral dark placeholder) ───
 export const CarouselSkeleton = React.memo(() => {
-  const timeOfDay = useMemo(() => getTimeOfDay(), []);
-  const accentColor = TIME_GRADIENTS[timeOfDay].accent;
-
   return (
     <View style={styles.carouselSection}>
       {/* Section Header */}
       <View style={styles.sectionHeader}>
-        <View style={[styles.accentLine, { backgroundColor: accentColor, opacity: 0.3 }]} />
+        <View style={styles.accentLine} />
         <ShimmerBone width={120} height={18} borderRadius={RADIUS.xs} />
       </View>
 
@@ -128,15 +120,6 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     position: 'relative',
   },
-  heroGradientHint: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 200,
-    opacity: 0.08,
-  },
-  
   // Section Header
   sectionHeader: {
     flexDirection: 'row',
@@ -145,10 +128,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
     gap: 10,
   },
+  // Neutral accent line — no themed color, consistent with dark placeholder philosophy
   accentLine: {
     width: 3,
     height: 18,
     borderRadius: RADIUS.xs,
+    backgroundColor: COLORS.surfaceLight,
+    opacity: 0.5,
   },
 
   // Quick Picks Grid
