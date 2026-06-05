@@ -1,0 +1,8 @@
+{
+  "name": "vibra-jiosaavn-proxy",
+  "version": "1.0.0",
+  "description": "Stateless Vercel proxy for JioSaavn requests, pinned to Mumbai (bom1)",
+  "type": "module",
+  "main": "api/proxy.js",
+  "dependencies": {}
+}
