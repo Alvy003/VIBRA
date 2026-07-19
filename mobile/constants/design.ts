@@ -25,22 +25,22 @@ export const COLORS = {
 export const TIME_GRADIENTS = {
   morning: {
     // 6am - 12pm: Warm oranges, soft yellows
-    colors: ['#f59e0b', '#d97706', '#78350f', '#09090b'] as const,
-    accent: '#f59e0b',
+    colors: ['#d97706', '#78350f', '#241207', '#09090b'] as const,
+    accent: '#d97706',
   },
   afternoon: {
     // 12pm - 6pm: Bright blues, teals
-    colors: ['#06b6d4', '#0891b2', '#164e63', '#09090b'] as const,
+    colors: ['#0891b2', '#164e63', '#0b1b24', '#09090b'] as const,
     accent: '#06b6d4',
   },
   evening: {
     // 6pm - 10pm: Purples, magentas
-    colors: ['#a855f7', '#7c3aed', '#3b0764', '#09090b'] as const,
+    colors: ['#7c3aed', '#3b0764', '#190a2a', '#09090b'] as const,
     accent: '#a855f7',
   },
   night: {
     // 10pm - 6am: Deep purples
-    colors: ['#9333ea', '#7c3aed', '#310a5b', '#09090b'] as const,
+    colors: ['#4c1d95', '#2a1454', '#140d2b', '#09090b'] as const,
     accent: '#7B2CF5',
   },
 };
@@ -48,7 +48,7 @@ export const TIME_GRADIENTS = {
 export const getTimeOfDay = (): keyof typeof TIME_GRADIENTS => {
   const hour = new Date().getHours();
   if (hour >= 6 && hour < 12) return 'morning';
-  if (hour >= 12 && hour < 18) return 'afternoon';
+  if (hour >= 12 && hour < 18) return 'afternoon';//afternoon
   if (hour >= 18 && hour < 22) return 'evening';
   return 'night';
 };

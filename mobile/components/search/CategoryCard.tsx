@@ -1,31 +1,29 @@
 // components/search/CategoryCard.tsx
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Dimensions } from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-} from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
-  Music,
-  Sparkles,
+  Clock,
   Disc3,
-  Languages,
-  Flame,
+  Dumbbell,
   Guitar,
   Headphones,
   Heart,
+  Languages,
+  Mic2,
   Moon,
-  Dumbbell,
+  Music,
   PartyPopper,
   Radio,
-  Mic2,
-  Zap,
-  Clock,
-  Star,
+  Sparkles,
+  Star
 } from 'lucide-react-native';
+import React from 'react';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_GAP = 12;

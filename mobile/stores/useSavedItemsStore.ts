@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { axiosInstance } from "@/lib/axios";
 import { mmkvStorage } from "@/lib/mmkvStorage";
 import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
+import { useToastStore } from "./useToastStore";
 
 export interface SavedItem {
     _id: string;
@@ -48,13 +49,17 @@ export const useSavedItemsStore = create<SavedItemsStore>()(
             toggleSaveItem: async (item) => {
                 const externalId = item.externalId || item.id;
                 const isSaved = get().isItemSaved(externalId);
-                
+
                 try {
                     if (isSaved) {
                         await axiosInstance.delete(`/library/saved/${externalId}`);
                         set(state => ({
                             savedItems: state.savedItems.filter(i => i.externalId !== externalId)
                         }));
+                        useToastStore.getState().showToast({
+                            message: "Removed from Library",
+                            duration: 2500
+                        });
                         return false;
                     } else {
                         const { data } = await axiosInstance.post("/library/saved", {
@@ -66,6 +71,10 @@ export const useSavedItemsStore = create<SavedItemsStore>()(
                         set(state => ({
                             savedItems: [data, ...state.savedItems]
                         }));
+                        useToastStore.getState().showToast({
+                            message: "Saved to Library",
+                            duration: 2500
+                        });
                         return true;
                     }
                 } catch (err) {

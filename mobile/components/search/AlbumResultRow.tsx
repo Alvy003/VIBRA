@@ -8,12 +8,15 @@ import { Music } from 'lucide-react-native';
 import { resolveAssetUrl } from '@/lib/url';
 import Colors from '@/constants/Colors';
 
+import { useSearchStore } from '@/stores/useSearchStore';
+
 interface AlbumResultRowProps {
   album: any;
 }
 
 export const AlbumResultRow = React.memo(({ album }: AlbumResultRowProps) => {
   const router = useRouter();
+  const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -22,7 +25,15 @@ export const AlbumResultRow = React.memo(({ album }: AlbumResultRowProps) => {
     
     // All search results are external (JioSaavn)
     if (rawId) {
-      const cleanId = rawId.replace(/^jiosaavn_album_/, '');
+      addRecentSearch({
+        id: String(rawId),
+        title: album.title || '',
+        artist: album.artist || '',
+        imageUrl: album.imageUrl || '',
+        type: 'album',
+        timestamp: Date.now(),
+      });
+      const cleanId = String(rawId).replace(/^jiosaavn_album_/, '');
       router.push(`/(tabs)/album/external/jiosaavn/${cleanId}?from=search` as any);
     }
   };

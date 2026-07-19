@@ -12,16 +12,16 @@ export interface UserMusicPreferences {
 }
 
 export const AVAILABLE_LANGUAGES = [
-  { id: "hindi", label: "Hindi"},
-  { id: "english", label: "English"},
-  { id: "malayalam", label: "Malayalam"},
-  { id: "tamil", label: "Tamil"},
-  { id: "telugu", label: "Telugu"},
-  { id: "kannada", label: "Kannada"},
-  { id: "punjabi", label: "Punjabi"},
-  { id: "bengali", label: "Bengali"},
-  { id: "marathi", label: "Marathi"},
-  { id: "gujarati", label: "Gujarati"},
+  { id: "hindi", label: "Hindi" },
+  { id: "english", label: "English" },
+  { id: "malayalam", label: "Malayalam" },
+  { id: "tamil", label: "Tamil" },
+  { id: "telugu", label: "Telugu" },
+  { id: "kannada", label: "Kannada" },
+  { id: "punjabi", label: "Punjabi" },
+  { id: "bengali", label: "Bengali" },
+  { id: "marathi", label: "Marathi" },
+  { id: "gujarati", label: "Gujarati" },
 ];
 
 export const AVAILABLE_GENRES = [
@@ -135,7 +135,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
           if (error.response?.status === 401) {
             return;
           }
-          console.error(`[OnboardingStore] Failed to fetch preferences (404/Error) from: ${axiosInstance.defaults.baseURL}/users/me/preferences`, 
+          console.error(`[OnboardingStore] Failed to fetch preferences (404/Error) from: ${axiosInstance.defaults.baseURL}/users/me/preferences`,
             error.response?.status || error.message);
           set({ isPreferencesLoaded: true });
         }
@@ -145,7 +145,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
         try {
           await axiosInstance.post("/users/me/preferences", prefs);
         } catch (error: any) {
-          console.error(`[OnboardingStore] Failed to sync preferences to: ${axiosInstance.defaults.baseURL}/users/me/preferences`, 
+          console.error(`[OnboardingStore] Failed to sync preferences to: ${axiosInstance.defaults.baseURL}/users/me/preferences`,
             error.response?.status || error.message);
         }
       },
@@ -173,7 +173,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
 
 // Trigger one-time async migration on first launch
 migrateStoreToMMKV("vibra-onboarding").then((migrated) => {
-    if (migrated) {
-        useOnboardingStore.persist.rehydrate();
-    }
+  if (migrated) {
+    useOnboardingStore.persist.rehydrate();
+  }
 });

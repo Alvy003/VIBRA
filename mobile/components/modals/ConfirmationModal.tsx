@@ -1,17 +1,15 @@
+import Colors from '@/constants/Colors';
+import { BlurView } from 'expo-blur';
 import React from 'react';
 import {
-    View,
-    Text,
-    Modal,
-    TouchableOpacity,
-    StyleSheet,
     Dimensions,
+    Modal,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { AlertCircle } from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated from 'react-native-reanimated';
-import Colors from '@/constants/Colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -24,6 +22,7 @@ interface ConfirmationModalProps {
     onConfirm: () => void;
     onCancel: () => void;
     isDestructive?: boolean;
+    variant?: 'default' | 'danger';
 }
 
 export default function ConfirmationModal({
@@ -34,7 +33,8 @@ export default function ConfirmationModal({
     cancelLabel = "Cancel",
     onConfirm,
     onCancel,
-    isDestructive = false
+    isDestructive = false,
+    variant = 'default'
 }: ConfirmationModalProps) {
     if (!visible) return null;
 
@@ -76,7 +76,7 @@ export default function ConfirmationModal({
                             ]}
                             activeOpacity={0.8}
                         >
-                            <Text style={styles.confirmText}>{confirmLabel}</Text>
+                            <Text style={[styles.confirmText, (variant === 'danger' || isDestructive) && { color: Colors.error }]}>{confirmLabel}</Text>
                         </TouchableOpacity>
                     </View>
                 </Animated.View>

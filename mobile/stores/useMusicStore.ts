@@ -4,6 +4,9 @@ import { axiosInstance, setAuthToken } from "@/lib/axios";
 import * as Haptics from 'expo-haptics';
 import { mmkvStorage } from "@/lib/mmkvStorage";
 import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
+import { useToastStore } from './useToastStore';
+import { usePlayerUIStore } from './usePlayerUIStore';
+import { useNetworkStore } from './useNetworkStore';
 
 interface Song {
     _id: string;
@@ -44,29 +47,34 @@ interface SavedItem {
 interface MusicStore {
     albums: Album[];
     featuredSongs: Song[];
+    featuredSongsFetchedAt?: number;
     trendingSongs: Song[];
     isLoading: boolean;
     musicError: string | null;
     likedSongs: Song[];
     recentlyPlayed: Song[];
     quickPicks: Song[];
+    quickPicksFetchedAt?: number;
     recentCollections: any[];
-    frequentCollections: any[];
 
-
+    isAuthReady: boolean;
+    setAuthReady: (ready: boolean) => void;
     currentAlbum: Album | null;
+    isLoadingLyrics: boolean;
+    refreshVersion: number;
     fetchAlbums: () => Promise<void>;
-    fetchFeaturedSongs: () => Promise<void>;
+    fetchFeaturedSongs: (forceRefresh?: boolean) => Promise<void>;
     fetchTrendingSongs: () => Promise<void>;
     fetchAlbumById: (id: string) => Promise<void>;
     fetchLikedSongs: (token?: string) => Promise<void>;
     fetchRecentlyPlayed: () => Promise<void>;
-    fetchQuickPicks: () => Promise<void>;
+    fetchQuickPicks: (forceRefresh?: boolean) => Promise<void>;
     fetchRecentCollections: () => Promise<void>;
-    fetchFrequentCollections: () => Promise<void>;
     toggleLikeSong: (song: any) => Promise<boolean>;
     isSongLiked: (song: any) => boolean;
     isSongMatch: (track1: any, track2: any) => boolean;
+
+    triggerRefresh: () => void;
     reset: () => void;
 }
 
@@ -76,6 +84,7 @@ export const useMusicStore = create<MusicStore>()(
         (set, get) => ({
             albums: [],
             featuredSongs: [],
+            featuredSongsFetchedAt: 0,
             trendingSongs: [],
             currentAlbum: null,
             isLoading: false,
@@ -83,8 +92,13 @@ export const useMusicStore = create<MusicStore>()(
             likedSongs: [],
             recentlyPlayed: [],
             quickPicks: [],
+            quickPicksFetchedAt: 0,
             recentCollections: [],
-            frequentCollections: [],
+            isAuthReady: false,
+            currentExternalArtist: null,
+            isLoadingLyrics: false,
+            refreshVersion: 0,
+            setAuthReady: (ready) => set({ isAuthReady: ready }),
 
             fetchAlbums: async () => {
                 console.log("[MusicStore] Fetching albums from:", axiosInstance.defaults.baseURL + "/albums");
@@ -106,20 +120,60 @@ export const useMusicStore = create<MusicStore>()(
                 }
             },
 
-            fetchFeaturedSongs: async () => {
-                console.log("[MusicStore] Fetching featured songs from:", axiosInstance.defaults.baseURL + "/songs/featured");
+            fetchFeaturedSongs: async (forceRefresh = false) => {
+                const now = Date.now();
+                const lastFetched = get().featuredSongsFetchedAt || 0;
+                const hasCache = get().featuredSongs.length > 0;
+                const isExpired = !lastFetched || (now - lastFetched > 86400000); // 24 hours TTL
+                
+                if (hasCache) {
+                    const ageSec = Math.round((now - lastFetched) / 1000);
+                    if (__DEV__) {
+                        console.log(`[MusicStore] fetchFeaturedSongs called. forceRefresh: ${forceRefresh}, hasCache: ${hasCache}, cacheAge: ${ageSec}s, isExpired: ${isExpired}`);
+                    }
+                    if (!forceRefresh && !isExpired) {
+                        if (__DEV__) {
+                            console.log(`[MusicStore] Featured songs cache valid (Age: ${ageSec}s <= 86400s). Skipping fetch.`);
+                        }
+                        return;
+                    }
+                    if (__DEV__) {
+                        console.log(`[MusicStore] Featured songs cache expired/forced (Age: ${ageSec}s). Running silent refresh.`);
+                    }
+                } else {
+                    if (__DEV__) {
+                        console.log("[MusicStore] No featured songs cache. Running initial fetch.");
+                    }
+                    set({ isLoading: true, musicError: null });
+                }
+
                 try {
                     const response = await axiosInstance.get("/songs/featured");
                     const data = Array.isArray(response.data) ? response.data : [];
-                    console.log("[MusicStore] Featured songs received:", data.length);
-                    set({ featuredSongs: data });
+                    
+                    const prevDataStr = JSON.stringify(get().featuredSongs);
+                    const newDataStr = JSON.stringify(data);
+                    
+                    if (prevDataStr !== newDataStr) {
+                        if (__DEV__) {
+                            console.log("[MusicStore] Featured songs updated:", data.length);
+                        }
+                        set({ featuredSongs: data, featuredSongsFetchedAt: Date.now() });
+                    } else {
+                        if (__DEV__) {
+                            console.log("[MusicStore] Featured songs unchanged");
+                        }
+                        set({ featuredSongsFetchedAt: Date.now() });
+                    }
                 } catch (error: any) {
                     console.error("[MusicStore] Fetch error:", error.message);
                     const message = error.response?.data?.message || error.message || "Failed to fetch featured songs";
                     set({ musicError: message });
-
+                } finally {
+                    if (!hasCache) {
+                        set({ isLoading: false });
+                    }
                 }
-
             },
 
             fetchTrendingSongs: async () => {
@@ -171,10 +225,45 @@ export const useMusicStore = create<MusicStore>()(
                 }
             },
 
-            fetchQuickPicks: async () => {
+            fetchQuickPicks: async (forceRefresh = false) => {
+                if (!get().isAuthReady && !forceRefresh) return;
+                const now = Date.now();
+                const lastFetched = get().quickPicksFetchedAt || 0;
+                const hasCache = get().quickPicks.length > 0;
+                const isExpired = !lastFetched || (now - lastFetched > 43200000); // 12 hours TTL
+                
+                if (hasCache) {
+                    const ageSec = Math.round((now - lastFetched) / 1000);
+                    if (__DEV__) {
+                        console.log(`[MusicStore] fetchQuickPicks called. forceRefresh: ${forceRefresh}, hasCache: ${hasCache}, cacheAge: ${ageSec}s, isExpired: ${isExpired}`);
+                    }
+                    if (!forceRefresh && !isExpired) {
+                        if (__DEV__) {
+                            console.log(`[MusicStore] Quick picks cache valid (Age: ${ageSec}s <= 43200s). Skipping fetch.`);
+                        }
+                        return;
+                    }
+                    if (__DEV__) {
+                        console.log(`[MusicStore] Quick picks cache expired/forced (Age: ${ageSec}s). Running silent refresh.`);
+                    }
+                } else {
+                    if (__DEV__) {
+                        console.log("[MusicStore] No quick picks cache. Running initial fetch.");
+                    }
+                }
+
                 try {
                     const response = await axiosInstance.get("/stream/quick-picks");
-                    set({ quickPicks: Array.isArray(response.data) ? response.data : [] });
+                    const data = Array.isArray(response.data) ? response.data : [];
+                    
+                    const prevDataStr = JSON.stringify(get().quickPicks);
+                    const newDataStr = JSON.stringify(data);
+                    
+                    if (prevDataStr !== newDataStr) {
+                        set({ quickPicks: data, quickPicksFetchedAt: Date.now() });
+                    } else {
+                        set({ quickPicksFetchedAt: Date.now() });
+                    }
                 } catch (error: any) {
                     console.error("[MusicStore] Failed to fetch quick picks:", error.message);
                 }
@@ -188,19 +277,18 @@ export const useMusicStore = create<MusicStore>()(
                     console.error("[MusicStore] Failed to fetch recent collections:", error.message);
                 }
             },
-            
-            fetchFrequentCollections: async () => {
-                try {
-                    const response = await axiosInstance.get("/history/frequent-collections?limit=6");
-                    set({ frequentCollections: Array.isArray(response.data) ? response.data : [] });
-                } catch (error: any) {
-                    console.error("[MusicStore] Failed to fetch frequent collections:", error.message);
-                }
-            },
-
             toggleLikeSong: async (track: any) => {
                 const prevState = get().likedSongs;
                 const isLiked = get().isSongLiked(track);
+
+                if (!useNetworkStore.getState().isOnline) {
+                    useToastStore.getState().showToast({
+                        message: "Available when you're back online.",
+                        iconType: 'none',
+                        duration: 2500
+                    });
+                    return isLiked;
+                }
 
                 try {
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -213,33 +301,53 @@ export const useMusicStore = create<MusicStore>()(
                     }
 
                     let res;
+                    const getLocalId = (t: any) => {
+                        if (!t) return null;
+                        const source = t.source;
+                        const isExternal = source === 'jiosaavn' || source === 'youtube' || 
+                            (t.externalId && !/^[0-9a-fA-F]{24}$/.test(String(t.externalId)));
+                        if (isExternal) return null;
+
+                        if (t._id && /^[0-9a-fA-F]{24}$/.test(String(t._id))) return String(t._id);
+                        if (t.id && /^[0-9a-fA-F]{24}$/.test(String(t.id))) return String(t.id);
+                        return null;
+                    };
+
                     if (isLiked) {
                         // UNLIKE
                         const likedSong = prevState.find((s: any) => get().isSongMatch(s, track));
-                        const isExternal = (likedSong as any)?._likedType === "external" || !!(likedSong as any)?.externalId;
+                        const isExternal = (likedSong as any)?._likedType === "external" || 
+                            (!!(likedSong as any)?.externalId && !/^[0-9a-fA-F]{24}$/.test(String((likedSong as any)?.externalId)));
                         
                         if (isExternal) {
                             const extId = (likedSong as any)?.externalId || track.externalId || track.id;
                             res = await axiosInstance.delete(`/users/me/unlike-external/${String(extId)}`);
                         } else {
-                            const localId = (likedSong as any)?._id || track._id;
-                            res = await axiosInstance.delete(`/users/me/unlike/${localId}`);
+                            const localId = getLocalId(likedSong) || getLocalId(track);
+                            if (localId) {
+                                res = await axiosInstance.delete(`/users/me/unlike/${localId}`);
+                            }
                         }
                     } else {
                         // LIKE
-                        if (track.externalId || track.id) {
+                        const localId = getLocalId(track);
+                        if (localId) {
+                            res = await axiosInstance.post(`/users/me/like/${localId}`);
+                        } else {
+                            const extId = track.externalId || track.id;
+                            const cleanId = String(extId).replace(/^(jiosaavn_track_|jiosaavn_album_|jiosaavn_playlist_|jiosaavn_|yt_|youtube_)/, "");
+                            const source = track.source || (String(extId).startsWith("youtube_") ? "youtube" : "jiosaavn");
+                            const fallbackUrl = `/api/stream/play/${source}/${cleanId}`;
+
                             res = await axiosInstance.post("/users/me/like-external", {
                                 title: track.title,
                                 artist: track.artist,
                                 imageUrl: track.imageUrl || track.artwork,
-                                audioUrl: track.audioUrl || track.url,
+                                audioUrl: track.audioUrl || track.url || track.streamUrl || fallbackUrl,
                                 duration: track.duration,
-                                externalId: String(track.externalId || track.id),
-                                source: track.source || 'jiosaavn'
+                                externalId: String(extId),
+                                source
                             });
-                        } else {
-                            const id = track._id || track.id;
-                            res = await axiosInstance.post(`/users/me/like/${id}`);
                         }
                     }
                     
@@ -248,6 +356,31 @@ export const useMusicStore = create<MusicStore>()(
                         set({ likedSongs: res.data });
                         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                     }
+
+                    // Show Toast Notification
+                    if (isLiked) {
+                        useToastStore.getState().showToast({
+                            message: "Removed from Liked Songs",
+                            iconType: 'none',
+                            duration: 2500
+                        });
+                    } else {
+                        useToastStore.getState().showToast({
+                            message: "Added to Liked Songs",
+                            iconType: 'heart',
+                            action: {
+                                label: "Change",
+                                onPress: () => {
+                                    const latestRef = usePlayerUIStore.getState().addTrackSheetRef;
+                                    if (latestRef) {
+                                        latestRef.open(track);
+                                    }
+                                }
+                            },
+                            duration: 2500
+                        });
+                    }
+
                     return !isLiked;
                 } catch (err: any) {
                     const errorMsg = err.response?.data?.message || err.message;
@@ -278,13 +411,18 @@ export const useMusicStore = create<MusicStore>()(
                 return false;
             },
 
+
+            triggerRefresh: () => {
+                set((state) => ({ refreshVersion: state.refreshVersion + 1 }));
+            },
+
             reset: () => {
                 set({
                     likedSongs: [],
                     recentlyPlayed: [],
                     quickPicks: [],
+                    quickPicksFetchedAt: 0,
                     recentCollections: [],
-                    frequentCollections: [],
                     currentAlbum: null,
                     musicError: null,
                     isLoading: false
@@ -307,10 +445,14 @@ export const useMusicStore = create<MusicStore>()(
             },
             partialize: (state) => ({
                 likedSongs: state.likedSongs,
+                featuredSongs: state.featuredSongs,
+                featuredSongsFetchedAt: state.featuredSongsFetchedAt,
+                quickPicks: state.quickPicks,
+                quickPicksFetchedAt: state.quickPicksFetchedAt,
             }),
             onRehydrateStorage: () => (state) => {
                 if (__DEV__) {
-                    console.log(`[MusicStore] Hydration complete. Liked songs: ${state?.likedSongs?.length ?? 0}.`);
+                    console.log(`[MusicStore] Hydration complete. Liked songs: ${state?.likedSongs?.length ?? 0}. Cached featured songs: ${state?.featuredSongs?.length ?? 0}. Cached quick picks: ${state?.quickPicks?.length ?? 0} (FetchedAt: ${state?.quickPicksFetchedAt})`);
                 }
             }
         }

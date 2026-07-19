@@ -1,29 +1,70 @@
-import React, { useCallback, useState } from 'react';
-import { View, StyleSheet, Keyboard, ScrollView, TouchableOpacity, Text, BackHandler } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
-import { Plus, List as ListIcon, Search, Download, Music, Heart, LayoutGrid, ArrowUpDown, User as UserIcon, X } from 'lucide-react-native';
-import Animated, { FadeIn, Layout } from 'react-native-reanimated';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSearchStore, RecentSearchItem } from '@/stores/useSearchStore';
-import { SearchHeader } from '@/components/search/SearchHeader';
+import { AudioSearchModal } from '@/components/search/AudioSearchModal';
 import { BrowseCategories } from '@/components/search/BrowseCategories';
 import { RecentSearches } from '@/components/search/RecentSearches';
+import { SearchHeader } from '@/components/search/SearchHeader';
 import { SearchResults } from '@/components/search/SearchResults';
-import { AudioSearchModal } from '@/components/search/AudioSearchModal';
+import { SearchSuggestions } from '@/components/search/SearchSuggestions';
 import Colors from '@/constants/Colors';
+import { useNetworkStore } from '@/stores/useNetworkStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { AutocompleteSuggestion, RecentSearchItem, useSearchStore } from '@/stores/useSearchStore';
+import { useToastStore } from '@/stores/useToastStore';
+import { useNavigation, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, BackHandler, Keyboard, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeIn, Layout } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const query = useSearchStore((s) => s.query);
   const setQuery = useSearchStore((s) => s.setQuery);
   const fetchSuggestions = useSearchStore((s) => s.fetchSuggestions);
   const fetchResults = useSearchStore((s) => s.fetchResults);
+  const results = useSearchStore((s) => s.results);
+  const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
+  const playTrack = usePlayerStore((s) => s.playTrack);
 
   const [filter, setFilter] = useState<'all' | 'songs' | 'artists' | 'albums' | 'playlists'>('all');
   const [isFocused, setIsFocused] = useState(false);
   const [micModalVisible, setMicModalVisible] = useState(false);
 
+  const searchHeaderRef = useRef<{ focus: () => void; blur: () => void }>(null);
+  const navigation = useNavigation();
+
+  useEffect(() => {
+    const unsubscribe = (navigation as any).addListener('tabPress', (e: any) => {
+      const isFocusedScreen = navigation.isFocused();
+      if (isFocusedScreen) {
+        searchHeaderRef.current?.focus();
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'background' || nextAppState === 'inactive') {
+        Keyboard.dismiss();
+        searchHeaderRef.current?.blur();
+      }
+    });
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   const handleCategoryPress = useCallback((category: string) => {
+    if (!useNetworkStore.getState().isOnline) {
+      useToastStore.getState().showToast({
+        message: "Search unavailable while offline",
+        iconType: 'none',
+      });
+      return;
+    }
     setIsFocused(true);
     setQuery(category);
     fetchResults(category);
@@ -38,6 +79,13 @@ export default function SearchScreen() {
 
   const handleAudioResult = useCallback((q: string) => {
     setMicModalVisible(false);
+    if (!useNetworkStore.getState().isOnline) {
+      useToastStore.getState().showToast({
+        message: "Search unavailable while offline",
+        iconType: 'none',
+      });
+      return;
+    }
     setQuery(q);
     fetchResults(q);
     Keyboard.dismiss();
@@ -59,8 +107,67 @@ export default function SearchScreen() {
     { id: 'playlists', label: 'Playlists' },
   ];
 
-  const showResults = query.trim().length > 0;
-  const showRecents = isFocused && query.trim().length === 0;
+  const isSearching = useSearchStore((s) => s.isSearching);
+  const isSearchSubmitted = results !== null || isSearching;
+  const showAutocomplete = query.trim().length >= 2 && !isSearchSubmitted;
+  const showRecents = isFocused && !showAutocomplete && !isSearchSubmitted;
+  const showBrowse = !showAutocomplete && !isSearchSubmitted && !showRecents;
+
+  const handleSuggestionSelect = useCallback((item: AutocompleteSuggestion | string) => {
+    Keyboard.dismiss();
+    
+    if (typeof item === 'string') {
+      setQuery(item);
+      fetchResults(item);
+      return;
+    }
+    
+    // Log to recent searches
+    const prefixMap = {
+      song: 'jiosaavn_',
+      artist: 'jiosaavn_artist_',
+      album: 'jiosaavn_album_',
+      playlist: 'jiosaavn_playlist_',
+    };
+    const prefix = prefixMap[item.type];
+    const recentId = String(item.id).startsWith(prefix) ? item.id : `${prefix}${item.id}`;
+    
+    addRecentSearch({
+      id: recentId,
+      title: item.title,
+      artist: item.artist || '',
+      imageUrl: item.imageUrl || '',
+      type: item.type,
+      timestamp: Date.now(),
+    });
+
+    // Play or Navigate directly
+    if (item.type === 'song') {
+      playTrack({
+        id: recentId,
+        title: item.title,
+        artist: item.artist,
+        artwork: item.imageUrl,
+        source: 'jiosaavn',
+      } as any);
+    } else {
+      const cleanId = String(item.id).replace(/^(jiosaavn_artist_|jiosaavn_album_|jiosaavn_playlist_|jiosaavn_)/, '');
+      const pathMap = {
+        artist: `/(tabs)/artist/external/jiosaavn/${cleanId}?from=search`,
+        album: `/(tabs)/album/external/jiosaavn/${cleanId}?from=search`,
+        playlist: `/(tabs)/playlist/external/jiosaavn/${cleanId}?from=search`,
+      };
+      const path = pathMap[item.type as 'artist' | 'album' | 'playlist'];
+      if (path) {
+        router.push(path as any);
+      }
+    }
+  }, [playTrack, addRecentSearch, router]);
+
+  const handleAutofill = useCallback((text: string) => {
+    setQuery(text);
+    fetchSuggestions(text);
+  }, [setQuery, fetchSuggestions]);
 
   // Auto-focus when query comes from external source (like Browse categories)
   React.useEffect(() => {
@@ -94,6 +201,7 @@ export default function SearchScreen() {
         animated={true}
       />
       <SearchHeader
+        ref={searchHeaderRef}
         onMicPress={() => setMicModalVisible(true)}
         onFocus={handleFocus}
         onBlur={handleBlur}
@@ -101,7 +209,7 @@ export default function SearchScreen() {
       />
 
       <View style={{ flex: 1, backgroundColor: Colors.background }}>
-        {showResults && (
+        {isSearchSubmitted && (
           <View style={styles.filterContainer}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterList}>
               <Animated.View layout={Layout.springify()} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -142,11 +250,20 @@ export default function SearchScreen() {
         )}
 
         <View style={styles.content}>
-          {!showResults && !showRecents && (
+          {showBrowse && (
             <BrowseCategories onCategoryPress={handleCategoryPress} />
           )}
 
-          <SearchResults visible={showResults} activeFilter={filter} />
+          {showAutocomplete && (
+            <SearchSuggestions
+              onSelect={handleSuggestionSelect}
+              onAutofill={handleAutofill}
+            />
+          )}
+
+          {isSearchSubmitted && (
+            <SearchResults visible={true} activeFilter={filter} />
+          )}
 
           <RecentSearches
             onSelect={handleRecentSelect}

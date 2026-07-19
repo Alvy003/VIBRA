@@ -1,13 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
-import { Image } from 'expo-image';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
+import Colors from '@/constants/Colors';
 import { RADIUS } from '@/constants/design';
 import { useStreamStore } from '@/stores/useStreamStore';
+import { useToastStore } from '@/stores/useToastStore';
+import { useRouter } from 'expo-router';
+import { Lock } from 'lucide-react-native';
+import React from 'react';
+import { Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { MixCover } from './MixCover';
-import Colors from '@/constants/Colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_SIZE = (SCREEN_WIDTH - 48) / 2; // 2 columns with padding
@@ -17,8 +16,12 @@ interface DiscoveryMixCardProps {
 }
 
 export const DiscoveryMixCard = React.memo(({ type }: DiscoveryMixCardProps) => {
+    if (__DEV__) {
+        console.log(`[DiscoveryMixCard] Render (type: ${type})`);
+    }
     const router = useRouter();
-    const { dailyMix, weeklyMix } = useStreamStore();
+    const dailyMix = useStreamStore(s => s.dailyMix);
+    const weeklyMix = useStreamStore(s => s.weeklyMix);
 
     const isWeekly = type === 'weekly';
     const mixData = isWeekly ? weeklyMix?.results : dailyMix;
@@ -29,7 +32,10 @@ export const DiscoveryMixCard = React.memo(({ type }: DiscoveryMixCardProps) => 
     const label = isWeekly ? 'Weekly Mix' : 'Daily Mix';
 
     const handlePress = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        if (!isEligible) {
+            useToastStore.getState().showToast({ message: `Keep listening to unlock ${label}.` });
+            return;
+        }
         router.push({
             pathname: "/(tabs)/playlist/[id]" as any,
             params: { id: `${type}-mix`, from: 'home' }
@@ -49,17 +55,22 @@ export const DiscoveryMixCard = React.memo(({ type }: DiscoveryMixCardProps) => 
                     style={StyleSheet.absoluteFill}
                 />
 
-                {/* Lock/Progress Overlay for Weekly */}
-                {isWeekly && !isEligible && (
+                {/* Lock/Progress Overlay */}
+                {!isEligible && (
                     <View style={styles.lockedOverlay}>
-                        <View style={styles.progressBar}>
-                            <View
-                                style={[
-                                    styles.progressFill,
-                                    { width: `${Math.min(((weeklyMix?.progress?.count || 0) / 20) * 100, 100)}%`, backgroundColor: accentColor }
-                                ]}
-                            />
+                        <View style={styles.lockContainer}>
+                            <Lock color={Colors.textPrimary} size={28} opacity={0.9} />
                         </View>
+                        {isWeekly && (
+                            <View style={styles.progressBar}>
+                                <View
+                                    style={[
+                                        styles.progressFill,
+                                        { width: `${Math.min(((weeklyMix?.progress?.count || 0) / 20) * 100, 100)}%`, backgroundColor: accentColor }
+                                    ]}
+                                />
+                            </View>
+                        )}
                     </View>
                 )}
             </View>
@@ -107,15 +118,23 @@ const styles = StyleSheet.create({
     lockedOverlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: Colors.blackAlpha50,
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
         padding: 10,
+    },
+    lockContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        flex: 1,
     },
     progressBar: {
         height: 3,
         backgroundColor: Colors.whiteAlpha20,
         borderRadius: 1.5,
         overflow: 'hidden',
-        marginBottom: 35, // Positioned above the label bar area
+        position: 'absolute',
+        bottom: 12,
+        left: 10,
+        right: 10,
     },
     progressFill: {
         height: '100%',

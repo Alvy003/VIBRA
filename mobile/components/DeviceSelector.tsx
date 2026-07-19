@@ -1,41 +1,35 @@
 // components/DeviceSelector.tsx
-import React, { useState, useRef } from 'react';
+import Colors from '@/constants/Colors';
+import { AudioDevice, useNativeAudioDevices } from '@/hooks/useNativeAudioDevices';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Platform,
-  Linking,
-  Alert,
-} from 'react-native';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withRepeat,
-  withSequence,
-  withDelay,
-  Easing,
-} from 'react-native-reanimated';
-import {
-  Smartphone,
   Bluetooth,
-  Speaker,
+  Check,
   Headphones,
-  Tv,
-  X,
   Radio,
   RefreshCw,
-  Volume2,
-  ChevronRight,
-  Check,
+  Speaker,
+  Tv,
+  Volume2
 } from 'lucide-react-native';
-import { SharpDevice } from './SharpIcons';
+import React, { useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
+} from 'react-native';
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming
+} from 'react-native-reanimated';
 import BottomSheet, { BottomSheetRef } from './BottomSheet';
-import { useNativeAudioDevices, AudioDevice } from '@/hooks/useNativeAudioDevices';
-import Colors from '@/constants/Colors';
+import { SharpDevice } from './SharpIcons';
 
 let IntentLauncher: any = null;
 try {

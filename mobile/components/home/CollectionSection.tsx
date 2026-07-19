@@ -1,13 +1,12 @@
-import React, { useCallback, useMemo } from 'react';
-import { View, StyleSheet, FlatList, Dimensions, Text } from 'react-native';
-import { useRouter } from 'expo-router';
 import { PremiumCard } from '@/components/PremiumCard';
 import { useMusicStore } from '@/stores/useMusicStore';
-import { useStreamStore } from '@/stores/useStreamStore';
+import { useRouter } from 'expo-router';
+import React, { useCallback, useMemo } from 'react';
+import { Dimensions, FlatList, StyleSheet, View } from 'react-native';
 import { SectionHeader } from './SectionHeader';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.45;
+const CARD_WIDTH = SCREEN_WIDTH * 0.40;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
@@ -50,6 +49,7 @@ export const CollectionSection = React.memo(() => {
                 imageUrl={item.imageUrl}
                 onPress={handlePress}
                 index={index}
+                width={CARD_WIDTH}
             />
         );
     }, [router]);
@@ -66,7 +66,7 @@ export const CollectionSection = React.memo(() => {
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
                 data={displayData}
                 keyExtractor={(item, idx) => `${item.externalId || item._id}_${idx}`}
                 renderItem={renderCollectionItem}
@@ -85,5 +85,5 @@ export const CollectionSection = React.memo(() => {
 CollectionSection.displayName = 'CollectionSection';
 
 const styles = StyleSheet.create({
-    sectionContainer: { marginTop: 10 },
+    sectionContainer: { marginTop: 24 },
 });

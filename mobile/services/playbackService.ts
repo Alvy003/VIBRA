@@ -1,4 +1,4 @@
-import TrackPlayer, { Event, State, Capability, AppKilledPlaybackBehavior } from 'react-native-track-player';
+import TrackPlayer, { AppKilledPlaybackBehavior, Capability, Event } from 'react-native-track-player';
 
 // Minimalistic PlaybackService to isolate event bridge issues
 export async function PlaybackService() {
@@ -8,7 +8,7 @@ export async function PlaybackService() {
     // This helps Android 13/14 bridge the gap between main app and headless task
     try {
         await TrackPlayer.updateOptions({
-            icon: require('../assets/images/vibra-512.png'),
+            icon: require('../assets/images/vibra-white.png'),
             android: {
                 appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
                 alwaysPauseOnInterruption: true,

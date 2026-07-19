@@ -121,6 +121,8 @@ export default function SearchResultsScreen() {
                         showsVerticalScrollIndicator={false}
                         removeClippedSubviews
                         keyboardShouldPersistTaps="handled"
+                        overScrollMode="never"
+                        bounces={false}
                     >
                         {/* Top Result */}
                         {topSong ? (

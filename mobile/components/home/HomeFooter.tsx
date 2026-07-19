@@ -1,9 +1,9 @@
 // components/home/HomeFooter.tsx
-import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Linking } from 'react-native';
-import { Music2, Instagram, Twitter, Youtube, Github } from 'lucide-react-native';
-import { COLORS, TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
 import Colors from '@/constants/Colors';
+import { COLORS } from '@/constants/design';
+import { Github, Instagram, Twitter, Youtube } from 'lucide-react-native';
+import React from 'react';
+import { Linking, StyleSheet, Text, View } from 'react-native';
 
 export const HomeFooter = React.memo(() => {
   const BRAND_PURPLE = Colors.accent;
@@ -42,7 +42,7 @@ export const HomeFooter = React.memo(() => {
         <Text style={styles.tagline}>The future of music is here.</Text>
 
         {/* Links Grid */}
-        <View style={styles.linksRow}>
+        {/* <View style={styles.linksRow}>
           {links.map((link, i) => (
             <React.Fragment key={link.label}>
               <TouchableOpacity onPress={() => handlePress(link.url)}>
@@ -51,10 +51,10 @@ export const HomeFooter = React.memo(() => {
               {i < links.length - 1 && <View style={styles.linkDot} />}
             </React.Fragment>
           ))}
-        </View>
+        </View> */}
 
         {/* Social Icons */}
-        <View style={styles.socialsRow}>
+        {/* <View style={styles.socialsRow}>
           {socials.map((social, i) => (
             <TouchableOpacity
               key={i}
@@ -64,7 +64,7 @@ export const HomeFooter = React.memo(() => {
               <social.icon size={20} color={COLORS.textSecondary} strokeWidth={1.5} />
             </TouchableOpacity>
           ))}
-        </View>
+        </View> */}
 
         {/* Bottom Credits */}
         {/* <View style={styles.bottomSection}>
@@ -119,7 +119,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   tagline: {
-    color: COLORS.textMuted,
+    color: COLORS.textSecondary,
     fontSize: 13,
     fontWeight: '500',
     marginBottom: 32,

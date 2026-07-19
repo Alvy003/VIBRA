@@ -1,94 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import Colors from '@/constants/Colors';
+import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
+import { Check, ChevronRight } from 'lucide-react-native';
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-  TouchableOpacity,
-  ScrollView,
   Dimensions,
-  Pressable
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
-  SlideInRight,
-  SlideOutLeft,
-  SlideInLeft,
-  SlideOutRight,
-  SlideInDown,
-  SlideOutDown,
+  SlideInRight
 } from 'react-native-reanimated';
-import { Check, Music, Globe, ChevronRight } from 'lucide-react-native';
-import {
-  useOnboardingStore,
-  AVAILABLE_LANGUAGES
-} from '../../stores/useOnboardingStore';
-import { useAuth } from '@clerk/clerk-expo';
-import { useStreamStore } from '../../stores/useStreamStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-
-const THEME = {
-  violet: '#7c3aed',
-  violetLight: '#a78bfa',
-  violetDark: '#5b21b6',
-  zinc900: '#18181b',
-  zinc800: '#27272a',
-  zinc700: '#3f3f46',
-  zinc600: '#52525b',
-  zinc400: '#a1a1aa',
-  textPrimary: '#ffffff',
-  textSecondary: '#a1a1aa',
-};
+import {
+  AVAILABLE_LANGUAGES,
+  useOnboardingStore
+} from '../../stores/useOnboardingStore';
+import { useStreamStore } from '../../stores/useStreamStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const OnboardingModal = () => {
-  const {
-    preferences,
-    setLanguages,
-    completeOnboarding,
-    shouldShowOnboarding
-  } = useOnboardingStore();
+  const completedOnboarding = useOnboardingStore(state => state.preferences.completedOnboarding);
+  const isPreferencesLoaded = useOnboardingStore(state => state.isPreferencesLoaded);
+  const preferencesLanguages = useOnboardingStore(state => state.preferences.languages);
+  const setLanguages = useOnboardingStore(state => state.setLanguages);
+  const completeOnboarding = useOnboardingStore(state => state.completeOnboarding);
 
   const fetchHomepage = useStreamStore(state => state.fetchHomepage);
   const fetchPicks = useStreamStore(state => state.fetchDailyMix);
   const insets = useSafeAreaInsets();
-  const { isSignedIn } = useAuth();
 
-  const [visible, setVisible] = useState(false);
-  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
   const [step, setStep] = useState(0);
-  const [localSelection, setLocalSelection] = useState<string[]>(preferences.languages);
+  const [localSelection, setLocalSelection] = useState<string[]>([]);
 
-  // Fetch prefs from server first, THEN decide whether to show modal.
-  // This prevents the modal from flashing on logout or before server data loads.
+  // Sync local selection when preferences languages are loaded or change
   useEffect(() => {
-    if (!isSignedIn) {
-      setVisible(false);
-      setIsLoadingPrefs(true); // Reset for next sign-in
-      return;
+    if (isPreferencesLoaded) {
+      setLocalSelection(preferencesLanguages || []);
     }
-
-    let cancelled = false;
-    setIsLoadingPrefs(true);
-
-    useOnboardingStore.getState().fetchPreferences().finally(() => {
-      if (cancelled) return;
-      setIsLoadingPrefs(false);
-      const shouldShow = useOnboardingStore.getState().shouldShowOnboarding();
-      if (shouldShow) {
-        setLocalSelection(useOnboardingStore.getState().preferences.languages);
-        setStep(0);
-        setVisible(true);
-      } else {
-        setVisible(false);
-      }
-    });
-
-    return () => { cancelled = true; };
-  }, [isSignedIn]);
+  }, [isPreferencesLoaded, preferencesLanguages]);
 
   const handleToggle = (langId: string) => {
     setLocalSelection(prev =>
@@ -106,10 +63,9 @@ export const OnboardingModal = () => {
 
     setLanguages(localSelection);
     completeOnboarding();
-    setVisible(false);
 
     // Refresh content
-    useStreamStore.setState({ homepageData: null });
+    useStreamStore.getState().invalidateHomepageCache();
     fetchHomepage(true);
     fetchPicks();
   };
@@ -119,12 +75,13 @@ export const OnboardingModal = () => {
       setLanguages(['hindi', 'english']);
     }
     completeOnboarding();
-    setVisible(false);
 
-    useStreamStore.setState({ homepageData: null });
+    useStreamStore.getState().invalidateHomepageCache();
     fetchHomepage(true);
     fetchPicks();
   };
+
+  const visible = isPreferencesLoaded && !completedOnboarding;
 
   if (!visible) return null;
 
@@ -138,6 +95,7 @@ export const OnboardingModal = () => {
       statusBarTranslucent
     >
       <View style={styles.modalOverlay}>
+        <BlurView intensity={50} tint="dark" style={StyleSheet.absoluteFill} />
         <Animated.View
           entering={FadeIn.duration(300)}
           exiting={FadeOut.duration(300)}
@@ -145,24 +103,10 @@ export const OnboardingModal = () => {
         />
 
         <Animated.View
-          entering={SlideInDown.duration(250)}
-          exiting={SlideOutDown.duration(300)}
-          style={[styles.modalContent, { paddingBottom: insets.bottom + 20 }]}
+          entering={FadeIn.duration(250)}
+          exiting={FadeOut.duration(300)}
+          style={[styles.modalContent, { paddingBottom: insets.bottom + 5 }]}
         >
-          {/* Step Indicator */}
-          <View style={styles.indicatorContainer}>
-            {[0, 1].map((s) => (
-              <View
-                key={s}
-                style={[
-                  styles.indicator,
-                  s <= step ? styles.indicatorActive : styles.indicatorInactive,
-                  s <= step && { flex: 2 }
-                ]}
-              />
-            ))}
-          </View>
-
           <View style={styles.stepContainer}>
             {step === 0 ? (
               <Animated.View
@@ -172,12 +116,7 @@ export const OnboardingModal = () => {
                 style={styles.welcomeStep}
               >
                 <View style={styles.iconWrapper}>
-                  <LinearGradient
-                    colors={['rgba(124, 58, 237, 0.2)', 'rgba(192, 38, 211, 0.2)']}
-                    style={styles.iconGradient}
-                  >
-                    <Music size={36} color={THEME.violetLight} />
-                  </LinearGradient>
+                  <Image source={require('../../assets/images/vibra-1024.png')} style={{ width: 80, height: 80 }} />
                 </View>
 
                 <Text style={styles.title}>Welcome to Vibra</Text>
@@ -191,10 +130,9 @@ export const OnboardingModal = () => {
                   style={styles.primaryButton}
                 >
                   <Text style={styles.primaryButtonText}>Get Started</Text>
-                  <ChevronRight size={18} color="#fff" />
+                  <ChevronRight size={18} color={Colors.black} />
                 </TouchableOpacity>
 
-                <Text style={styles.timeTag}>Takes less than 10 seconds</Text>
               </Animated.View>
             ) : (
               <Animated.View
@@ -203,9 +141,6 @@ export const OnboardingModal = () => {
                 style={styles.languageStep}
               >
                 <View style={styles.headerRow}>
-                  <View style={styles.headerIconWrapper}>
-                    <Globe size={18} color={THEME.violetLight} />
-                  </View>
                   <View>
                     <Text style={styles.headerTitle}>Music Languages</Text>
                     <Text style={styles.headerSubtitle}>Choose what you'd like to hear</Text>
@@ -239,7 +174,7 @@ export const OnboardingModal = () => {
                           styles.checkmark,
                           isSelected ? styles.checkmarkActive : styles.checkmarkInactive
                         ]}>
-                          {isSelected && <Check size={12} color="#fff" strokeWidth={3} />}
+                          {isSelected && <Check size={12} color={Colors.black} strokeWidth={3} />}
                         </View>
                       </TouchableOpacity>
                     );
@@ -264,12 +199,12 @@ export const OnboardingModal = () => {
                   >
                     <Text style={[
                       styles.primaryButtonText,
-                      selectedCount === 0 && { color: THEME.zinc600 }
+                      selectedCount === 0 && { color: Colors.textMuted }
                     ]}>
                       {selectedCount > 0 ? "Continue" : "Select at least 1"}
                     </Text>
                     {localSelection.length > 0 ? (
-                      <ChevronRight size={18} color="#fff" />
+                      <ChevronRight size={18} color={Colors.black} />
                     ) : null}
                   </TouchableOpacity>
 
@@ -300,36 +235,17 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    backgroundColor: Colors.blackAlpha70,
   },
   modalContent: {
-    backgroundColor: THEME.zinc900,
+    backgroundColor: Colors.surface,
     width: '100%',
     maxWidth: SCREEN_WIDTH > 600 ? 450 : '100%',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.05)',
+    borderColor: Colors.whiteAlpha08,
     overflow: 'hidden',
-  },
-  indicatorContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 4,
-    gap: 6,
-  },
-  indicator: {
-    height: 4,
-    borderRadius: 2,
-    flex: 1,
-  },
-  indicatorActive: {
-    backgroundColor: THEME.violet,
-  },
-  indicatorInactive: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
   },
   stepContainer: {
     padding: 24,
@@ -340,53 +256,40 @@ const styles = StyleSheet.create({
   },
   iconWrapper: {
     position: 'relative',
-    marginBottom: 20,
-  },
-  iconGradient: {
-    width: 80,
-    height: 80,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(124, 58, 237, 0.1)',
+    marginBottom: 10,
   },
   title: {
     color: '#fff',
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.8,
   },
   subtitle: {
-    color: THEME.zinc400,
-    fontSize: 14,
+    color: Colors.textSecondary,
+    fontSize: 11,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 20,
+    lineHeight: 18,
+    marginTop: 5,
+    marginBottom: 40,
     maxWidth: 280,
   },
   primaryButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: THEME.violet,
+    backgroundColor: Colors.accent,
     width: '100%',
-    height: 56,
-    borderRadius: 16,
+    height: 42,
+    borderRadius: 20,
     gap: 8,
   },
   buttonDisabled: {
-    backgroundColor: THEME.zinc800,
+    backgroundColor: Colors.placeholderBg,
   },
   primaryButtonText: {
-    color: '#fff',
-    fontSize: 16,
+    color: Colors.black,
+    fontSize: 14,
     fontWeight: '600',
-  },
-  timeTag: {
-    color: THEME.zinc600,
-    fontSize: 11,
-    marginTop: 16,
   },
   languageStep: {
     minHeight: 400,
@@ -397,21 +300,13 @@ const styles = StyleSheet.create({
     gap: 12,
     marginBottom: 20,
   },
-  headerIconWrapper: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(124, 58, 237, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   headerTitle: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
   },
   headerSubtitle: {
-    color: THEME.zinc600,
+    color: Colors.textMuted,
     fontSize: 12,
   },
   languageList: {
@@ -430,17 +325,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     minHeight: 52,
   },
   langItemActive: {
-    backgroundColor: 'rgba(124, 58, 237, 0.15)',
-    borderColor: 'rgba(124, 58, 237, 0.4)',
+    backgroundColor: Colors.surface,
+    borderColor: Colors.accent,
   },
   langItemInactive: {
-    backgroundColor: 'rgba(39, 39, 42, 0.4)',
-    borderColor: 'rgba(63, 63, 70, 0.3)',
+    backgroundColor: Colors.surface,
+    borderColor: Colors.border,
   },
   langText: {
     fontSize: 14,
@@ -450,17 +345,17 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   langTextInactive: {
-    color: THEME.zinc400,
+    color: Colors.textMuted,
   },
   checkmark: {
-    width: 20,
-    height: 20,
+    width: 18,
+    height: 18,
     borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkmarkActive: {
-    backgroundColor: THEME.violet,
+    backgroundColor: Colors.accent,
   },
   checkmarkInactive: {
     backgroundColor: 'rgba(63, 63, 70, 0.5)',
@@ -475,16 +370,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   selectionText: {
-    color: THEME.zinc400,
-    fontSize: 12,
+    color: Colors.textMuted,
+    fontSize: 11,
   },
   skipButton: {
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     marginTop: 4,
   },
   skipButtonText: {
-    color: THEME.zinc600,
-    fontSize: 12,
+    color: Colors.textMuted,
+    fontSize: 11,
   },
 });

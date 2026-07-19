@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import { axiosInstance } from '@/lib/axios';
+import { useToastStore } from './useToastStore';
 
 // Workaround for typing issues in some environments
 const FS = FileSystem as any;
@@ -38,7 +40,7 @@ interface DownloadStore {
     downloadTrack: (song: any, context?: { playlistId?: string, albumId?: string }) => Promise<void>;
     downloadPlaylist: (playlist: any, songs: any[]) => Promise<void>;
     downloadAlbum: (album: any, songs: any[]) => Promise<void>;
-    removeDownload: (songId: string) => Promise<void>;
+    removeDownload: (songId: string, isBatch?: boolean) => Promise<void>;
     removePlaylistDownload: (playlistId: string) => Promise<void>;
     removeAlbumDownload: (albumId: string) => Promise<void>;
     isDownloaded: (songId: string) => boolean;
@@ -79,11 +81,40 @@ export const useDownloadStore = create<DownloadStore>()(
                     isDownloading: { ...state.isDownloading, [songId]: true }
                 }));
 
+                if (!context) {
+                    useToastStore.getState().showToast({
+                        message: "Downloading track...",
+                        duration: 2000
+                    });
+                }
+
                 try {
                     await ensureDir();
 
-                    const url = song.url || song.audioUrl || song.streamUrl;
-                    if (!url) throw new Error("No URL to download");
+                    let url = song.url || song.audioUrl || song.streamUrl;
+                    const isJioSaavn = song.source === 'jiosaavn' || song.source === 'saavn' || songId.startsWith('jiosaavn_');
+
+                    if (!url) {
+                        const source = song.source || 'jiosaavn';
+                        const cleanId = songId.replace(/^(jiosaavn_track_|jiosaavn_album_|jiosaavn_playlist_)/, '');
+                        const cleanIdForUrl = cleanId.startsWith('jiosaavn_') ? cleanId.slice(9) : cleanId;
+                        url = `/api/stream/play/${source}/${cleanIdForUrl}`;
+                        if (isJioSaavn) {
+                            url += '?bitrate=320';
+                        }
+                    } else if (isJioSaavn && url.includes('/stream/play/jiosaavn/')) {
+                        if (url.includes('bitrate=')) {
+                            url = url.replace(/bitrate=\d+/, 'bitrate=320');
+                        } else {
+                            url = url.includes('?') ? `${url}&bitrate=320` : `${url}?bitrate=320`;
+                        }
+                    }
+
+                    if (url.startsWith('/')) {
+                        const baseURL = axiosInstance.defaults.baseURL || '';
+                        const host = baseURL.endsWith('/api') ? baseURL.slice(0, -4) : baseURL;
+                        url = `${host}${url}`;
+                    }
 
                     const fileExt = url.includes('.mp3') ? '.mp3' : '.m4a';
                     const fileName = `${songId}${fileExt}`;
@@ -139,6 +170,13 @@ export const useDownloadStore = create<DownloadStore>()(
                         downloadedSongs: { ...state.downloadedSongs, [songId]: downloadedSong },
                         isDownloading: { ...state.isDownloading, [songId]: false }
                     }));
+
+                    if (!context) {
+                        useToastStore.getState().showToast({
+                            message: "Downloaded",
+                            duration: 3000
+                        });
+                    }
                 } catch (error) {
                     console.error("[DownloadStore] Download error", error);
                     set((state) => ({
@@ -150,6 +188,11 @@ export const useDownloadStore = create<DownloadStore>()(
             downloadPlaylist: async (playlist, songs) => {
                 const playlistId = playlist.id || playlist.externalId || playlist._id;
                 if (!playlistId) return;
+
+                useToastStore.getState().showToast({
+                    message: "Downloading playlist...",
+                    duration: 2000
+                });
 
                 // Download all songs in the playlist
                 for (const song of songs) {
@@ -168,11 +211,21 @@ export const useDownloadStore = create<DownloadStore>()(
                 set((state) => ({
                     downloadedPlaylists: { ...state.downloadedPlaylists, [playlistId]: downloadedPlaylist }
                 }));
+
+                useToastStore.getState().showToast({
+                    message: "Playlist downloaded",
+                    duration: 3000
+                });
             },
 
             downloadAlbum: async (album, songs) => {
                 const albumId = album.id || album.externalId || album._id;
                 if (!albumId) return;
+
+                useToastStore.getState().showToast({
+                    message: "Downloading album...",
+                    duration: 2000
+                });
 
                 for (const song of songs) {
                     await get().downloadTrack(song, { albumId });
@@ -190,9 +243,14 @@ export const useDownloadStore = create<DownloadStore>()(
                 set((state) => ({
                     downloadedAlbums: { ...state.downloadedAlbums, [albumId]: downloadedAlbum }
                 }));
+
+                useToastStore.getState().showToast({
+                    message: "Album downloaded",
+                    duration: 3000
+                });
             },
 
-            removeDownload: async (songId) => {
+            removeDownload: async (songId, isBatch = false) => {
                 const song = get().downloadedSongs[songId];
                 if (!song) return;
 
@@ -205,6 +263,13 @@ export const useDownloadStore = create<DownloadStore>()(
                     const newDownloadedSongs = { ...get().downloadedSongs };
                     delete newDownloadedSongs[songId];
                     set({ downloadedSongs: newDownloadedSongs });
+
+                    if (!isBatch) {
+                        useToastStore.getState().showToast({
+                            message: "Removed from Downloads",
+                            duration: 2500
+                        });
+                    }
                 } catch (error) {
                     console.error("[DownloadStore] Remove error", error);
                 }
@@ -218,13 +283,18 @@ export const useDownloadStore = create<DownloadStore>()(
                 for (const songId of playlist.songIds) {
                     const song = get().downloadedSongs[songId];
                     if (song && song.playlistId === playlistId && !song.albumId) {
-                        await get().removeDownload(songId);
+                        await get().removeDownload(songId, true);
                     }
                 }
 
                 const newPlaylists = { ...get().downloadedPlaylists };
                 delete newPlaylists[playlistId];
                 set({ downloadedPlaylists: newPlaylists });
+
+                useToastStore.getState().showToast({
+                    message: "Removed from Downloads",
+                    duration: 2500
+                });
             },
 
             removeAlbumDownload: async (albumId) => {
@@ -234,13 +304,18 @@ export const useDownloadStore = create<DownloadStore>()(
                 for (const songId of album.songIds) {
                     const song = get().downloadedSongs[songId];
                     if (song && song.albumId === albumId && !song.playlistId) {
-                        await get().removeDownload(songId);
+                        await get().removeDownload(songId, true);
                     }
                 }
 
                 const newAlbums = { ...get().downloadedAlbums };
                 delete newAlbums[albumId];
                 set({ downloadedAlbums: newAlbums });
+
+                useToastStore.getState().showToast({
+                    message: "Removed from Downloads",
+                    duration: 2500
+                });
             },
 
             isDownloaded: (songId) => {

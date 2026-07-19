@@ -9,13 +9,17 @@ import { ExternalItem } from './types';
 import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.45;
+const CARD_WIDTH = SCREEN_WIDTH * 0.40;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const TopChartsSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
+    if (__DEV__) {
+        console.log('[TopChartsSection] Render');
+    }
     const router = useRouter();
     const charts = useStreamStore(s => s.homepageData?.charts);
+    const isLoading = useStreamStore(s => s.isLoadingHomepage);
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
@@ -25,18 +29,22 @@ export const TopChartsSection = React.memo(({ onOptions }: { onOptions?: (item: 
         [router]
     );
 
-    const renderTopChart = useCallback(({ item, index }: { item: ExternalItem; index: number }) => (
+    const renderTopChart = useCallback(({ item, index }: { item: any; index: number }) => (
         <PremiumCard
             title={item.title}
             // subtitle={item.description}
             imageUrl={item.imageUrl}
-            onPress={() => handleNavigateExternal(item)}
-            onLongPress={() => onOptions?.(item, 'playlist')}
+            onPress={item.isPlaceholder ? undefined : () => handleNavigateExternal(item)}
+            onLongPress={item.isPlaceholder ? undefined : () => onOptions?.(item, 'playlist')}
             index={index}
+            width={CARD_WIDTH}
+            isPlaceholder={item.isPlaceholder}
         />
     ), [handleNavigateExternal, onOptions]);
 
-    if (!charts || charts.length === 0) return null;
+    const displayCharts = charts && charts.length > 0 ? charts.slice(0, 8) : (isLoading ? Array(4).fill({ isPlaceholder: true }) : []);
+
+    if (displayCharts.length === 0) return null;
 
     return (
         <View style={styles.sectionContainer}>
@@ -47,9 +55,9 @@ export const TopChartsSection = React.memo(({ onOptions }: { onOptions?: (item: 
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
-                data={charts.slice(0, 8)}
-                keyExtractor={(item) => item.externalId || item.id || String(item._id)}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
+                data={displayCharts}
+                keyExtractor={(item, idx) => item.isPlaceholder ? `placeholder-${idx}` : (item.externalId || item.id || String(item._id))}
                 renderItem={renderTopChart}
                 snapToInterval={ITEM_SIZE}
                 decelerationRate="fast"
@@ -70,5 +78,5 @@ export const TopChartsSection = React.memo(({ onOptions }: { onOptions?: (item: 
 TopChartsSection.displayName = 'TopChartsSection';
 
 const styles = StyleSheet.create({
-    sectionContainer: { marginTop: 28 },
+    sectionContainer: { marginTop: 24 },
 });

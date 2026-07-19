@@ -1,15 +1,14 @@
-import React, { useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList } from 'react-native';
 import { PremiumCard } from '@/components/PremiumCard';
+import Colors from '@/constants/Colors';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import React, { useCallback, useMemo } from 'react';
+import { Dimensions, FlatList, StyleSheet, View } from 'react-native';
 import { SectionHeader } from './SectionHeader';
-import Colors from '@/constants/Colors';
 import { SongItem } from './types';
-import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.38;
+const CARD_WIDTH = SCREEN_WIDTH * 0.40;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
@@ -41,6 +40,7 @@ export const QuickPicksSection = React.memo(() => {
             imageUrl={item.imageUrl}
             onPress={() => handlePlay(item)}
             index={index}
+            width={CARD_WIDTH}
         />
     ), [handlePlay]);
 
@@ -55,7 +55,7 @@ export const QuickPicksSection = React.memo(() => {
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
                 data={quickPicks}
                 keyExtractor={(item) => item._id}
                 renderItem={renderQuickPick}
@@ -79,6 +79,6 @@ QuickPicksSection.displayName = 'QuickPicksSection';
 
 const styles = StyleSheet.create({
     sectionContainer: {
-        marginTop: 28,
+        marginTop: 24,
     },
 });

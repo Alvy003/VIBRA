@@ -1,28 +1,28 @@
 // Robust detection for development mode
-const IS_DEV =
-  process.env.APP_VARIANT === 'development' ||
-  process.env.NODE_ENV === 'development' ||
-  // Special check for local developer runs where APP_VARIANT might be missing
-  (process.env.npm_lifecycle_event && process.env.npm_lifecycle_event.includes('dev'));
+const IS_DEV = process.env.APP_VARIANT
+  ? process.env.APP_VARIANT === 'development'
+  : process.env.NODE_ENV === 'development' ||
+    // Special check for local developer runs where APP_VARIANT might be missing
+    (process.env.npm_lifecycle_event && process.env.npm_lifecycle_event.includes('dev'));
 
-const DEV_IP = process.env.EXPO_PUBLIC_LOCAL_DEV_IP || '192.168.1.38';
-const API_URL = IS_DEV ? `http://${DEV_IP}:5000` : 'https://vibra-969f.onrender.com';
-const AUDIO_PROXY_URL = 'https://audio-proxy.alvyshajan.workers.dev';
+const DEV_IP = process.env.EXPO_PUBLIC_LOCAL_DEV_IP;
+const API_URL = IS_DEV ? `http://${DEV_IP}:5000` : process.env.EXPO_PUBLIC_API_URL;
+const AUDIO_PROXY_URL = process.env.EXPO_PUBLIC_AUDIO_PROXY_URL;
 
 export default {
   expo: {
     name: IS_DEV ? 'Vibra (Dev)' : 'Vibra',
     slug: 'vibra-mobile',
-    version: '1.0.1',
+    version: '1.1.0',
     orientation: 'portrait',
-    icon: './assets/images/vibra.png',
+    icon: './assets/images/vibra-foreground.png',
     scheme: 'vibra',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     splash: {
       image: './assets/images/vibra-1024.png',
       resizeMode: 'contain',
-      backgroundColor: '#000000cc'
+      backgroundColor: '#09090b'
     },
     ios: {
       supportsTablet: true,
@@ -39,8 +39,9 @@ export default {
     android: {
       package: IS_DEV ? 'com.vibra.mobile.dev' : 'com.vibra.mobile',
       adaptiveIcon: {
-        foregroundImage: './assets/images/vibra.png',
-        backgroundColor: '#121212'
+        foregroundImage: './assets/images/vibra-foreground.png',
+        backgroundColor: '#121212',
+        monochromeImage: './assets/images/vibra-monochrome.png'
       },
       edgeToEdgeEnabled: true,
       backgroundColor: '#09090b',
@@ -74,20 +75,22 @@ export default {
     web: {
       bundler: 'metro',
       output: 'static',
-      favicon: './assets/images/vibra.png'
+      favicon: './assets/images/vibra-foreground.png'
     },
     plugins: [
       'expo-router',
       'expo-secure-store',
+      './plugins/withAndroidAuto.js',
       // Using our local manual plugin instead of the broken library plugin
       './plugins/withTrackPlayer.js',
       './plugins/withAudioDeviceModule.js',
+      './plugins/withAndroidWidget.js',
       [
         '@sentry/react-native/expo',
         {
           url: 'https://sentry.io/',
-          project: process.env.SENTRY_PROJECT || '4511495325810768',
-          organization: process.env.SENTRY_ORG || 'vibra-uh'
+          project: process.env.SENTRY_PROJECT,
+          organization: process.env.SENTRY_ORG
         }
       ]
     ],

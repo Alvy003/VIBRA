@@ -8,10 +8,11 @@ import Animated, {
   withSpring,
   FadeIn,
 } from 'react-native-reanimated';
-import { Play } from 'lucide-react-native';
+import { Play, Music2 } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import Colors from '@/constants/Colors';
 import { RADIUS, COLORS, TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
 import { resolveAssetUrl } from '@/lib/url';
 import SongOptions, { SongOptionsRef } from '@/components/SongOptions';
@@ -29,10 +30,11 @@ const ARTWORK_SIZE = 50;
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 interface QuickPickCardProps {
-  item: any;
+  item?: any;
   index: number;
-  onPress: () => void;
-  onLongPress: () => void;
+  onPress?: (item: any) => void;
+  onLongPress?: (item: any) => void;
+  isPlaceholder?: boolean;
 }
 
 const QuickPickCard = React.memo(({
@@ -40,7 +42,25 @@ const QuickPickCard = React.memo(({
   index,
   onPress,
   onLongPress,
+  isPlaceholder,
 }: QuickPickCardProps) => {
+  if (isPlaceholder) {
+    return (
+      <View style={styles.card}>
+        <View style={styles.artworkContainerPlaceholder}>
+          <Play size={20} color={Colors.placeholderGlyph} />
+        </View>
+        <View style={styles.textContainer}>
+          <View style={styles.titlePlaceholder} />
+          <View style={styles.artistPlaceholder} />
+        </View>
+      </View>
+    );
+  }
+
+  if (__DEV__ && item) {
+    console.log(`[QuickPickCard] Render (title: ${item.title})`);
+  }
   const scale = useSharedValue(1);
   const playOpacity = useSharedValue(0);
 
@@ -66,7 +86,7 @@ const QuickPickCard = React.memo(({
   };
 
   const handlePress = () => {
-    onPress();
+    onPress?.(item);
   };
 
   return (
@@ -74,8 +94,8 @@ const QuickPickCard = React.memo(({
       entering={FadeIn.delay(index * 50).duration(300)}
       onPress={handlePress}
       onLongPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        onLongPress();
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+        onLongPress?.(item);
       }}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
@@ -89,15 +109,15 @@ const QuickPickCard = React.memo(({
                 source={{ uri: resolvedUri, width: 100, height: 100 }}
                 style={styles.artwork}
                 contentFit="cover"
-                transition={150}
+                transition={300}
                 cachePolicy="memory-disk"
               />
               {/* Subtle Overlay */}
               <View style={styles.imageOverlay} />
             </>
           ) : (
-            <View style={styles.artworkFallback}>
-              <Play size={16} color="rgba(255,255,255,0.3)" fill="rgba(255,255,255,0.3)" />
+            <View style={styles.artworkContainerPlaceholder}>
+              <Play size={20} color={Colors.placeholderGlyph} />
             </View>
           )}
       </View>
@@ -117,13 +137,26 @@ const QuickPickCard = React.memo(({
 
 export const QuickPicksGrid = React.memo(() => {
   const quickPicks = useMusicStore(s => s.quickPicks);
+  const isLoading = useMusicStore(s => s.isLoading);
+  const fetchQuickPicks = useMusicStore(s => s.fetchQuickPicks);
+  const refreshVersion = useMusicStore(s => s.refreshVersion);
+
+  const isAuthReady = useMusicStore(s => s.isAuthReady);
+
+  React.useEffect(() => {
+      if (isAuthReady) {
+          fetchQuickPicks(refreshVersion > 0);
+      }
+  }, [fetchQuickPicks, refreshVersion, isAuthReady]);
+
   const featuredSongs = useMusicStore(s => s.featuredSongs);
   const playTrack = usePlayerStore(s => s.playTrack);
   const optionsRef = React.useRef<SongOptionsRef>(null);
 
   const displayPicks = useMemo(() => {
     if (quickPicks.length > 0) return quickPicks.slice(0, 6);
-    return featuredSongs.slice(0, 6);
+    if (featuredSongs.length > 0) return featuredSongs.slice(0, 6);
+    return Array(6).fill({ isPlaceholder: true });
   }, [quickPicks, featuredSongs]);
 
   const timeOfDay = useMemo(() => getTimeOfDay(), []);
@@ -151,7 +184,11 @@ export const QuickPicksGrid = React.memo(() => {
     } as any);
   }, [playTrack]);
 
-  if (quickPicks.length === 0) return null;
+  const handleLongPress = useCallback((song: any) => {
+    optionsRef.current?.open(song);
+  }, []);
+
+  if (displayPicks.length === 0) return null;
 
   const rows = [];
   for (let i = 0; i < displayPicks.length; i += 2) {
@@ -172,11 +209,12 @@ export const QuickPicksGrid = React.memo(() => {
           <View key={rowIndex} style={styles.row}>
             {Array.isArray(row) && row.map((item, colIndex) => (
               <QuickPickCard
-                key={`${item._id || item.id}-${rowIndex * 2 + colIndex}`}
-                item={item}
+                key={item.isPlaceholder ? `placeholder-${rowIndex * 2 + colIndex}` : `${item._id || item.id}-${rowIndex * 2 + colIndex}`}
+                item={item.isPlaceholder ? undefined : item}
                 index={rowIndex * 2 + colIndex}
-                onPress={() => handlePlay(item)}
-                onLongPress={() => optionsRef.current?.open(item)}
+                onPress={handlePlay}
+                onLongPress={handleLongPress}
+                isPlaceholder={item.isPlaceholder}
               />
             ))}
             {Array.isArray(row) && row.length === 1 ? <View style={styles.cardPlaceholder} /> : null}
@@ -248,6 +286,7 @@ const styles = StyleSheet.create({
     shadowColor: '#000',
     shadowOpacity: 0.25,
     shadowRadius: 4,
+    backgroundColor: Colors.placeholderBg,
   },
   artwork: {
     width: '100%',
@@ -257,13 +296,7 @@ const styles = StyleSheet.create({
   artworkFallback: {
     width: '100%',
     height: '100%',
-    backgroundColor: COLORS.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  playOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: Colors.placeholderBg,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -279,7 +312,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   artist: {
-    color: 'rgba(255,255,255,0.45)',
+    color: COLORS.textSecondary,
     fontSize: 11,
     fontWeight: '500',
   },
@@ -287,5 +320,27 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.12)',
     zIndex: 1,
+  },
+  artworkContainerPlaceholder: {
+    width: ARTWORK_SIZE,
+    height: ARTWORK_SIZE,
+    borderTopLeftRadius: RADIUS.xs,
+    borderBottomLeftRadius: RADIUS.xs,
+    backgroundColor: Colors.placeholderBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  titlePlaceholder: {
+    width: '70%',
+    height: 11,
+    backgroundColor: Colors.placeholderText,
+    borderRadius: 4,
+    marginBottom: 6,
+  },
+  artistPlaceholder: {
+    width: '40%',
+    height: 9,
+    backgroundColor: Colors.placeholderSubtitleText,
+    borderRadius: 3,
   },
 });

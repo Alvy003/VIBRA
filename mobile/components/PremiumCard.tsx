@@ -2,7 +2,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Dimensions } from 'react-native';
 import { Image } from 'expo-image';
-import { Disc } from 'lucide-react-native';
+import { Music2, } from 'lucide-react-native';
 import { AnimatedCard } from './AnimatedCard';
 import { resolveAssetUrl } from '@/lib/url';
 import Colors from '@/constants/Colors';
@@ -11,13 +11,15 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.38;
 
 interface PremiumCardProps {
-  title: string;
+  title?: string;
   subtitle?: string;
   imageUrl?: string;
-  onPress: () => void;
+  onPress?: () => void;
   onLongPress?: () => void;
   fallbackIcon?: React.ComponentType<any>;
   index?: number;
+  width?: number;
+  isPlaceholder?: boolean;
 }
 
 export const PremiumCard: React.FC<PremiumCardProps> = React.memo(({
@@ -26,22 +28,37 @@ export const PremiumCard: React.FC<PremiumCardProps> = React.memo(({
   imageUrl,
   onPress,
   onLongPress,
-  fallbackIcon: FallbackIcon = Disc,
+  fallbackIcon: FallbackIcon = Music2,
+  width,
+  isPlaceholder,
 }) => {
-  const cardW = CARD_WIDTH;
+  const cardW = width || CARD_WIDTH;
+
+  if (isPlaceholder) {
+    return (
+      <View style={{ width: cardW, marginRight: 14 }}>
+        <View style={{ width: cardW, height: cardW, borderRadius: 4, overflow: 'hidden', backgroundColor: Colors.placeholderBg, justifyContent: 'center', alignItems: 'center' }}>
+          <Music2 size={39} color={Colors.placeholderGlyph} />
+        </View>
+        <View style={styles.cardInfo}>
+          <View style={styles.cardTitlePlaceholder} />
+          <View style={styles.cardSubtitlePlaceholder} />
+        </View>
+      </View>
+    );
+  }
 
   const resolvedUri = useMemo(() => resolveAssetUrl(imageUrl), [imageUrl]);
 
   return (
     <AnimatedCard
-      onPress={onPress}
+      onPress={onPress!}
       onLongPress={onLongPress}
       scaleDown={0.97}
-      enableHaptic
-      hapticStyle="light"
+      enableHaptic={false}
       style={{ width: cardW, marginRight: 14 }}
     >
-      <View style={{ width: cardW, height: cardW, borderRadius: 4, overflow: 'hidden' }}>
+      <View style={{ width: cardW, height: cardW, borderRadius: 4, overflow: 'hidden', backgroundColor: Colors.placeholderBg }}>
         {imageUrl ? (
           <>
             <Image
@@ -50,14 +67,15 @@ export const PremiumCard: React.FC<PremiumCardProps> = React.memo(({
               style={styles.cardImage}
               cachePolicy="memory-disk"
               recyclingKey={imageUrl}
-              transition={200}
+              transition={120}
+              placeholder={Colors.placeholderBg}
             />
             {/* Subtle Overlay to make it feel "baked in" */}
             <View style={styles.imageOverlay} />
           </>
         ) : (
           <View style={styles.fallbackContainer}>
-            <FallbackIcon size={36} color={Colors.textMuted} />
+            <FallbackIcon size={50} color={Colors.placeholderGlyph} />
           </View>
         )}
       </View>
@@ -76,7 +94,8 @@ export const PremiumCard: React.FC<PremiumCardProps> = React.memo(({
 }, (prev, next) => (
   prev.title === next.title &&
   prev.imageUrl === next.imageUrl &&
-  prev.subtitle === next.subtitle
+  prev.subtitle === next.subtitle &&
+  prev.isPlaceholder === next.isPlaceholder
 ));
 
 const styles = StyleSheet.create({
@@ -89,7 +108,7 @@ const styles = StyleSheet.create({
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surfaceLighter,
+    backgroundColor: Colors.placeholderBg,
     borderRadius: 4,
   },
   cardInfo: {
@@ -102,7 +121,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cardSubtitle: {
-    color: Colors.whiteAlpha40,
+    color: Colors.textSecondary,
     fontSize: 11.5,
     marginTop: 2,
     fontWeight: '400',
@@ -111,5 +130,19 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: Colors.blackAlpha12,
     zIndex: 1,
+  },
+  cardTitlePlaceholder: {
+    width: '75%',
+    height: 12,
+    backgroundColor: Colors.placeholderText,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  cardSubtitlePlaceholder: {
+    width: '50%',
+    height: 10,
+    backgroundColor: Colors.placeholderSubtitleText,
+    borderRadius: 3,
+    marginTop: 6,
   },
 });

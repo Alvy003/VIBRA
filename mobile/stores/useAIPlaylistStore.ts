@@ -1,7 +1,6 @@
-import axios from 'axios';
+import { axiosInstance, setAuthToken } from '@/lib/axios';
 import * as Haptics from 'expo-haptics';
 import { create } from 'zustand';
-import { axiosInstance, setAuthToken } from '@/lib/axios';
 
 interface AIPlaylistTrack {
   externalId: string;

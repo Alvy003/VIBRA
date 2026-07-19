@@ -1,14 +1,14 @@
 // components/BottomSheet.tsx
-import React, { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useMemo } from 'react';
-import { StyleSheet, View, BackHandler } from 'react-native';
 import Colors from '@/constants/Colors';
-import { 
-  BottomSheetModal, 
+import {
   BottomSheetBackdrop,
   BottomSheetBackdropProps,
   BottomSheetFooter,
   BottomSheetFooterProps,
+  BottomSheetModal,
 } from '@gorhom/bottom-sheet';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import { BackHandler, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export interface BottomSheetProps {

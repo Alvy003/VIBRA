@@ -1,9 +1,8 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { Sparkles, Music, Plus, Link2, Youtube, Music2 } from 'lucide-react-native';
-import BottomSheet from '../BottomSheet';
-import { COLORS, RADIUS } from '@/constants/design';
 import * as Haptics from 'expo-haptics';
+import { Link2, Music, Sparkles } from 'lucide-react-native';
+import React from 'react';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import BottomSheet from '../BottomSheet';
 
 interface LibraryPlusMenuProps {
     isOpen: boolean;

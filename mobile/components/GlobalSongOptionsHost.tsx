@@ -3,29 +3,27 @@
 // Mounts ONCE at root layout level. All list rows trigger openSongOptions(track)
 // which sets state here. This eliminates per-row BottomSheet instantiation.
 //
-import React, { useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Image, StyleSheet, Alert, Share } from 'react-native';
-import {
-    Heart,
-    Share2,
-    Music,
-    User,
-    CircleArrowDown,
-    Loader2,
-    CirclePlus,
-    Mic2,
-} from 'lucide-react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import Colors from '@/constants/Colors';
+import { useDownloadStore } from '@/stores/useDownloadStore';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
-import { usePlaylistStore } from '@/stores/usePlaylistStore';
-import { useDownloadStore } from '@/stores/useDownloadStore';
 import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
-import { SharpAddQueue, QueueIcon } from './SharpIcons';
-import { DownloadedIcon } from './DownloadedIcon';
+import { LinearGradient } from 'expo-linear-gradient';
+import {
+    CirclePlus,
+    Heart,
+    Mic2,
+    Music,
+    Share2,
+    User,
+} from 'lucide-react-native';
+import React, { useCallback, useRef } from 'react';
+import { Image, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import AddTrackBottomSheet, { AddTrackBottomSheetRef } from './AddTrackBottomSheet';
 import BottomSheet from './BottomSheet';
-import Colors from '@/constants/Colors';
+import { DownloadStateIcon } from './DownloadedIcon';
+import ConfirmationModal from './modals/ConfirmationModal';
+import { QueueIcon, SharpAddQueue } from './SharpIcons';
 
 // Fine-grained selectors — this component only re-renders when the modal
 // visibility or the selected track changes, not on every player state update.
@@ -37,12 +35,15 @@ export const GlobalSongOptionsHost = React.memo(() => {
     const isVisible = useIsSongOptionsVisible();
     const song = useSelectedSongForOptions();
     const closeSongOptions = useCloseSongOptions();
+    const isPlayerExpanded = usePlayerUIStore(s => s.isPlayerExpanded);
 
     const addTrackSheetRef = useRef<AddTrackBottomSheetRef>(null);
+    const [isRemoveConfirmVisible, setIsRemoveConfirmVisible] = React.useState(false);
 
     // Actions — accessed via getState() inside callbacks so they never cause
     // this component to re-render when the player store changes.
     const handleClose = useCallback(() => {
+        setIsRemoveConfirmVisible(false);
         closeSongOptions();
     }, [closeSongOptions]);
 
@@ -90,26 +91,22 @@ export const GlobalSongOptionsHost = React.memo(() => {
     const handleDownload = useCallback(async () => {
         if (!song) return;
         const songId = song.id || song.externalId || song._id;
-        const { isDownloaded, removeDownload, downloadTrack } = useDownloadStore.getState();
+        const { isDownloaded, downloadTrack } = useDownloadStore.getState();
         const downloaded = isDownloaded(songId);
         if (downloaded) {
-            Alert.alert(
-                'Remove Download',
-                'Are you sure you want to delete this track from your device?',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Remove', style: 'destructive', onPress: () => {
-                            removeDownload(songId);
-                            handleClose();
-                        }
-                    },
-                ]
-            );
+            setIsRemoveConfirmVisible(true);
         } else {
             handleClose();
             await downloadTrack(song);
         }
+    }, [song, handleClose]);
+
+    const confirmRemoveDownload = useCallback(() => {
+        setIsRemoveConfirmVisible(false);
+        if (!song) return;
+        const songId = song.id || song.externalId || song._id;
+        useDownloadStore.getState().removeDownload(songId);
+        handleClose();
     }, [song, handleClose]);
 
     const handleToggleLike = useCallback(() => {
@@ -168,13 +165,12 @@ export const GlobalSongOptionsHost = React.memo(() => {
             size: 21,
         },
         {
-            icon: isDownloaded ? DownloadedIcon : (isDownloading ? Loader2 : CircleArrowDown),
+            icon: DownloadStateIcon,
             label: isDownloaded ? 'Downloaded' : (isDownloading ? 'Downloading...' : 'Download'),
             onPress: handleDownload,
             active: isDownloaded,
             loading: isDownloading,
-            color: isDownloaded ? Colors.accent : 'rgba(209, 205, 205, 0.79)',
-            size: isDownloaded ? 20 : 21,
+            special: 'download' as const,
         },
         {
             icon: SharpAddQueue,
@@ -188,18 +184,20 @@ export const GlobalSongOptionsHost = React.memo(() => {
             onPress: handleGoToQueue,
             size: 20,
         },
-        {
-            icon: Mic2,
-            label: 'Lyrics',
-            onPress: handleShowLyrics,
-            size: 21,
-        },
-        {
-            icon: User,
-            label: 'Go to artist',
-            onPress: handleGoToArtist,
-            size: 21,
-        },
+        ...(isPlayerExpanded ? [
+            {
+                icon: Mic2,
+                label: 'Lyrics',
+                onPress: handleShowLyrics,
+                size: 21,
+            },
+            {
+                icon: User,
+                label: 'Go to artist',
+                onPress: handleGoToArtist,
+                size: 21,
+            }
+        ] : []),
     ];
 
     const Header = (
@@ -228,7 +226,7 @@ export const GlobalSongOptionsHost = React.memo(() => {
             <BottomSheet
                 isOpen={isVisible}
                 onClose={handleClose}
-                snapPoints={['60%']}
+                snapPoints={[isPlayerExpanded ? '65%' : '52%']}
                 header={Header}
             >
                 <View style={styles.menuContainer}>
@@ -253,17 +251,24 @@ export const GlobalSongOptionsHost = React.memo(() => {
                                             fill={item.active ? 'white' : 'transparent'}
                                         />
                                     </LinearGradient>
+                                ) : item.special === 'download' ? (
+                                    <DownloadStateIcon
+                                        variant="small"
+                                        status={isDownloaded ? 'downloaded' : (isDownloading ? 'downloading' : 'idle')}
+                                        color="rgba(209, 205, 205, 0.79)"
+                                        accentColor={Colors.accent}
+                                    />
                                 ) : (
                                     <item.icon
                                         size={item.size || 22}
-                                        color={item.color || 'rgba(209, 205, 205, 0.79)'}
+                                        color={(item as any).color || 'rgba(209, 205, 205, 0.79)'}
                                         strokeWidth={2.2}
                                     />
                                 )}
                             </View>
                             <Text style={[
                                 styles.menuLabel,
-                                item.active && { color: item.special === 'like' ? '#fff' : Colors.accent }
+                                item.active && item.special !== 'download' && { color: item.special === 'like' ? '#fff' : Colors.accent }
                             ]}>
                                 {item.label}
                             </Text>
@@ -273,6 +278,16 @@ export const GlobalSongOptionsHost = React.memo(() => {
             </BottomSheet>
 
             <AddTrackBottomSheet ref={addTrackSheetRef} />
+
+            <ConfirmationModal
+                visible={isRemoveConfirmVisible}
+                title="Remove Download"
+                message="Remove this download from your device?"
+                confirmLabel="Remove"
+                variant="danger"
+                onConfirm={confirmRemoveDownload}
+                onCancel={() => setIsRemoveConfirmVisible(false)}
+            />
         </>
     );
 });

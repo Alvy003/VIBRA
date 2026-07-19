@@ -1,6 +1,7 @@
 // components/QueueBottomSheet.tsx
 import React, { useMemo, useRef, useCallback, memo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image, LayoutAnimation } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, LayoutAnimation } from 'react-native';
+import { Image } from 'expo-image';
 import { Music, Trash2, Shuffle } from 'lucide-react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import DraggableFlatList, { ScaleDecorator, RenderItemParams } from 'react-native-draggable-flatlist';
@@ -14,11 +15,6 @@ import { Svg, Line } from 'react-native-svg';
 import BottomSheet from './BottomSheet';
 import Colors from '@/constants/Colors';
 
-interface QueueBottomSheetProps {
-    visible: boolean;
-    onClose: () => void;
-}
-
 const DragHandle = memo(() => (
     <Svg width="16" height="16" viewBox="0 0 16 16">
         <Line x1="2" y1="4" x2="14" y2="4" stroke={Colors.textSecondary} strokeWidth="1.2" strokeLinecap="round" />
@@ -27,17 +23,45 @@ const DragHandle = memo(() => (
     </Svg>
 ));
 
-const TrackItem = memo(({ item, actualIndex, isCurrent, drag, onRemove, onPlayNext }: any) => {
+const TrackItem = memo(({ item, getIndex, drag, onRemove, onPlayNext }: any) => {
     const swipeableRef = useRef<Swipeable>(null);
+
+    const handlePress = useCallback(async () => {
+        const index = getIndex();
+        const actualIndex = usePlayerStore.getState().currentIndex + 1 + (index || 0);
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        await TrackPlayer.skip(actualIndex);
+        await TrackPlayer.play();
+    }, [getIndex]);
+
+    const handleSwipeOpen = useCallback((direction: string) => {
+        const index = getIndex();
+        const actualIndex = usePlayerStore.getState().currentIndex + 1 + (index || 0);
+        if (direction === 'right') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            swipeableRef.current?.close();
+            // Defer actual removal to let swipe closing animation finish cleanly
+            setTimeout(() => {
+                onRemove(actualIndex);
+            }, 200);
+        } else if (direction === 'left') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            swipeableRef.current?.close();
+            // Defer non-critical store mutation/TrackPlayer sync to prevent UI stutter during swipe close
+            setTimeout(() => {
+                onPlayNext(item);
+            }, 200);
+        }
+    }, [getIndex, item, onRemove, onPlayNext]);
 
     return (
         <ScaleDecorator activeScale={1.02}>
             <Swipeable
                 ref={swipeableRef}
-                activeOffsetX={[-30, 30]}
-                failOffsetY={[-10, 10]}
-                rightThreshold={150}
-                leftThreshold={150}
+                activeOffsetX={[-10, 10]}
+                failOffsetY={[-5, 5]}
+                rightThreshold={80}
+                leftThreshold={80}
                 overshootRight={false}
                 overshootLeft={false}
                 friction={1}
@@ -51,24 +75,12 @@ const TrackItem = memo(({ item, actualIndex, isCurrent, drag, onRemove, onPlayNe
                         <SharpAddQueue size={24} color={Colors.background} />
                     </View>
                 )}
-                onSwipeableOpen={(direction) => {
-                    if (direction === 'right') {
-                        onRemove(actualIndex);
-                    } else if (direction === 'left') {
-                        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                        swipeableRef.current?.close();
-                        onPlayNext(item);
-                    }
-                }}
+                onSwipeableOpen={handleSwipeOpen}
             >
                 <View style={styles.trackItem}>
                     <TouchableOpacity
                         style={styles.trackContent}
-                        onPress={async () => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                            await TrackPlayer.skip(actualIndex);
-                            await TrackPlayer.play();
-                        }}
+                        onPress={handlePress}
                         activeOpacity={0.6}
                     >
                         <View style={styles.artworkContainer}>
@@ -76,6 +88,8 @@ const TrackItem = memo(({ item, actualIndex, isCurrent, drag, onRemove, onPlayNe
                                 <Image
                                     source={{ uri: resolveAssetUrl(item.artwork || item.imageUrl) }}
                                     style={styles.artwork}
+                                    transition={150}
+                                    contentFit="cover"
                                 />
                             ) : (
                                 <View style={styles.artworkPlaceholder}>
@@ -84,19 +98,19 @@ const TrackItem = memo(({ item, actualIndex, isCurrent, drag, onRemove, onPlayNe
                             )}
                         </View>
                         <View style={styles.trackInfo}>
-                            <Text style={[styles.trackTitle, isCurrent && styles.activeTrackTitle]} numberOfLines={1}>
+                            <Text style={styles.trackTitle} numberOfLines={1}>
                                 {item.title}
                             </Text>
                             <Text style={styles.trackArtist} numberOfLines={1}>{item.artist}</Text>
                         </View>
                     </TouchableOpacity>
                     <TouchableOpacity
-                        onLongPress={() => {
-                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                        onPressIn={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                             drag();
                         }}
-                        delayLongPress={100}
                         style={styles.dragHandle}
+                        activeOpacity={0.8}
                     >
                         <DragHandle />
                     </TouchableOpacity>
@@ -106,18 +120,22 @@ const TrackItem = memo(({ item, actualIndex, isCurrent, drag, onRemove, onPlayNe
     );
 });
 
-export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetProps) {
-    const {
-        queue,
-        currentIndex,
-        currentTrack,
-        removeFromQueue,
-        setPlayNext,
-        currentContext,
-        togglePlay,
-        isPlaying,
-        shuffleMode
-    } = usePlayerStore();
+import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
+
+export default function QueueBottomSheet() {
+    const visible = usePlayerUIStore(state => state.isQueueVisible);
+    const setQueueVisible = usePlayerUIStore(state => state.setQueueVisible);
+    const onClose = useCallback(() => setQueueVisible(false), [setQueueVisible]);
+
+    const queue = usePlayerStore(state => state.queue);
+    const currentIndex = usePlayerStore(state => state.currentIndex);
+    const currentTrack = usePlayerStore(state => state.currentTrack);
+    const removeFromQueue = usePlayerStore(state => state.removeFromQueue);
+    const setPlayNext = usePlayerStore(state => state.setPlayNext);
+    const currentContext = usePlayerStore(state => state.currentContext);
+    const togglePlay = usePlayerStore(state => state.togglePlay);
+    const isPlaying = usePlayerStore(state => state.isPlaying);
+    const shuffleMode = usePlayerStore(state => state.shuffleMode);
     
     const insets = useSafeAreaInsets();
     const bottomSheetRef = useRef<any>(null);
@@ -131,7 +149,7 @@ export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetP
     // Local optimistic state for instant UI feedback
     const [localTracks, setLocalTracks] = React.useState(storeUpcomingTracks);
 
-    // Sync local state when store state changes (if we're not enthusiastically animating)
+    // Sync local state when store state changes
     React.useEffect(() => {
         setLocalTracks(storeUpcomingTracks);
     }, [storeUpcomingTracks]);
@@ -141,7 +159,8 @@ export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetP
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
         
         // Optimistic UI update
-        const storeIndexOffset = currentIndex + 1;
+        const state = usePlayerStore.getState();
+        const storeIndexOffset = state.currentIndex + 1;
         const localIndex = index - storeIndexOffset;
         if (localIndex >= 0) {
             setLocalTracks(prev => prev.filter((_, i) => i !== localIndex));
@@ -149,26 +168,23 @@ export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetP
 
         // Defer heavy store update so UI remains instant
         setTimeout(() => {
-            removeFromQueue(index);
+            state.removeFromQueue(index);
         }, 50);
-    }, [removeFromQueue, currentIndex]);
+    }, []);
 
-    const renderItem = useCallback(({ item, getIndex, drag, isActive }: RenderItemParams<any>) => {
-        const index = getIndex();
-        const actualIndex = currentIndex + 1 + (index || 0);
+    const renderItem = useCallback(({ item, getIndex, drag }: RenderItemParams<any>) => {
         return (
             <TrackItem
                 item={item}
-                actualIndex={actualIndex}
-                isCurrent={false}
+                getIndex={getIndex}
                 drag={drag}
                 onRemove={handleRemoveTrack}
                 onPlayNext={setPlayNext}
             />
         );
-    }, [currentIndex, handleRemoveTrack, setPlayNext]);
+    }, [handleRemoveTrack, setPlayNext]);
 
-    const Header = (
+    const Header = useMemo(() => (
         <View style={styles.headerContainer}>
           <View style={{paddingBottom: 10}}>
             <View style={styles.headerTop}>
@@ -191,6 +207,8 @@ export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetP
                                     <Image
                                         source={{ uri: resolveAssetUrl(currentTrack.artwork || (currentTrack as any).imageUrl) }}
                                         style={styles.artwork}
+                                        transition={150}
+                                        contentFit="cover"
                                     />
                                 ) : (
                                     <View style={styles.artworkPlaceholder}>
@@ -229,7 +247,7 @@ export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetP
                 </View>
             )}
         </View>
-    );
+    ), [currentTrack, currentContext, isPlaying, shuffleMode, togglePlay]);
 
     return (
         <BottomSheet
@@ -254,7 +272,11 @@ export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetP
 
                     const absoluteFrom = currentIndex + 1 + from;
                     const absoluteTo = currentIndex + 1 + to;
-                    usePlayerStore.getState().reorderQueue(absoluteFrom, absoluteTo);
+
+                    // Defer heavy store update so UI drop animation completes instantly
+                    setTimeout(() => {
+                        usePlayerStore.getState().reorderQueue(absoluteFrom, absoluteTo);
+                    }, 100);
                     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
                 contentContainerStyle={[styles.listContent, { paddingBottom: insets.bottom + 100 }]}
@@ -266,6 +288,13 @@ export default function QueueBottomSheet({ visible, onClose }: QueueBottomSheetP
                 activationDistance={isExpanded ? 10 : 999}
                 removeClippedSubviews={true}
                 initialNumToRender={10}
+                maxToRenderPerBatch={10}
+                windowSize={5}
+                getItemLayout={(data, index) => ({
+                    length: 68,
+                    offset: 68 * index,
+                    index,
+                })}
             />
         </BottomSheet>
     );

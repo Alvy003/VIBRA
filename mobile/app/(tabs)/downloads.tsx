@@ -1,31 +1,31 @@
-import React, { useMemo, useCallback, useRef } from 'react';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import { DownloadStateIcon } from '@/components/DownloadedIcon';
+import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
+import { TrackListItem } from '@/components/TrackListItem';
+import Colors from '@/constants/Colors';
+import { DownloadedSong, useDownloadStore } from '@/stores/useDownloadStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { FlashList as OriginalFlashList } from '@shopify/flash-list';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import { ArrowLeft } from 'lucide-react-native';
+import React, { useCallback, useMemo, useRef } from 'react';
 import {
-    View,
+    Dimensions,
+    StatusBar,
+    StyleSheet,
     Text,
     TouchableOpacity,
-    StyleSheet,
-    StatusBar,
-    Dimensions,
+    View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Download } from 'lucide-react-native';
-import { useDownloadStore, DownloadedSong } from '@/stores/useDownloadStore';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { TrackListItem } from '@/components/TrackListItem';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    useAnimatedScrollHandler,
-    interpolate,
     Extrapolate,
+    interpolate,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue,
 } from 'react-native-reanimated';
-import { FlashList as OriginalFlashList } from '@shopify/flash-list';
-import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
-import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
-import Colors from '@/constants/Colors';
-import { DownloadedIcon } from '@/components/DownloadedIcon';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ACCENT_COLOR = Colors.accent;
@@ -78,7 +78,7 @@ const DownloadsHeader = React.memo<DownloadsHeaderProps>(({
         <View style={styles.actionBar}>
             {/* Left Controls: Just a branded icon */}
             <View style={styles.leftControls}>
-                <DownloadedIcon size={22} />
+                <DownloadStateIcon variant="medium" status="downloaded" />
             </View>
 
             {/* Right Controls: Shuffle and Play */}
@@ -200,11 +200,16 @@ export default function DownloadsScreen() {
 
             {/* Sticky Header */}
             <Animated.View style={[styles.stickyHeader, stickyHeaderStyle]}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#1e293b' }]} />
                 {/* Branded Gradient Overlay for Sticky Header */}
                 <LinearGradient
-                    colors={['#1e293b', Colors.background]}
-                    style={StyleSheet.absoluteFill}                    
+                    colors={[
+                        'rgba(0, 0, 0, 0.47)', // Top of sticky bar
+                        'rgba(0, 0, 0, 0.60)', // Middle dimming stop
+                        'rgba(0, 0, 0, 0.70)', // Bottom dimming stop
+                    ]}
+                    locations={[0, 0.5, 1]}
+                    style={StyleSheet.absoluteFill}
                 />
                 <SafeAreaView edges={['top']} style={styles.stickyHeaderContent}>
                     <View style={{ width: 40 }} />
@@ -232,6 +237,8 @@ export default function DownloadsScreen() {
                 keyExtractor={(item: any) => item.id}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
+                overScrollMode="never"
+                bounces={false}
                 renderItem={({ item, index }: any) => (
                     <TrackListItem
                         track={item}
@@ -254,8 +261,8 @@ export default function DownloadsScreen() {
                 contentContainerStyle={{ paddingBottom: 160 }}
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
-                         <Download size={48} color={Colors.whiteAlpha20} />
-                         <Text style={styles.emptyText}>No downloaded songs yet</Text>
+                         <DownloadStateIcon variant="large" status="idle" color={Colors.textMuted} />
+                        <Text style={styles.emptyText}>No downloaded songs yet</Text>
                     </View>
                 }
             />
@@ -399,9 +406,9 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     emptyText: {
-        color: Colors.textSecondary,
-        marginTop: 16,
-        fontSize: 15,
+        color: Colors.textMuted,
+        marginTop: 12,
+        fontSize: 14,
         fontWeight: '500',
     }
 });

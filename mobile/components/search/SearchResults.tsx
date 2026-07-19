@@ -1,6 +1,6 @@
 // components/search/SearchResults.tsx
 import React, { useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSearchStore } from '@/stores/useSearchStore';
 import { TopResultCard } from './TopResultCard';
@@ -15,14 +15,14 @@ interface SearchResultsProps {
 }
 
 export const SearchResults = React.memo(({ visible, activeFilter }: SearchResultsProps) => {
-  const suggestions = useSearchStore((s) => s.suggestions);
   const results = useSearchStore((s) => s.results);
-  const isSuggesting = useSearchStore((s) => s.isSuggesting);
   const isSearching = useSearchStore((s) => s.isSearching);
   const query = useSearchStore((s) => s.query);
+  const searchError = useSearchStore((s) => s.searchError);
+  const fetchResults = useSearchStore((s) => s.fetchResults);
 
-  const displayData = results || suggestions;
-  const isLoading = isSearching || (isSuggesting && !displayData);
+  const displayData = results;
+  const isLoading = isSearching;
 
   const topResult = useMemo(() => {
     if (!displayData) return null;
@@ -92,6 +92,14 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
         s.videoId !== topResult.data.videoId
       );
     }
+    // Deduplicate songs by title + artist key before sorting/slicing
+    const seen = new Set<string>();
+    filtered = filtered.filter((s: any) => {
+      const key = `${s.title?.toLowerCase().trim()}::${s.artist?.toLowerCase().trim()}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
     return sortByStartsWith(filtered, query).slice(0, 4);
   }, [displayData, topResult, query]);
 
@@ -140,13 +148,36 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
 
   if (!visible) return null;
 
-  if (isLoading && !displayData) {
+  if (searchError && query.length > 0) {
     return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Searching...</Text>
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorTitle}>
+          {searchError === 'network_error' 
+            ? "Network Connection Error" 
+            : "Something went wrong"}
+        </Text>
+        <Text style={styles.errorHint}>
+          {searchError === 'network_error'
+            ? "Please check your internet connection and try again."
+            : "We couldn't complete your search. Please try again."}
+        </Text>
+        <TouchableOpacity 
+          style={styles.retryButton}
+          onPress={() => fetchResults(query)}
+        >
+          <Text style={styles.retryButtonText}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
+
+  // if (isLoading && !displayData) {
+  //   return (
+  //     <View style={styles.loadingContainer}>
+  //       <Text style={styles.loadingText}>Searching...</Text>
+  //     </View>
+  //   );
+  // }
 
   if (!hasResults && query.length > 0) {
     return (
@@ -166,6 +197,8 @@ export const SearchResults = React.memo(({ visible, activeFilter }: SearchResult
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        overScrollMode="never"
+        bounces={false}
       >
         {/* Top Result */}
         {topResult && activeFilter === 'all' && (
@@ -286,6 +319,39 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    paddingBottom: 50,
+    backgroundColor: '#09090b',
+  },
+  errorTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  errorHint: {
+    color: '#a1a1aa',
+    fontSize: 14,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  retryButton: {
+    backgroundColor: '#8b5cf6', // Premium Vibra Purple
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   footer: {
     height: 140,

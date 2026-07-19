@@ -3,12 +3,20 @@ import Constants from "expo-constants";
 import * as Sentry from "@sentry/react-native";
 
 let authToken: string | null = null;
+let sessionVersion = 0;
 
 export const setAuthToken = (token: string | null) => {
     authToken = token;
 };
 
 export const getAuthToken = () => authToken;
+
+export const incrementSessionVersion = () => {
+    sessionVersion++;
+    console.log(`[Axios] Session version incremented to: ${sessionVersion}`);
+};
+
+export const getSessionVersion = () => sessionVersion;
 
 const API_URL_FROM_CONFIG = Constants.expoConfig?.extra?.apiUrl;
 const API_URL_FROM_ENV = process.env.EXPO_PUBLIC_API_URL;
@@ -30,6 +38,8 @@ export const axiosInstance = axios.create({
 // Add request interceptor to inject token
 axiosInstance.interceptors.request.use(
     (config) => {
+        // Attach session version to config
+        (config as any).sessionVersion = sessionVersion;
         if (authToken) {
             config.headers.Authorization = `Bearer ${authToken}`;
         } else {
@@ -44,8 +54,39 @@ axiosInstance.interceptors.request.use(
 
 // Add response interceptor for debugging 401s and capturing API errors in Sentry
 axiosInstance.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // Discard stale responses if session version changed
+        const reqSessionVersion = (response.config as any)?.sessionVersion;
+        if (reqSessionVersion !== undefined && reqSessionVersion !== sessionVersion) {
+            console.log(`[Axios] Discarding response from stale session (req: ${reqSessionVersion}, current: ${sessionVersion})`);
+            return Promise.reject(new Error("STALE_SESSION"));
+        }
+
+        // Reset player store backend failures on any successful backend request
+        try {
+            const { usePlayerStore } = require('../stores/usePlayerStore');
+            const state = usePlayerStore.getState();
+            if (state.consecutiveBackendFailures > 0) {
+                state.resetBackendFailures();
+            }
+        } catch (e) {
+            // ignore
+        }
+        return response;
+    },
     (error) => {
+        // Discard stale errors if session version changed
+        const reqSessionVersion = (error.config as any)?.sessionVersion;
+        if (reqSessionVersion !== undefined && reqSessionVersion !== sessionVersion) {
+            console.log(`[Axios] Discarding error from stale session (req: ${reqSessionVersion}, current: ${sessionVersion})`);
+            return Promise.reject(new Error("STALE_SESSION"));
+        }
+
+        // Suppress logs and sentry if it is already a stale session error
+        if (error?.message === "STALE_SESSION") {
+            return Promise.reject(error);
+        }
+
         // Ignore aborted/cancelled requests
         if (axios.isCancel(error)) {
             return Promise.reject(error);
@@ -54,6 +95,16 @@ axiosInstance.interceptors.response.use(
         const status = error.response?.status;
         const configUrl = error.config?.url || '';
         const method = error.config?.method?.toUpperCase() || 'UNKNOWN';
+
+        // Increment backend failures on failed backend request
+        try {
+            if (status !== 401) {
+                const { usePlayerStore } = require('../stores/usePlayerStore');
+                usePlayerStore.getState().handleBackendFailure();
+            }
+        } catch (e) {
+            // ignore
+        }
 
         // Expected 401 on startup when the user is not yet logged in/synced
         const isExpected401 = status === 401 && !authToken;

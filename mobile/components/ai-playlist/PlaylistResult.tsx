@@ -1,31 +1,24 @@
 // components/ai-playlist/PlaylistResult.tsx
-import React, { useCallback, useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Dimensions,
-} from 'react-native';
-import { Image } from 'expo-image';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  RotateCcw,
-  CirclePlus,
-  Check,
-  CircleMinus,
-} from 'lucide-react-native';
-import BottomSheet from '../BottomSheet';
-import { SharpPlay } from '@/components/SharpIcons';
-import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { TrackListItem } from '@/components/TrackListItem';
-import * as Haptics from 'expo-haptics';
-import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
-import Colors from '@/constants/Colors';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+import * as Haptics from 'expo-haptics';
+import {
+  CircleMinus
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import {
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import BottomSheet from '../BottomSheet';
+import SaveStateIcon from '../SaveStateIcon';
 
 interface PlaylistResultProps {
   visible: boolean;
@@ -77,7 +70,7 @@ export const PlaylistResult = React.memo(({
       duration: track.duration,
       source: track.source,
     }));
-    if (tracks.length > 0) initializeQueue(tracks, 0);
+    if (tracks.length > 0) initializeQueue(tracks, 0, { type: 'discovery', id: playlist._id || 'ai-playlist', title: playlist.name || 'AI Playlist' });
   }, [localTracks, playlist.coverArt, initializeQueue]);
 
   const handleRemoveTrack = useCallback((trackId: string) => {
@@ -122,7 +115,7 @@ export const PlaylistResult = React.memo(({
             duration: t.duration,
             source: t.source,
           }));
-          initializeQueue(tracks, index);
+          initializeQueue(tracks, index, { type: 'discovery', id: playlist._id || 'ai-playlist', title: playlist.name || 'AI Playlist' });
         }}
         playlistImageUrl={playlist.coverArt}
       />
@@ -157,13 +150,12 @@ export const PlaylistResult = React.memo(({
             </TouchableOpacity> */}
 
             <TouchableOpacity onPress={handleToggleSave} activeOpacity={0.7} style={styles.actionCircle}>
-              {isSaved ? (
-                <View style={[styles.savedBadge, { backgroundColor: Colors.accent }]}>
-                  <Check size={14} color="black" strokeWidth={4} />
-                </View>
-              ) : (
-                <CirclePlus size={24} color="#b3b3b3" />
-              )}
+              <SaveStateIcon
+                variant="medium"
+                isSaved={isSaved}
+                checkmarkColor="black"
+                outlineColor="#b3b3b3"
+              />
             </TouchableOpacity>
 {/* 
             <TouchableOpacity

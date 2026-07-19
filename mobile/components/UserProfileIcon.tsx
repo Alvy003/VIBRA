@@ -35,10 +35,10 @@ export const UserProfileIcon = React.memo(({ size = 34, style }: UserProfileIcon
     >
       {user?.imageUrl ? (
         <Image
-          source={{ uri: user.imageUrl }}
+          source={{ uri: user.imageUrl, width: size * 2, height: size * 2 }}
           style={styles.image}
           cachePolicy="memory-disk"
-          transition={200}
+          transition={300}
         />
       ) : (
         <View style={[styles.placeholder, { borderRadius }]}>

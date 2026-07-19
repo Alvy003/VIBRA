@@ -1,24 +1,23 @@
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import { Image } from 'expo-image';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import { DownloadedIcon } from '@/components/DownloadedIcon';
+import { UserProfileIcon } from '@/components/UserProfileIcon';
+import { CreatePlaylistModal } from '@/components/library/CreatePlaylistModal';
+import { LibraryPlusMenu } from '@/components/library/LibraryPlusMenu';
+import Colors from '@/constants/Colors';
+import { resolveAssetUrl } from '@/lib/url';
+import { useDownloadStore } from '@/stores/useDownloadStore';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { useUser } from '@clerk/clerk-expo';
-import { Plus, List as ListIcon, Search, Download, Music, Heart, LayoutGrid, ArrowUpDown, ArrowDown, User as UserIcon, X } from 'lucide-react-native';
-import { resolveAssetUrl } from '@/lib/url';
-import { useRouter } from 'expo-router';
-import { useDownloadStore } from '@/stores/useDownloadStore';
-import { RefreshControl } from 'react-native';
-import { CreatePlaylistModal } from '@/components/library/CreatePlaylistModal';
-import { DownloadedIcon } from '@/components/DownloadedIcon';
-import Animated, { FadeIn, Layout } from 'react-native-reanimated';
-import { UserProfileIcon } from '@/components/UserProfileIcon';
-import { LibraryPlusMenu } from '@/components/library/LibraryPlusMenu';
-import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import Colors from '@/constants/Colors';
+import { useRouter } from 'expo-router';
+import { ArrowDown, ArrowUpDown, Heart, LayoutGrid, List as ListIcon, Music, Plus, Search, User as UserIcon, X } from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Dimensions, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeIn, Layout } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width } = Dimensions.get('window');
 const COLUMN_WIDTH = (width - 40) / 2;
@@ -82,11 +81,12 @@ export default function LibraryScreen() {
                     onPress: () => router.push('/(tabs)/downloads?from=library' as any)
                 });
             } else {
+                const jiosaavnLikedCount = likedSongs.filter((s: any) => s.externalId?.startsWith('jiosaavn_')).length;
                 items.push({
                     id: 'liked-songs',
                     type: 'special',
                     title: 'Liked Songs',
-                    subtitle: `Playlist • ${likedSongs.length} songs`,
+                    subtitle: `Playlist • ${jiosaavnLikedCount} songs`,
                     icon: Heart,
                     gradient: [Colors.primaryDark, Colors.accent],
                     onPress: () => router.push('/favorites?from=library' as any)
@@ -342,6 +342,8 @@ export default function LibraryScreen() {
                 maxToRenderPerBatch={8}
                 windowSize={5}
                 removeClippedSubviews={true}
+                overScrollMode="never"
+                bounces={false}
                 contentContainerStyle={{
                     paddingHorizontal: viewMode === 'list' ? 4 : 0,
                     paddingTop: 0,

@@ -2,9 +2,27 @@ import React from 'react';
 import { View, StyleSheet, Text } from 'react-native';
 import { DiscoveryMixCard } from './DiscoveryMixCard';
 import { SectionHeader } from './SectionHeader';
+import { useStreamStore } from '@/stores/useStreamStore';
+import { useMusicStore } from '@/stores/useMusicStore';
 import Colors from '@/constants/Colors';
 
 export const MixSection = React.memo(() => {
+    if (__DEV__) {
+        console.log('[MixSection] Render');
+    }
+    
+    const fetchDailyMix = useStreamStore(s => s.fetchDailyMix);
+    const fetchWeeklyMix = useStreamStore(s => s.fetchWeeklyMix);
+    const refreshVersion = useStreamStore(s => s.refreshVersion);
+    const isAuthReady = useMusicStore(s => s.isAuthReady);
+
+    React.useEffect(() => {
+        if (isAuthReady) {
+            fetchDailyMix(refreshVersion > 0);
+            fetchWeeklyMix(refreshVersion > 0);
+        }
+    }, [fetchDailyMix, fetchWeeklyMix, refreshVersion, isAuthReady]);
+
     return (
         <View style={styles.sectionContainer}>
             <SectionHeader

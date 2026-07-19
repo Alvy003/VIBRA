@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { useProgress } from 'react-native-track-player';
+import TrackPlayer from 'react-native-track-player';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 
 import Animated, {
@@ -21,32 +21,77 @@ const THUMB_SIZE = 8;
 const HIT_SLOP = 5;
 
 const ProgressBar = React.memo(({ onSeek }: ProgressBarProps) => {
-  const { position, duration } = useProgress(200);
+  const currentTrackDuration = usePlayerStore(state => state.currentTrack?.duration || 1);
   const currentTrackId = usePlayerStore(state => state.currentTrack?.id);
+  const durationRef = React.useRef(currentTrackDuration);
 
   const sliderWidth = useSharedValue(0);
   const isSliding = useSharedValue(false);
   const progress = useSharedValue(0);
 
+  const isSeeking = React.useRef(false);
+  const seekTarget = React.useRef(0);
+  const seekTime = React.useRef(0);
+
   useEffect(() => {
-    // Reset progress immediately on track change to prevent flicker
+    durationRef.current = currentTrackDuration;
+  }, [currentTrackDuration]);
+
+  useEffect(() => {
     progress.value = 0;
+    isSeeking.current = false;
+    seekTarget.current = 0;
+    seekTime.current = 0;
   }, [currentTrackId]);
 
   useEffect(() => {
-    if (!isSliding.value && duration > 0) {
-      progress.value = position / duration;
-    }
-  }, [position, duration]);
+    let interval: NodeJS.Timeout;
+    
+    interval = setInterval(async () => {
+      if (isSliding.value) return;
+
+      try {
+        const { position, duration } = await TrackPlayer.getProgress();
+        const currentDuration = duration > 0 ? duration : durationRef.current;
+        
+        if (currentDuration > 0) {
+          // Update ref if native duration is more accurate
+          durationRef.current = currentDuration;
+          
+          if (isSeeking.current) {
+            const elapsed = Date.now() - seekTime.current;
+            const diff = Math.abs(position - seekTarget.current);
+            
+            if (diff < 2 || elapsed > 1000) {
+              isSeeking.current = false;
+            } else {
+              return;
+            }
+          }
+
+          progress.value = position / currentDuration;
+        }
+      } catch (error) {
+        // Silently catch errors if TrackPlayer isn't ready
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, []);
 
 
   const seekTo = useCallback(
     (fraction: number) => {
-      if (duration > 0) {
-        onSeek(fraction * duration);
+      const currentDuration = durationRef.current;
+      if (currentDuration > 0) {
+        const targetTime = fraction * currentDuration;
+        isSeeking.current = true;
+        seekTarget.current = targetTime;
+        seekTime.current = Date.now();
+        onSeek(targetTime);
       }
     },
-    [duration, onSeek]
+    [onSeek]
   );
 
   const panGesture = Gesture.Pan()

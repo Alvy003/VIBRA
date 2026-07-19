@@ -1,7 +1,7 @@
 // hooks/useNativeAudioDevices.ts
-import { useState, useEffect, useCallback } from 'react';
-import { NativeModules, NativeEventEmitter, Platform } from 'react-native';
 import * as Device from 'expo-device';
+import { useCallback, useEffect, useState } from 'react';
+import { NativeEventEmitter, NativeModules } from 'react-native';
 
 const { AudioDeviceModule } = NativeModules;
 
@@ -14,9 +14,13 @@ export interface AudioDevice {
   isActive?: boolean;
 }
 
+// Global cache singletons to persist device states across hook unmounts/remounts
+let cachedCurrentDevice: AudioDevice | null = null;
+let cachedAllDevices: AudioDevice[] = [];
+
 export const useNativeAudioDevices = () => {
-  const [currentDevice, setCurrentDevice] = useState<AudioDevice | null>(null);
-  const [allDevices, setAllDevices] = useState<AudioDevice[]>([]);
+  const [currentDevice, setCurrentDevice] = useState<AudioDevice | null>(cachedCurrentDevice);
+  const [allDevices, setAllDevices] = useState<AudioDevice[]>(cachedAllDevices);
   const [isScanning, setIsScanning] = useState(false);
   const [isNativeAvailable, setIsNativeAvailable] = useState(false);
 
@@ -68,7 +72,7 @@ export const useNativeAudioDevices = () => {
     try {
       const devices = await AudioDeviceModule.getConnectedDevices();
       const current = await getCurrentOutput();
-      
+
       return devices.map((d: any) => ({
         id: d.id?.toString() || 'unknown',
         name: d.name || 'Unknown Device',
@@ -86,13 +90,15 @@ export const useNativeAudioDevices = () => {
 
   const scanForDevices = useCallback(async () => {
     setIsScanning(true);
-    
+
     try {
       const [current, all] = await Promise.all([
         getCurrentOutput(),
         getAllDevices(),
       ]);
-      
+
+      cachedCurrentDevice = current;
+      cachedAllDevices = all;
       setCurrentDevice(current);
       setAllDevices(all);
     } catch (error) {
@@ -107,7 +113,7 @@ export const useNativeAudioDevices = () => {
     if (!AudioDeviceModule?.showAudioRoutePicker) {
       return false;
     }
-    
+
     try {
       const result = await AudioDeviceModule.showAudioRoutePicker();
       // Refresh after picker closes

@@ -6,23 +6,27 @@ const path = require('path');
  * Custom Expo Config Plugin to:
  * 1. Copy AudioDeviceModule.kt and AudioDevicePackage.kt to the android folder.
  * 2. Register the AudioDevicePackage in MainApplication.kt.
+ *
+ * Package name is derived dynamically from config.android.package so that
+ * both the dev (com.vibra.mobile.dev) and production (com.vibra.mobile) builds
+ * work without any hardcoded paths.
  */
 module.exports = function withAudioDeviceModule(config) {
   return withMainApplication(config, (config) => {
-    // 1. Copy the files
     const projectRoot = config.modRequest.projectRoot;
     const nativeSrcDir = path.join(projectRoot, 'plugins', 'native');
+
+    // Derive the package name and directory from config (e.g. "com.vibra.mobile" or "com.vibra.mobile.dev")
+    const androidPackage = config.android?.package || 'com.vibra.mobile';
+    const packagePath = androidPackage.split('.').join(path.sep);
     const androidTargetDir = path.join(
-      projectRoot, 
-      'android', 
-      'app', 
-      'src', 
-      'main', 
-      'java', 
-      'com', 
-      'vibra', 
-      'mobile', 
-      'dev'
+      projectRoot,
+      'android',
+      'app',
+      'src',
+      'main',
+      'java',
+      packagePath
     );
 
     // Ensure target directory exists (though it should in prebuild)
@@ -30,32 +34,44 @@ module.exports = function withAudioDeviceModule(config) {
       fs.mkdirSync(androidTargetDir, { recursive: true });
     }
 
-    // Copy AudioDeviceModule.kt
-    const moduleSrc = path.join(nativeSrcDir, 'AudioDeviceModule.kt');
-    const moduleDest = path.join(androidTargetDir, 'AudioDeviceModule.kt');
-    if (fs.existsSync(moduleSrc)) {
-      fs.copyFileSync(moduleSrc, moduleDest);
+    // Helper: copy a .kt file and rewrite its package declaration to match the real package
+    function copyAndRewrite(srcFile, destFile) {
+      if (!fs.existsSync(srcFile)) return;
+      let content = fs.readFileSync(srcFile, 'utf8');
+      // Replace any hardcoded package declaration with the real one
+      content = content.replace(
+        /^package\s+[\w.]+/m,
+        `package ${androidPackage}`
+      );
+      fs.writeFileSync(destFile, content, 'utf8');
     }
 
-    // Copy AudioDevicePackage.kt
-    const packageSrc = path.join(nativeSrcDir, 'AudioDevicePackage.kt');
-    const packageDest = path.join(androidTargetDir, 'AudioDevicePackage.kt');
-    if (fs.existsSync(packageSrc)) {
-      fs.copyFileSync(packageSrc, packageDest);
-    }
+    // 1. Copy and rewrite AudioDeviceModule.kt
+    copyAndRewrite(
+      path.join(nativeSrcDir, 'AudioDeviceModule.kt'),
+      path.join(androidTargetDir, 'AudioDeviceModule.kt')
+    );
 
-    // 2. Register in MainApplication.kt
+    // 2. Copy and rewrite AudioDevicePackage.kt
+    copyAndRewrite(
+      path.join(nativeSrcDir, 'AudioDevicePackage.kt'),
+      path.join(androidTargetDir, 'AudioDevicePackage.kt')
+    );
+
+    // 3. Register in MainApplication.kt
     let contents = config.modResults.contents;
+    const importStatement = `import ${androidPackage}.AudioDevicePackage`;
+    const packageDeclaration = `package ${androidPackage}`;
 
-    // Add the import
-    if (!contents.includes('import com.vibra.mobile.dev.AudioDevicePackage')) {
+    // Add the import below the package declaration if not already present
+    if (!contents.includes(importStatement)) {
       contents = contents.replace(
-        'package com.vibra.mobile.dev',
-        'package com.vibra.mobile.dev\n\nimport com.vibra.mobile.dev.AudioDevicePackage'
+        packageDeclaration,
+        `${packageDeclaration}\n\nimport ${androidPackage}.AudioDevicePackage`
       );
     }
 
-    // Add the package to getPackages()
+    // Add the package to getPackages() if not already present
     const searchString = 'PackageList(this).packages.apply {';
     if (contents.includes(searchString) && !contents.includes('add(AudioDevicePackage())')) {
       contents = contents.replace(

@@ -1,21 +1,309 @@
-import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { mmkvStorage } from '@/lib/mmkvStorage';
 import { migrateStoreToMMKV } from '@/lib/mmkvMigration';
+import { mmkvStorage, storage } from '@/lib/mmkvStorage';
+import { setupPlayer } from '@/lib/trackPlayerSetup';
+import {
+    DUMMY_URL,
+    buildPlayableQueue,
+    buildPlayableTrack,
+    isValidPlaybackUrl
+} from '@/utils/buildPlayableTrack';
+import { syncAutoCache } from '@/utils/syncAutoCache';
+import { syncWidget } from '@/utils/widgetSync';
+import * as Sentry from '@sentry/react-native';
+import { AppState } from 'react-native';
 import TrackPlayer, {
     RepeatMode,
     State,
     Event as TrackPlayerEvent,
     type Track
 } from 'react-native-track-player';
+import { create } from 'zustand';
+import { createJSONStorage, persist } from 'zustand/middleware';
 import { useStreamStore } from './useStreamStore';
-import { setupPlayer } from '@/lib/trackPlayerSetup';
-import * as Sentry from '@sentry/react-native';
-import { AppState } from 'react-native';
 
-const DUMMY_URL = 'https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3';
-const MOBILE_UA = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36";
-const JIOSAAVN_REFERER = "https://www.jiosaavn.com/";
+function normalizeForDedup(str: string | undefined): string {
+    if (!str) return "";
+    let clean = str.toLowerCase();
+
+    // 1. Strip parenthesized/bracketed content with suffixes
+    const bracketRegex = /[\(\[][^\)\]]*(?:from|remaster|live|acoustic|version|extended|official|audio|lyrics|ost|soundtrack|hits|original|motion|picture)[^\)\]]*[\)\]]/gi;
+    clean = clean.replace(bracketRegex, "");
+
+    // 2. Remove standard parentheses and brackets contents
+    clean = clean.replace(/\([^)]*\)/g, "");
+    clean = clean.replace(/\[[^\]]*\]/g, "");
+
+    // 3. Common suffixes
+    const suffixTerms = [
+        "original motion picture soundtrack",
+        "original motion picture",
+        "motion picture soundtrack",
+        "motion picture",
+        "soundtrack",
+        "remastered",
+        "remaster",
+        "live",
+        "acoustic",
+        "version",
+        "extended",
+        "official",
+        "audio",
+        "lyrics",
+        "ost",
+        "greatest hits",
+        "greatest hit",
+        "from"
+    ];
+
+    // 4. Split on hyphen/dash/colon
+    const splitMatch = clean.split(/[-–:]/);
+    if (splitMatch.length > 1) {
+        const rightSide = splitMatch.slice(1).join(" ");
+        if (suffixTerms.some(term => rightSide.includes(term))) {
+            clean = splitMatch[0];
+        }
+    }
+
+    // 5. Strip suffix words using regex with boundary
+    suffixTerms.forEach(term => {
+        const regex = new RegExp(`\\b${term}\\b`, 'gi');
+        clean = clean.replace(regex, ' ');
+    });
+
+    // 6. Safe punctuation removal
+    clean = clean.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?|'""]/g, " ");
+
+    // 7. Collapse spaces and trim
+    clean = clean.replace(/\s+/g, " ").trim();
+
+    return clean;
+}
+
+function getAlbumVersionScore(title: string | undefined, album: string | undefined): number {
+    const t = (title || "").toLowerCase();
+    const a = (album || "").toLowerCase();
+
+    // 6. Karaoke / instrumental / tribute / cover / other (Lowest priority)
+    if (t.includes("karaoke") || t.includes("instrumental") || t.includes("tribute") || t.includes("cover") || t.includes("ringtone") ||
+        a.includes("karaoke") || a.includes("instrumental") || a.includes("tribute") || a.includes("cover") || a.includes("ringtone")) {
+        return 0;
+    }
+
+    // 5. Live
+    if (t.includes("live") || a.includes("live")) {
+        return 1;
+    }
+
+    // 4. Remaster
+    if (t.includes("remaster") || a.includes("remaster")) {
+        return 2;
+    }
+
+    // 3. Compilation / Greatest Hits
+    if (t.includes("greatest hits") || t.includes("compilation") || t.includes("hits") || t.includes("best of") ||
+        a.includes("greatest hits") || a.includes("compilation") || a.includes("hits") || a.includes("best of")) {
+        return 3;
+    }
+
+    // 2. Single
+    if (t.includes("single") || a.includes("single")) {
+        return 4;
+    }
+
+    // 1. Original release / Official album (default)
+    return 5;
+}
+
+function processCandidates(
+    rawCandidates: any[],
+    existingIds: Set<string>,
+    existingExternalIds: Set<string>,
+    existingNormKeys: Set<string>
+): any[] {
+    // 1. First, basic validation and filter out any tracks already in the player queue (by ID or normKey)
+    const filteredFromQueue = rawCandidates.filter(s => {
+        const sid = (s.externalId || s.id)?.toString();
+        if (!sid || existingIds.has(sid) || existingExternalIds.has(sid)) return false;
+        const normKey = `${normalizeForDedup(s.title)}_${normalizeForDedup(s.artist)}`;
+        if (existingNormKeys.has(normKey)) return false;
+        return true;
+    });
+
+    // 2. Group by normalized title + artist to compete versions
+    const groups = new Map<string, any[]>();
+    for (const s of filteredFromQueue) {
+        const normKey = `${normalizeForDedup(s.title)}_${normalizeForDedup(s.artist)}`;
+        if (!groups.has(normKey)) {
+            groups.set(normKey, []);
+        }
+        groups.get(normKey)!.push(s);
+    }
+
+    // 3. For each group, select the best version based on album version score
+    const bestCandidates: any[] = [];
+    for (const songs of groups.values()) {
+        if (songs.length === 1) {
+            bestCandidates.push(songs[0]);
+        } else {
+            // Sort by album version score descending, fallback to index order (original order)
+            const sorted = [...songs].sort((a, b) => {
+                const scoreA = getAlbumVersionScore(a.title, a.album || a.artwork);
+                const scoreB = getAlbumVersionScore(b.title, b.album || b.artwork);
+                if (scoreA !== scoreB) {
+                    return scoreB - scoreA; // Descending
+                }
+                const playA = a.playCount || 0;
+                const playB = b.playCount || 0;
+                return playB - playA;
+            });
+            bestCandidates.push(sorted[0]);
+        }
+    }
+
+    return bestCandidates;
+}
+
+function naturalMix(songs: any[]): any[] {
+    const result: any[] = [];
+    const remaining = [...songs];
+
+    while (remaining.length > 0) {
+        if (result.length === 0) {
+            result.push(remaining.shift()!);
+            continue;
+        }
+
+        const last = result[result.length - 1];
+        const lastArtist = last.artist ? last.artist.split(',')[0].trim().toLowerCase() : "";
+        const lastAlbum = last.album ? last.album.trim().toLowerCase() : "";
+
+        // Find the best next song
+        let bestIdx = -1;
+
+        // Try 1: Avoid same artist AND same album
+        bestIdx = remaining.findIndex(s => {
+            const artist = s.artist ? s.artist.split(',')[0].trim().toLowerCase() : "";
+            const album = s.album ? s.album.trim().toLowerCase() : "";
+            return artist !== lastArtist && (!album || album !== lastAlbum);
+        });
+
+        // Try 2: Avoid same artist only
+        if (bestIdx === -1) {
+            bestIdx = remaining.findIndex(s => {
+                const artist = s.artist ? s.artist.split(',')[0].trim().toLowerCase() : "";
+                return artist !== lastArtist;
+            });
+        }
+
+        // Try 3: Just take the first available
+        if (bestIdx === -1) {
+            bestIdx = 0;
+        }
+
+        result.push(remaining.splice(bestIdx, 1)[0]);
+    }
+
+    return result;
+}
+
+let progressInterval: any = null;
+let lastPostedPosition = -1;
+let lastPostedHistoryId: string | null = null;
+
+let transitionQueue: Promise<void> = Promise.resolve();
+const enqueueTransition = <T>(fn: () => Promise<T>): Promise<T> => {
+    const nextPromise = transitionQueue.then(async () => {
+        return await fn();
+    });
+    transitionQueue = nextPromise.then(() => {}).catch(() => {});
+    return nextPromise;
+};
+
+const updateWidgetState = async (passedState?: any) => {
+    try {
+        const state = passedState || (typeof usePlayerStore !== 'undefined' ? usePlayerStore.getState() : null);
+        if (!state) return;
+        const currentTrack = state.currentTrack;
+        const isPlaying = state.isPlaying || 
+                          state.playbackState === State.Buffering || 
+                          state.playbackState === State.Loading;
+        if (currentTrack) {
+            await syncWidget(
+                currentTrack.title || 'Unknown Title',
+                currentTrack.artist || 'Unknown Artist',
+                currentTrack.artwork || '',
+                isPlaying
+            );
+        } else {
+            await syncWidget('Not Playing', 'Open Vibra to play music', '', false);
+        }
+    } catch (e) {
+        console.error('[PlayerStore] Error updating widget state:', e);
+    }
+};
+
+const startProgressLoop = () => {
+    if (progressInterval) return;
+
+    progressInterval = setInterval(async () => {
+        try {
+            const state = usePlayerStore.getState();
+            const historyId = state.activeHistoryId;
+            if (!historyId) return;
+
+            const progress = await TrackPlayer.getProgress();
+            const position = progress.position;
+            const duration = progress.duration || 1;
+            const completionPercentage = Math.round((position / duration) * 100);
+
+            // Write progress to MMKV (write-ahead log)
+            storage.set('pending_progress_sync', JSON.stringify({
+                historyId,
+                position,
+                completionPercentage,
+                timestamp: Date.now()
+            }));
+
+            // Sync with backend if 30 seconds have passed since last sync
+            if (position - lastPostedPosition >= 30) {
+                await state.syncProgress();
+            }
+        } catch (err) {
+            // Silently catch errors in background loop
+        }
+    }, 1000);
+};
+
+const stopProgressLoop = () => {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+};
+
+const flushUnsyncedProgress = async () => {
+    try {
+        const { axiosInstance, getAuthToken } = await import('@/lib/axios');
+        if (!getAuthToken()) {
+            return;
+        }
+
+        const raw = storage.getString('pending_progress_sync');
+        if (raw) {
+            storage.delete('pending_progress_sync');
+            const data = JSON.parse(raw);
+            if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
+                await axiosInstance.post('/history/track/progress', {
+                    historyId: data.historyId,
+                    playDuration: data.position,
+                    completionPercentage: data.completionPercentage
+                });
+            }
+        }
+    } catch (e) {
+        console.error('[PlayerStore] Failed to flush unsynced progress:', e);
+    }
+};
 
 interface PlayerStore {
     // State
@@ -27,11 +315,16 @@ interface PlayerStore {
     shuffleMode: boolean;
     repeatMode: 'off' | 'track' | 'queue';
     isPlayerReady: boolean;
+    pendingQueueSelection: boolean;
     hasTrackedCurrentTrack: boolean;
     currentContext: { type: 'album' | 'playlist' | 'artist' | 'discovery' | 'search', id: string, title?: string } | null;
     playbackState: State | null;
     skipFailureCount: number;
     isResolving: boolean;
+    activeHistoryId: string | null;
+    syncProgress: () => Promise<void>;
+    consecutiveBackendFailures: number;
+    playbackError: string | null;
 
     // Core actions
     initPlayer: () => Promise<void>;
@@ -44,7 +337,7 @@ interface PlayerStore {
     seekTo: (position: number) => Promise<void>;
 
     // Queue management
-    initializeQueue: (tracks: Track[], startIndex?: number, context?: { type: 'album' | 'playlist' | 'artist' | 'discovery' | 'search', id: string, title?: string }) => Promise<void>;
+    initializeQueue: (tracks: Track[], startIndex?: number, context?: { type: 'album' | 'playlist' | 'artist' | 'discovery' | 'search', id: string, title?: string }) => Promise<boolean>;
     addToQueue: (track: Track) => Promise<void>;
     setPlayNext: (track: Track) => Promise<void>;
     removeFromQueue: (index: number) => Promise<void>;
@@ -53,12 +346,14 @@ interface PlayerStore {
     // Modes
     toggleShuffle: () => Promise<void>;
     toggleRepeat: () => Promise<void>;
-    reorderQueue: (fromIndex: number, toIndex: number) => void;
+    reorderQueue: (fromIndex: number, toIndex: number) => Promise<void>;
 
     // Helpers
     resolveAudioUrl: (track: Track, force?: boolean) => Promise<string | null>;
     syncWithTrackPlayer: () => Promise<void>;
     preloadUpcomingTracks: () => Promise<void>;
+    handleBackendFailure: () => void;
+    resetBackendFailures: () => void;
 
     // Auto-fill
     _isRefilling: boolean;
@@ -66,7 +361,12 @@ interface PlayerStore {
 
     // History
     trackHistory: (track: Track) => Promise<void>;
+    resumePlayback: (item: {
+        track: any;
+        position: number;
+    }) => Promise<void>;
     reset: () => Promise<void>;
+    flushUnsyncedProgress: () => Promise<void>;
 }
 
 function sanitizeTrackForPersistence(track: Track): Track {
@@ -96,12 +396,16 @@ export const usePlayerStore = create<PlayerStore>()(
     shuffleMode: false,
     repeatMode: 'off',
     isPlayerReady: false,
+    pendingQueueSelection: false,
     _isRefilling: false,
     hasTrackedCurrentTrack: false,
     currentContext: null,
     playbackState: null,
     skipFailureCount: 0,
     isResolving: false,
+    activeHistoryId: null,
+    consecutiveBackendFailures: 0,
+    playbackError: null,
 
     // ═══════════════════════════════════════════
     // INITIALIZATION
@@ -117,8 +421,17 @@ export const usePlayerStore = create<PlayerStore>()(
         // Dynamically update app_state tag on AppState changes
         try {
             Sentry.setTag('app_state', AppState.currentState);
-            AppState.addEventListener('change', (nextAppState) => {
+            AppState.addEventListener('change', async (nextAppState) => {
                 Sentry.setTag('app_state', nextAppState);
+                if (nextAppState === 'background') {
+                    stopProgressLoop();
+                    await get().syncProgress();
+                } else if (nextAppState === 'active') {
+                    const pbState = await TrackPlayer.getPlaybackState();
+                    if (pbState.state === State.Playing) {
+                        startProgressLoop();
+                    }
+                }
             });
         } catch (e) {
             // Silently ignore AppState listener failure
@@ -127,13 +440,27 @@ export const usePlayerStore = create<PlayerStore>()(
         try {
             const success = await setupPlayer();
             set({ isPlayerReady: success });
+            updateWidgetState();
 
             if (success) {
                 // --- GLOBAL LISTENERS ---
                 // Native Track Change (Auto-advance & Resolution)
                 TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackActiveTrackChanged, async (event) => {
+                    if (get().pendingQueueSelection) {
+                        return; // Ignore events triggered by queue initialization steps
+                    }
+
                     const track = event.track;
                     const index = event.index;
+
+                    // Stop progress loop for previous track and sync its final position
+                    stopProgressLoop();
+                    get().syncProgress().catch(err => console.error('[PlayerStore] syncProgress error:', err));
+
+                    // Reset sync variables for new track
+                    lastPostedPosition = -1;
+                    lastPostedHistoryId = null;
+                    set({ activeHistoryId: null });
 
                     if (track) {
                         set({
@@ -152,23 +479,64 @@ export const usePlayerStore = create<PlayerStore>()(
                         set({ skipFailureCount: 0, isResolving: false });
 
                         // Trigger history tracking and preloading
-                        get().trackHistory(track);
+                        await get().trackHistory(track);
+                        
+                        // Start progress loop if we are playing
+                        const playbackState = await TrackPlayer.getPlaybackState();
+                        if (playbackState.state === State.Playing) {
+                            startProgressLoop();
+                        }
+
                         get().preloadUpcomingTracks();
+                        updateWidgetState();
                     }
                 });
 
                 // Native Playback State Change
-                TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackState, (event) => {
+                // Only push a widget update when the play⇔pause state *actually flips*.
+                // Intermediate states (Loading, Buffering, Stopped) fire this event
+                // too but carry no new widget-visible information — they would only
+                // create redundant concurrent native calls that race each other.
+                let _lastWidgetIsPlaying: boolean | null = null;
+                TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackState, async (event) => {
+                    const isPausedOrStopped = event.state === State.Paused || event.state === State.Stopped || event.state === State.None;
+                    
+                    let isPlayingNow = get().isPlaying;
+                    if (event.state === State.Playing || event.state === State.Buffering || event.state === State.Loading) {
+                        isPlayingNow = true;
+                    } else if (isPausedOrStopped) {
+                        isPlayingNow = false;
+                    }
+                    
                     set({
-                        isPlaying: event.state === State.Playing,
+                        isPlaying: isPlayingNow,
                         playbackState: event.state
                     });
+
+                    if (isPlayingNow) {
+                        startProgressLoop();
+                    } else {
+                        stopProgressLoop();
+                        // Sync immediately on pause
+                        await get().syncProgress();
+                    }
+
+                    // Only update the widget when the playing flag flips.
+                    // This prevents Loading → Buffering → Playing from firing
+                    // three concurrent syncWidget calls on every track change.
+                    if (isPlayingNow !== _lastWidgetIsPlaying) {
+                        _lastWidgetIsPlaying = isPlayingNow;
+                        updateWidgetState();
+                    }
                 });
 
-                // Queue Ended
+                // Queue Ended — widget state is already correct via PlaybackState above.
                 TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackQueueEnded, () => {
                     set({ isPlaying: false });
+                    // No updateWidgetState() call: PlaybackState:Paused/Stopped fires
+                    // immediately after and handles the icon flip via the boundary check.
                 });
+
 
                 // Playback Error (Spiral Breaker)
                 TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackError, async (error: any) => {
@@ -195,8 +563,40 @@ export const usePlayerStore = create<PlayerStore>()(
                         }
                     });
 
-                    const isBadStatus = error.code === 'android-io-bad-http-status' || error.message?.includes('403') || error.message?.includes('410');
-                    
+                    // Check if it's a redirector failure (meaning backend is down)
+                    const isRedirectorUrl = state.currentTrack?.url?.includes('/api/stream/play/');
+                    if (isRedirectorUrl) {
+                        get().handleBackendFailure();
+                    }
+
+                    // If backend circuit breaker is triggered, stop retries and pause
+                    if (get().consecutiveBackendFailures >= 3) {
+                        console.error('[PlayerStore] Circuit breaker active. Stopping retries.');
+                        await TrackPlayer.pause();
+                        set({ isPlaying: false });
+                        return;
+                    }
+
+                    const errorMessage = error.message || '';
+                    const is404 = errorMessage.includes('404');
+                    const is403 = errorMessage.includes('403') || errorMessage.includes('410') || 
+                                  (error.code === 'android-io-bad-http-status' && !is404);
+
+                    if (is404) {
+                        console.log('[PlayerStore] HTTP 404 detected. Skipping immediately.');
+                        const newFailureCount = state.skipFailureCount + 1;
+                        set({ skipFailureCount: newFailureCount });
+                        
+                        if (newFailureCount >= 3) {
+                            console.error('[PlayerStore] Skip failure limit reached. Stopping playback.');
+                            set({ isPlaying: false, skipFailureCount: 0 });
+                            return;
+                        }
+                        
+                        await get().playNext();
+                        return;
+                    }
+
                     const newFailureCount = state.skipFailureCount + 1;
                     set({ skipFailureCount: newFailureCount });
 
@@ -207,7 +607,7 @@ export const usePlayerStore = create<PlayerStore>()(
                     }
 
                     // --- REFRESH LOGIC ---
-                    if (isBadStatus && state.currentTrack && (state.currentTrack as any).source !== 'local') {
+                    if (is403 && state.currentTrack && (state.currentTrack as any).source !== 'local') {
                         console.log('[PlayerStore] Attempting to refresh expired URL...');
                         const freshUrl = await get().resolveAudioUrl(state.currentTrack, true);
                         
@@ -246,23 +646,50 @@ export const usePlayerStore = create<PlayerStore>()(
                 
                 if (nativeQueue.length === 0 && state.queue.length > 0) {
                     console.log('[PlayerStore] Restoring persisted queue:', state.queue.length, 'tracks');
-                    
-                    // Add all tracks to native player
-                    await TrackPlayer.add(state.queue);
-                    
-                    // Skip to last active index
-                    if (state.currentIndex >= 0 && state.currentIndex < state.queue.length) {
+
+                    const { axiosInstance } = await import('@/lib/axios');
+                    const baseURL = axiosInstance.defaults.baseURL ?? null;
+
+                    // Phase 2: run every persisted track through the canonical builder.
+                    // Tracks that were stored with DUMMY_URL get rebuilt with valid redirectors.
+                    // Truly unresolvable tracks are skipped and logged by the builder.
+                    let restoredQueue: Track[];
+                    try {
+                        restoredQueue = await buildPlayableQueue(state.queue, { baseURL });
+                    } catch (buildErr) {
+                        console.error('[PlayerStore] buildPlayableQueue failed during restoration:', buildErr);
+                        restoredQueue = [];
+                    }
+
+                    if (restoredQueue.length === 0) {
+                        console.warn('[PlayerStore] No valid tracks after queue restoration — starting fresh.');
+                    } else {
+                        // Add all tracks to native player
+                        await TrackPlayer.add(restoredQueue);
+                        set({ queue: restoredQueue });
+
+                        // Skip to last active index (clamped to new queue size)
+                        const targetIdx = Math.min(
+                            Math.max(state.currentIndex, 0),
+                            restoredQueue.length - 1,
+                        );
                         try {
-                            await TrackPlayer.skip(state.currentIndex);
-                            
-                            // Immediately refresh current track URL so playback works
-                            const currentTrack = state.queue[state.currentIndex];
-                            const freshUrl = await get().resolveAudioUrl(currentTrack, true); // force=true → redirector
-                            if (freshUrl && freshUrl !== DUMMY_URL) {
-                                await TrackPlayer.load({ ...currentTrack, url: freshUrl });
+                            await TrackPlayer.skip(targetIdx);
+
+                            // Phase 2: rebuild the current track through the builder to
+                            // ensure the URL is fully resolved (not DUMMY_URL).
+                            const restoredCurrent = restoredQueue[targetIdx];
+                            // restoredCurrent.url is already a valid redirector URL from
+                            // buildPlayableQueue — so TrackPlayer.load is only needed if
+                            // the builder fell back to DUMMY_URL for the active slot.
+                            if (!isValidPlaybackUrl(restoredCurrent?.url)) {
+                                const fresh = await buildPlayableTrack(state.queue[state.currentIndex], { baseURL });
+                                if (fresh.ok) {
+                                    await TrackPlayer.load(fresh.track);
+                                }
                             }
 
-                            // Ensure repeat mode is also restored
+                            // Restore repeat mode
                             let tpMode = RepeatMode.Off;
                             if (state.repeatMode === 'track') tpMode = RepeatMode.Track;
                             if (state.repeatMode === 'queue') tpMode = RepeatMode.Queue;
@@ -275,7 +702,7 @@ export const usePlayerStore = create<PlayerStore>()(
                                     app_state: 'restored_session',
                                 },
                                 extra: {
-                                    queueLength: state.queue.length,
+                                    queueLength: restoredQueue.length,
                                     currentIndex: state.currentIndex,
                                 }
                             });
@@ -285,6 +712,9 @@ export const usePlayerStore = create<PlayerStore>()(
 
                 // Sync state AFTER restoration (or normal boot) to avoid wiping hydrated queue
                 await get().syncWithTrackPlayer();
+                
+                // Flush any unsynced progress stored locally in MMKV
+                flushUnsyncedProgress();
             }
         } catch (error) {
             console.error('[PlayerStore] Init failed:', error);
@@ -301,12 +731,17 @@ export const usePlayerStore = create<PlayerStore>()(
             const index = await TrackPlayer.getActiveTrackIndex();
             const state = await TrackPlayer.getPlaybackState();
 
+            const mappedQueue = queue.map((t: any) => ({ ...t, artwork: t.artwork || t.imageUrl || undefined }));
+            const isPlayingNow = state.state === State.Playing || state.state === State.Buffering || state.state === State.Loading;
             set({
-                queue: queue.map((t: any) => ({ ...t, artwork: t.artwork || t.imageUrl || undefined })),
+                queue: mappedQueue,
                 currentIndex: index ?? -1,
-                currentTrack: index !== undefined ? { ...queue[index], artwork: queue[index].artwork || queue[index].imageUrl || undefined } : null,
-                isPlaying: state.state === State.Playing,
+                currentTrack: index !== undefined && index >= 0 && index < queue.length ? { ...queue[index], artwork: queue[index].artwork || queue[index].imageUrl || undefined } : null,
+                isPlaying: isPlayingNow,
             });
+            
+            // Sync Android Auto catalog
+            syncAutoCache(mappedQueue);
         } catch (error) {
             console.error('[PlayerStore] Sync failed:', error);
         }
@@ -358,10 +793,12 @@ export const usePlayerStore = create<PlayerStore>()(
                     audioUrl: (track as any).audioUrl || track.url,
                 });
 
-                if (url) return url;
+                if (url && url !== DUMMY_URL) return url;
             }
 
-            return track.url || null;
+            if (track.url && track.url !== DUMMY_URL) {
+                return track.url;
+            }
         } catch (error) {
             console.error('[PlayerStore] resolveAudioUrl error:', error);
             Sentry.captureException(error, {
@@ -378,7 +815,10 @@ export const usePlayerStore = create<PlayerStore>()(
             });
         }
 
-        return track.url;
+        // (Phase 3: Removed redundant absolute fallback manual redirector builder block. 
+        // getPlayableUrl handles it upstream, and buildPlayableTrack handles it downstream.)
+
+        return track.url || null;
     },
 
     // ═══════════════════════════════════════════
@@ -387,10 +827,12 @@ export const usePlayerStore = create<PlayerStore>()(
     playTrack: async (track: Track, context?: { type: 'album' | 'playlist' | 'artist' | 'discovery' | 'search', id: string, title?: string }) => {
         // console.log(`[PlayerStore] playTrack called. Context:`, context);
         try {
-            // Resolve URL if needed
-            const playableUrl = await get().resolveAudioUrl(track);
-            if (!playableUrl) {
-                console.error('[PlayerStore] Could not resolve URL for:', track.title);
+            const { axiosInstance } = await import('@/lib/axios');
+            const baseURL = axiosInstance.defaults.baseURL ?? null;
+
+            const res = await buildPlayableTrack(track, { baseURL });
+            if (!res.ok) {
+                console.error('[PlayerStore] Could not resolve playable track for:', track.title, 'Reason:', res.reason);
                 Sentry.captureMessage(`Stream resolution returned null: ${track.title}`, {
                     level: 'error',
                     tags: {
@@ -407,20 +849,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 return;
             }
 
-            const playableTrack: Track = {
-                ...track,
-                id: track.id || (track as any)._id || Math.random().toString(),
-                url: playableUrl,
-                title: track.title || 'Unknown Title',
-                artist: track.artist || 'Unknown Artist',
-                artwork: track.artwork || (track as any).imageUrl || undefined,
-                headers: {
-                    "User-Agent": "Mozilla/5.0",
-                    "Referer": "https://www.jiosaavn.com/"
-                }
-            };
-
-            // console.log(`[PlayerStore] Resolving track ${track.title} with URL:`, playableUrl);
+            const playableTrack = res.track;
 
             await TrackPlayer.reset();
             await TrackPlayer.add([playableTrack]);
@@ -493,67 +922,71 @@ export const usePlayerStore = create<PlayerStore>()(
     // NAVIGATION
     // ═══════════════════════════════════════════
     playNext: async () => {
-        try {
-            const state = get();
+        return enqueueTransition(async () => {
+            try {
+                const state = get();
 
-            // Handle repeat track mode
-            if (state.repeatMode === 'track' && state.currentTrack) {
-                await TrackPlayer.seekTo(0);
-                await TrackPlayer.play();
-                return;
-            }
-
-            const currentIdx = await TrackPlayer.getActiveTrackIndex() ?? -1;
-            const nextIdx = currentIdx + 1;
-
-            // Check if we've reached the end
-            if (nextIdx >= state.queue.length) {
-                if (state.repeatMode === 'queue' && state.queue.length > 0) {
-                    await TrackPlayer.skip(0);
+                // Handle repeat track mode
+                if (state.repeatMode === 'track' && state.currentTrack) {
+                    await TrackPlayer.seekTo(0);
                     await TrackPlayer.play();
-                } else {
-                    set({ isPlaying: false });
+                    return;
                 }
-                return;
+
+                const currentIdx = await TrackPlayer.getActiveTrackIndex() ?? -1;
+                const nextIdx = currentIdx + 1;
+
+                // Check if we've reached the end
+                if (nextIdx >= state.queue.length) {
+                    if (state.repeatMode === 'queue' && state.queue.length > 0) {
+                        await TrackPlayer.skip(0);
+                        await TrackPlayer.play();
+                    } else {
+                        set({ isPlaying: false });
+                    }
+                    return;
+                }
+
+                // SIMPLIFIED: Just skip. The listener handles the resolution.
+                await TrackPlayer.skipToNext();
+                await TrackPlayer.play();
+
+                // Pre-emptive auto-refill if queue is running out
+                const remainingTracks = state.queue.length - 1 - nextIdx;
+                if (remainingTracks < 5) {
+                    get().autoRefillQueue();
+                }
+
+            } catch (error) {
+                console.error('[PlayerStore] playNext error:', error);
             }
-
-            // SIMPLIFIED: Just skip. The listener handles the resolution.
-            await TrackPlayer.skipToNext();
-            await TrackPlayer.play();
-
-            // Pre-emptive auto-refill if queue is running out
-            const remainingTracks = state.queue.length - 1 - nextIdx;
-            if (remainingTracks < 5) {
-                get().autoRefillQueue();
-            }
-
-        } catch (error) {
-            console.error('[PlayerStore] playNext error:', error);
-        }
+        });
     },
 
     playPrevious: async () => {
-        try {
-            const position = await TrackPlayer.getPosition();
+        return enqueueTransition(async () => {
+            try {
+                const position = await TrackPlayer.getPosition();
 
-            // If more than 3 seconds in, restart current track
-            if (position > 3) {
-                await TrackPlayer.seekTo(0);
-                return;
+                // If more than 3 seconds in, restart current track
+                if (position > 3) {
+                    await TrackPlayer.seekTo(0);
+                    return;
+                }
+
+                const currentIdx = await TrackPlayer.getActiveTrackIndex() ?? 0;
+
+                if (currentIdx > 0) {
+                    await TrackPlayer.skipToPrevious();
+                    await TrackPlayer.play();
+                } else {
+                    // At start of queue, just restart
+                    await TrackPlayer.seekTo(0);
+                }
+            } catch (error) {
+                console.error('[PlayerStore] playPrevious error:', error);
             }
-
-            const currentIdx = await TrackPlayer.getActiveTrackIndex() ?? 0;
-
-            if (currentIdx > 0) {
-                await TrackPlayer.skipToPrevious();
-                await TrackPlayer.play();
-            } else {
-                // At start of queue, just restart
-                await TrackPlayer.seekTo(0);
-            }
-        } catch (error) {
-            console.error('[PlayerStore] playPrevious error:', error);
-        }
+        });
     },
 
     // ═══════════════════════════════════════════
@@ -561,49 +994,61 @@ export const usePlayerStore = create<PlayerStore>()(
     // ═══════════════════════════════════════════
     initializeQueue: async (tracks: Track[], startIndex: number = 0, context?: { type: 'album' | 'playlist' | 'artist' | 'discovery' | 'search', id: string, title?: string }) => {
         try {
-            if (!tracks.length) return;
+            if (!tracks.length) return false;
 
-            // Ensure we immediately resolve the URL for the first playable track
-            const safeIndex = Math.min(startIndex, tracks.length - 1);
-            const startTrack = tracks[safeIndex];
-            const startUrl = await get().resolveAudioUrl(startTrack);
+            const { axiosInstance } = await import('@/lib/axios');
+            const baseURL = axiosInstance.defaults.baseURL ?? null;
 
-            const resolvedTracks = tracks.map((track, i) => {
-                const mappedTrack: Track = {
-                    ...track,
-                    id: track.id || (track as any)._id || (track as any).externalId || `track-${i}-${Date.now()}`,
-                    title: track.title || 'Unknown Title',
-                    artist: track.artist || 'Unknown Artist',
-                    artwork: track.artwork || (track as any).imageUrl || undefined,
-                    // Fix: Map any available URL immediately to avoid DUMMY_URL race
-                    url: track.url || (track as any).streamUrl || (track as any).audioUrl || (i === safeIndex ? startUrl : DUMMY_URL),
-                    headers: {
-                        "User-Agent": MOBILE_UA,
-                        "Referer": JIOSAAVN_REFERER
-                    }
-                };
-                return mappedTrack;
-            });
+            // Use canonical track builder for all incoming tracks
+            const resolvedTracks = await buildPlayableQueue(tracks, { baseURL });
+            if (resolvedTracks.length === 0) {
+                console.warn('[PlayerStore] initializeQueue: No playable tracks survived validation.');
+                return false;
+            }
+
+            // Ensure startIndex is safe relative to the newly filtered array
+            const safeIndex = Math.min(startIndex, resolvedTracks.length - 1);
+
+            const currentShuffleMode = get().shuffleMode;
+            let finalQueue = resolvedTracks;
+            let finalStartIndex = safeIndex;
+
+            if (currentShuffleMode && resolvedTracks.length > 1) {
+                const startTrack = resolvedTracks[safeIndex];
+                const otherTracks = resolvedTracks.filter((_, idx) => idx !== safeIndex);
+                // Fisher-Yates shuffle
+                for (let i = otherTracks.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [otherTracks[i], otherTracks[j]] = [otherTracks[j], otherTracks[i]];
+                }
+                finalQueue = [startTrack, ...otherTracks];
+                finalStartIndex = 0;
+            }
 
             await TrackPlayer.reset();
-            await TrackPlayer.add(resolvedTracks);
+            
+            set({ pendingQueueSelection: true });
+            await TrackPlayer.add(finalQueue);
 
             // Re-apply options
             const { setupPlayer } = await import('@/lib/trackPlayerSetup');
             await setupPlayer();
 
-            await TrackPlayer.skip(safeIndex);
+            await TrackPlayer.skip(finalStartIndex);
             await TrackPlayer.play();
 
             set({
-                queue: resolvedTracks,
+                queue: finalQueue,
                 originalQueue: [...resolvedTracks], // Save original order
-                currentTrack: resolvedTracks[safeIndex],
-                currentIndex: safeIndex,
+                currentTrack: finalQueue[finalStartIndex],
+                currentIndex: finalStartIndex,
                 isPlaying: true,
                 currentContext: context || null,
-                shuffleMode: false, // Reset shuffle on new queue
+                pendingQueueSelection: false,
             });
+
+            // Sync Android Auto catalog (no-op on iOS)
+            syncAutoCache(finalQueue);
 
             // Async resolve the rest
             get().preloadUpcomingTracks();
@@ -613,6 +1058,8 @@ export const usePlayerStore = create<PlayerStore>()(
             if (remainingTracks < 5) {
                 get().autoRefillQueue();
             }
+
+            return true;
 
         } catch (error) {
             console.error('[PlayerStore] initializeQueue error:', error);
@@ -626,6 +1073,7 @@ export const usePlayerStore = create<PlayerStore>()(
                     startIndex,
                 }
             });
+            return false;
         }
     },
 
@@ -676,8 +1124,9 @@ export const usePlayerStore = create<PlayerStore>()(
                         }
                     }
 
-                    // Pre-resolve URLs
-                    if ((track as any).source && (!track.url || track.url === DUMMY_URL)) {
+                    // Pre-resolve URLs only if they are missing or are DUMMY_URL placeholders
+                    const isRedirector = track.url && (track.url.includes('/stream/play/') || track.url.includes('/api/stream/play/'));
+                    if ((track as any).source && (!track.url || track.url === DUMMY_URL) && !isRedirector) {
                         const resolvedUrl = await get().resolveAudioUrl(track);
                         if (resolvedUrl && track.url !== resolvedUrl) {
                             const updatedTrack = {
@@ -686,16 +1135,22 @@ export const usePlayerStore = create<PlayerStore>()(
                                 artwork: track.artwork || (track as any).imageUrl || undefined
                             };
 
-                            // Update native player queue
-                            await TrackPlayer.remove(targetIdx);
-                            await TrackPlayer.add([updatedTrack], targetIdx);
+                            // Double check if the track at targetIdx still has the same ID to prevent races
+                            const latestQueue = await TrackPlayer.getQueue();
+                            if (targetIdx < latestQueue.length && latestQueue[targetIdx].id === track.id) {
+                                await TrackPlayer.remove(targetIdx);
+                                await TrackPlayer.add([updatedTrack], targetIdx);
 
-                            // Update internal state
-                            set((s) => {
-                                const newQueue = [...s.queue];
-                                newQueue[targetIdx] = updatedTrack;
-                                return { queue: newQueue };
-                            });
+                                // Update internal state
+                                set((s) => {
+                                    if (targetIdx < s.queue.length && s.queue[targetIdx].id === track.id) {
+                                        const newQueue = [...s.queue];
+                                        newQueue[targetIdx] = updatedTrack;
+                                        return { queue: newQueue };
+                                    }
+                                    return {};
+                                });
+                            }
                         }
                     }
                 }
@@ -707,16 +1162,13 @@ export const usePlayerStore = create<PlayerStore>()(
 
     addToQueue: async (track: Track) => {
         try {
-            const url = await get().resolveAudioUrl(track);
-            const playableTrack = {
-                ...track,
-                url: url || DUMMY_URL,
-                artwork: track.artwork || (track as any).imageUrl || '',
-                headers: {
-                    "User-Agent": MOBILE_UA,
-                    "Referer": JIOSAAVN_REFERER
-                }
-            };
+            const { axiosInstance } = await import('@/lib/axios');
+            const res = await buildPlayableTrack(track, { baseURL: axiosInstance.defaults.baseURL ?? null });
+            if (!res.ok) {
+                console.warn('[PlayerStore] addToQueue rejected track:', track.title, res.reason);
+                return;
+            }
+            const playableTrack = res.track;
 
             const store = get();
             const currentQueue = store.queue;
@@ -736,16 +1188,13 @@ export const usePlayerStore = create<PlayerStore>()(
 
     setPlayNext: async (track: Track) => {
         try {
-            const url = await get().resolveAudioUrl(track);
-            const playableTrack = {
-                ...track,
-                url: url || DUMMY_URL,
-                artwork: track.artwork || (track as any).imageUrl || '',
-                headers: {
-                    "User-Agent": MOBILE_UA,
-                    "Referer": JIOSAAVN_REFERER
-                }
-            };
+            const { axiosInstance } = await import('@/lib/axios');
+            const res = await buildPlayableTrack(track, { baseURL: axiosInstance.defaults.baseURL ?? null });
+            if (!res.ok) {
+                console.warn('[PlayerStore] setPlayNext rejected track:', track.title, res.reason);
+                return;
+            }
+            const playableTrack = res.track;
 
             const store = get();
             const currentIdx = await TrackPlayer.getActiveTrackIndex();
@@ -822,6 +1271,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 currentIndex: -1,
                 isPlaying: false,
             });
+            updateWidgetState();
         } catch (error) {
             console.error('[PlayerStore] clearQueue error:', error);
         }
@@ -859,16 +1309,13 @@ export const usePlayerStore = create<PlayerStore>()(
                     if (afterIndices.length > 0) await TrackPlayer.remove(afterIndices);
                     if (beforeIndices.length > 0) await TrackPlayer.remove(beforeIndices);
 
-                    const tracksToAppend = otherTracks.map(t => ({
-                        id: t.id,
-                        url: t.url,
-                        title: t.title,
-                        artist: t.artist,
-                        artwork: t.artwork,
-                        source: t.source || 'jiosaavn',
-                        headers: (t as any).headers
-                    }));
-                    await TrackPlayer.add(tracksToAppend);
+                    const { axiosInstance } = await import('@/lib/axios');
+                    const baseURL = axiosInstance.defaults.baseURL ?? null;
+                    const tracksToAppend = await buildPlayableQueue(otherTracks, { baseURL });
+                    
+                    if (tracksToAppend.length > 0) {
+                        await TrackPlayer.add(tracksToAppend);
+                    }
                 }
 
                 set({ queue: shuffledQueue, currentIndex: 0 });
@@ -887,15 +1334,10 @@ export const usePlayerStore = create<PlayerStore>()(
 
                         // Rebuild around current
                         const indexInOrig = originalQueue.findIndex(t => t.id === currentTrack?.id);
-                        const tracksToAdd = originalQueue.map(t => ({
-                            id: t.id,
-                            url: t.url,
-                            title: t.title,
-                            artist: t.artist,
-                            artwork: t.artwork,
-                            source: t.source || 'jiosaavn',
-                            headers: (t as any).headers
-                        }));
+
+                        const { axiosInstance } = await import('@/lib/axios');
+                        const baseURL = axiosInstance.defaults.baseURL ?? null;
+                        const tracksToAdd = await buildPlayableQueue(originalQueue, { baseURL });
 
                         const tracksBefore = tracksToAdd.slice(0, indexInOrig);
                         const tracksAfter = tracksToAdd.slice(indexInOrig + 1);
@@ -913,36 +1355,72 @@ export const usePlayerStore = create<PlayerStore>()(
     },
 
     toggleRepeat: async () => {
-        const modes: ('off' | 'track' | 'queue')[] = ['off', 'track', 'queue'];
-        const currentIdx = modes.indexOf(get().repeatMode);
-        const nextMode = modes[(currentIdx + 1) % modes.length];
+        const currentMode = get().repeatMode;
+        const nextMode = currentMode === 'queue' ? 'off' : 'queue';
 
-        let tpMode = RepeatMode.Off;
-        if (nextMode === 'track') tpMode = RepeatMode.Track;
-        if (nextMode === 'queue') tpMode = RepeatMode.Queue;
+        const tpMode = nextMode === 'queue' ? RepeatMode.Queue : RepeatMode.Off;
 
         await TrackPlayer.setRepeatMode(tpMode);
         set({ repeatMode: nextMode });
     },
 
-    reorderQueue: (fromIndex: number, toIndex: number) => {
-        set((state) => {
+    reorderQueue: async (fromIndex: number, toIndex: number) => {
+        try {
+            const state = get();
+            if (fromIndex < 0 || fromIndex >= state.queue.length || toIndex < 0 || toIndex >= state.queue.length) return;
+
+            // 1. Calculate new index of the active track to keep Zustand perfectly in sync
+            let newCurrentIndex = state.currentIndex;
+            if (state.currentIndex !== -1) {
+                if (fromIndex === state.currentIndex) {
+                    newCurrentIndex = toIndex;
+                } else if (fromIndex < state.currentIndex && toIndex >= state.currentIndex) {
+                    newCurrentIndex = state.currentIndex - 1;
+                } else if (fromIndex > state.currentIndex && toIndex <= state.currentIndex) {
+                    newCurrentIndex = state.currentIndex + 1;
+                }
+            }
+
+            // 2. Update state queue and index
             const newQueue = [...state.queue];
             const [removed] = newQueue.splice(fromIndex, 1);
             newQueue.splice(toIndex, 0, removed);
-            return { queue: newQueue };
-        });
+
+            set({
+                queue: newQueue,
+                currentIndex: newCurrentIndex
+            });
+
+            // 3. Move natively in TrackPlayer
+            await TrackPlayer.move(fromIndex, toIndex);
+
+            // Double check index from native player to prevent desync
+            const nativeIndex = await TrackPlayer.getActiveTrackIndex();
+            if (nativeIndex !== undefined && nativeIndex !== newCurrentIndex) {
+                set({ currentIndex: nativeIndex });
+            }
+        } catch (error) {
+            console.error('[PlayerStore] reorderQueue error:', error);
+            // Re-sync if it fails
+            await get().syncWithTrackPlayer();
+        }
     },
 
     // ═══════════════════════════════════════════
     // AUTO-REFILL QUEUE
     // ═══════════════════════════════════════════
     autoRefillQueue: async () => {
+        try {
+            const { useSettingsStore } = await import('./useSettingsStore');
+            if (!useSettingsStore.getState().autoplay) return;
+        } catch (e) {
+            // silent fallback
+        }
         const state = get();
         if (state._isRefilling || !state.currentTrack) return;
 
         const remaining = state.queue.length - 1 - state.currentIndex;
-        if (remaining >= 5) return;
+        if (remaining >= 8) return;
 
         set({ _isRefilling: true });
 
@@ -959,7 +1437,11 @@ export const usePlayerStore = create<PlayerStore>()(
             }
 
             const trackId = ((track as any).externalId || track.id || '').replace('jiosaavn_', '').replace('yt_', '');
-            let recommendedSongs: any[] = [];
+            let pool: any[] = [];
+
+            const existingIds = new Set(get().queue.map(t => t.id?.toString()));
+            const existingExternalIds = new Set(get().queue.map(t => (t as any).externalId?.toString()));
+            const existingNormKeys = new Set(get().queue.map(t => `${normalizeForDedup(t.title)}_${normalizeForDedup(t.artist)}`));
 
             // ─── Strategy 1: Targeted Recommendations (JioSaavn/YouTube) ───
             if (trackId && (source === 'jiosaavn' || source === 'youtube')) {
@@ -968,21 +1450,22 @@ export const usePlayerStore = create<PlayerStore>()(
                     const langs = useOnboardingStore.getState().getLanguageString();
 
                     const res = await axiosInstance.get(`/stream/recommendations/${source}/${trackId}`, {
-                        params: { languages: langs, limit: 12 }
+                        params: { languages: langs, limit: 15 }
                     });
-                    // API returns { results: [...] }
                     const recoResults = res.data?.results || [];
 
                     if (Array.isArray(recoResults) && recoResults.length > 0) {
-                        recommendedSongs = recoResults;
+                        pool = [...pool, ...recoResults];
                     }
                 } catch (err) {
-                    // console.error('[Autorefill] Strategy 1 failed:', err);
+                    // silent
                 }
             }
 
+            let candidates = processCandidates(pool, existingIds, existingExternalIds, existingNormKeys);
+
             // ─── Strategy 2: Search-based fallback (like web) ───
-            if (recommendedSongs.length < 3 && track.title) {
+            if (candidates.length < 12 && track.title) {
                 try {
                     const query = (track.artist && track.artist !== 'Unknown Artist')
                         ? `${track.artist.split(',')[0].trim()} ${track.title}`
@@ -993,24 +1476,40 @@ export const usePlayerStore = create<PlayerStore>()(
                     });
                     const searchResults = searchRes.data?.results || [];
 
-                    if (Array.isArray(searchResults)) {
-                        recommendedSongs = [...recommendedSongs, ...searchResults];
+                    if (Array.isArray(searchResults) && searchResults.length > 0) {
+                        pool = [...pool, ...searchResults];
+                        candidates = processCandidates(pool, existingIds, existingExternalIds, existingNormKeys);
                     }
                 } catch (err) {
-                    // console.error('[Autorefill] Strategy 2 failed:', err);
+                    // silent
                 }
             }
 
-            // ─── Strategy 2.5: Pure Artist Search (if still low on songs) ───
-            if (recommendedSongs.length < 5 && track.artist && track.artist !== 'Unknown Artist') {
+            // ─── Strategy 2.5: High-Quality Artist Fallback (fetch artist's page details) ───
+            if (candidates.length < 12 && track.artist && track.artist !== 'Unknown Artist') {
                 try {
                     const artistOnly = track.artist.split(',')[0].trim();
-                    const artistRes = await axiosInstance.get("/stream/search", {
-                        params: { q: artistOnly, limit: 10, source: 'jiosaavn' },
-                    });
-                    const artistResults = artistRes.data?.results || [];
-                    if (Array.isArray(artistResults)) {
-                        recommendedSongs = [...recommendedSongs, ...artistResults];
+                    let artistId = (track as any).artistId;
+
+                    if (!artistId) {
+                        const searchAllRes = await axiosInstance.get("/stream/search/all", {
+                            params: { q: artistOnly, limit: 1 }
+                        });
+                        const artists = searchAllRes.data?.artists || [];
+                        if (artists.length > 0) {
+                            artistId = artists[0].externalId?.replace("jiosaavn_artist_", "");
+                        }
+                    }
+
+                    if (artistId) {
+                        const artistRes = await axiosInstance.get(`/stream/artists/jiosaavn/${artistId}`);
+                        const artistData = artistRes.data;
+                        const topSongs = artistData?.topSongs || [];
+                        if (Array.isArray(topSongs) && topSongs.length > 0) {
+                            const shuffledTop = [...topSongs].sort(() => Math.random() - 0.5);
+                            pool = [...pool, ...shuffledTop];
+                            candidates = processCandidates(pool, existingIds, existingExternalIds, existingNormKeys);
+                        }
                     }
                 } catch (err) {
                     // silent
@@ -1018,47 +1517,79 @@ export const usePlayerStore = create<PlayerStore>()(
             }
 
             // ─── Strategy 3: Daily Mix Fallback (Absolute last resort) ───
-            if (recommendedSongs.length < 4) {
+            if (candidates.length < 12) {
                 try {
                     await streamStore.fetchDailyMix();
                     const dailyMix = streamStore.dailyMix || [];
-                    if (Array.isArray(dailyMix)) {
-                        recommendedSongs = [...recommendedSongs, ...dailyMix];
+                    if (Array.isArray(dailyMix) && dailyMix.length > 0) {
+                        pool = [...pool, ...dailyMix];
+                        candidates = processCandidates(pool, existingIds, existingExternalIds, existingNormKeys);
                     }
                 } catch (err) {
-                    // console.error('[Autorefill] Strategy 3 failed:', err);
+                    // silent
                 }
             }
 
-            if (recommendedSongs.length > 0) {
-                // Robust deduplication
-                const existingIds = new Set(get().queue.map(t => t.id?.toString()));
-                const existingExternalIds = new Set(get().queue.map(t => (t as any).externalId?.toString()));
+            if (candidates.length > 0) {
+                // Initialize rolling artist history from the end of the current queue (last 5 songs)
+                const queueEnd = state.queue.slice(Math.max(0, state.queue.length - 5));
+                const recentArtists = queueEnd
+                    .map(t => t.artist ? t.artist.split(',')[0].trim().toLowerCase() : "")
+                    .filter(Boolean);
 
-                const uniqueNew = recommendedSongs
-                    .filter(s => {
-                        const sid = (s.externalId || s.id)?.toString();
-                        return sid && !existingIds.has(sid) && !existingExternalIds.has(sid);
-                    })
-                    .slice(0, 10)
-                    .map((s: any) => ({
-                        id: s.externalId || s.id,
-                        title: s.title,
-                        artist: s.artist,
-                        duration: s.duration,
-                        artwork: s.imageUrl || s.artwork,
-                        url: s.streamUrl || s.audioUrl || DUMMY_URL,
-                        source: s.source || 'jiosaavn',
-                        headers: {
-                            "User-Agent": MOBILE_UA,
-                            "Referer": JIOSAAVN_REFERER
+                const selectedSongs: any[] = [];
+                const activeRecentArtists = [...recentArtists];
+
+                // Pick up to 12 tracks, prioritizing artists not recently chosen
+                while (selectedSongs.length < 12 && candidates.length > 0) {
+                    let bestIdx = -1;
+                    let bestRecency = 999;
+
+                    for (let i = 0; i < candidates.length; i++) {
+                        const s = candidates[i];
+                        const artistNorm = s.artist ? s.artist.split(',')[0].trim().toLowerCase() : "";
+                        const idx = activeRecentArtists.indexOf(artistNorm);
+
+                        if (idx === -1) {
+                            bestIdx = i;
+                            break; // Not recently chosen - select immediately to preserve quality/order
+                        } else {
+                            if (idx < bestRecency) {
+                                bestRecency = idx;
+                                bestIdx = i;
+                            }
                         }
-                    }));
+                    }
 
-                if (uniqueNew.length > 0) {
-                    await TrackPlayer.add(uniqueNew);
-                    set((s) => ({ queue: [...s.queue, ...uniqueNew] }));
-                    // console.log(`[SmartAutoplay] Refilled ${uniqueNew.length} tracks`);
+                    if (bestIdx !== -1) {
+                        const song = candidates.splice(bestIdx, 1)[0];
+                        selectedSongs.push(song);
+
+                        const artistNorm = song.artist ? song.artist.split(',')[0].trim().toLowerCase() : "";
+                        if (artistNorm) {
+                            activeRecentArtists.push(artistNorm);
+                            if (activeRecentArtists.length > 5) {
+                                activeRecentArtists.shift();
+                            }
+                        }
+                    } else {
+                        break;
+                    }
+                }
+
+                // Naturally mix the songs to avoid clusters of same artist/album
+                const finalSongs = naturalMix(selectedSongs);
+
+                const { axiosInstance } = await import('@/lib/axios');
+                const baseURL = axiosInstance.defaults.baseURL ?? null;
+
+                // Phase 2: Canonical track builder replaces manual fallback logic
+                const validatedTracks = await buildPlayableQueue(finalSongs, { baseURL });
+
+                if (validatedTracks.length > 0) {
+                    await TrackPlayer.add(validatedTracks);
+                    set((s) => ({ queue: [...s.queue, ...validatedTracks] }));
+                    // console.log(`[SmartAutoplay] Refilled ${validatedTracks.length} tracks`);
                 }
             }
         } catch (error) {
@@ -1090,15 +1621,16 @@ export const usePlayerStore = create<PlayerStore>()(
                 track.id?.startsWith('jiosaavn_') ||
                 track.id?.startsWith('yt_');
 
+            let res;
             if (isExternal) {
-                await axiosInstance.post('/history/track', {
+                res = await axiosInstance.post('/history/track', {
                     songId: track.id,
                     isExternal: true,
                     context: get().currentContext,
                     externalData: {
                         title: track.title,
                         artist: track.artist,
-                        imageUrl: track.artwork || track.url,
+                        imageUrl: track.artwork || '',
                         duration: track.duration,
                         source: track.source || 'jiosaavn',
                         externalId: track.id,
@@ -1108,18 +1640,127 @@ export const usePlayerStore = create<PlayerStore>()(
                     },
                 });
             } else {
-                await axiosInstance.post('/history/track', {
+                res = await axiosInstance.post('/history/track', {
                     songId: track.id,
                     isExternal: false,
                 });
+            }
+
+            if (res?.data?.historyId) {
+                set({ activeHistoryId: res.data.historyId });
             }
         } catch (error) {
             console.error('[PlayerStore] Failed to track history:', error);
         }
     },
 
+    syncProgress: async () => {
+        const historyId = get().activeHistoryId;
+        if (!historyId) return;
+
+        try {
+            const progress = await TrackPlayer.getProgress();
+            const position = progress.position;
+
+            // Check if we already synced this exact position for this history ID
+            if (historyId === lastPostedHistoryId && Math.abs(position - lastPostedPosition) < 0.1) {
+                
+            return;
+            }
+
+            const { axiosInstance } = await import('@/lib/axios');
+            const duration = progress.duration || 1;
+            const completionPercentage = Math.round((position / duration) * 100);
+
+            lastPostedPosition = position;
+            lastPostedHistoryId = historyId;
+
+            // Write progress to MMKV (write-ahead log)
+            storage.set('pending_progress_sync', JSON.stringify({
+                historyId,
+                position,
+                completionPercentage,
+                timestamp: Date.now()
+            }));
+
+            // Sync with backend
+            await axiosInstance.post('/history/track/progress', {
+                historyId,
+                playDuration: position,
+                completionPercentage
+            });
+
+            // Clean up MMKV pending sync on success
+            storage.delete('pending_progress_sync');
+        } catch (error) {
+            console.error('[PlayerStore] Failed to sync progress:', error);
+        }
+    },
+
+    handleBackendFailure: () => {
+        const currentFailures = get().consecutiveBackendFailures + 1;
+        set({ consecutiveBackendFailures: currentFailures });
+
+        const trackId = get().currentTrack?.id;
+        const isOfflineTrack = get().currentTrack?.url?.startsWith('file://') || 
+                              (trackId && 
+                               (() => {
+                                   try {
+                                       const { useDownloadStore } = require('./useDownloadStore');
+                                       return !!useDownloadStore.getState().downloadedSongs[trackId]?.localUri;
+                                   } catch (e) {
+                                       return false;
+                                   }
+                               })());
+
+        if (currentFailures >= 3 && !isOfflineTrack) {
+            console.error('[PlayerStore] Circuit breaker triggered: 3 consecutive backend failures.');
+            TrackPlayer.pause();
+            set({ 
+                isPlaying: false, 
+                playbackError: 'Vibra backend is currently unreachable. Please check your internet connection or try again later.' 
+            });
+        }
+    },
+
+    resetBackendFailures: () => {
+        set({ consecutiveBackendFailures: 0, playbackError: null });
+    },
+
+    resumePlayback: async (item) => {
+        try {
+            const { track, position } = item;
+            
+            // Map the track object to expected raw shape for initializeQueue
+            const formattedTrack = {
+                ...track,
+                artwork: track.artwork || (track as any).imageUrl,
+            };
+
+            // Stop any current progress loop before initializing
+            stopProgressLoop();
+
+            // Set the queue and start playing
+            const success = await get().initializeQueue([formattedTrack], 0);
+            
+            if (success) {
+                try {
+                    await TrackPlayer.seekTo(position || 0);
+                    await TrackPlayer.play();
+                } catch (seekError) {
+                    console.error('[PlayerStore] Error seeking during resume:', seekError);
+                }
+            }
+
+        } catch (error) {
+            console.error('[PlayerStore] Failed to resume playback:', error);
+        }
+    },
+
     reset: async () => {
         try {
+            stopProgressLoop();
+            await get().syncProgress();
             await TrackPlayer.reset();
             set({
                 currentTrack: null,
@@ -1128,10 +1769,15 @@ export const usePlayerStore = create<PlayerStore>()(
                 currentIndex: -1,
                 hasTrackedCurrentTrack: false,
                 currentContext: null,
+                activeHistoryId: null,
             });
         } catch (error) {
             console.error('[PlayerStore] Reset failed:', error);
         }
+    },
+
+    flushUnsyncedProgress: async () => {
+        await flushUnsyncedProgress();
     },
 }),
 {
@@ -1166,11 +1812,16 @@ export const usePlayerStore = create<PlayerStore>()(
             });
             return;
         }
+        if (state) {
+            state.consecutiveBackendFailures = 0;
+            state.playbackError = null;
+        }
         if (__DEV__) {
             const queueLength = state?.queue?.length ?? 0;
             const track = state?.currentTrack?.title ?? 'none';
             console.log(`[PlayerStore] Hydration complete. Queue: ${queueLength} tracks. Last track: "${track}".`);
         }
+        updateWidgetState(state);
     }
 }
 )
@@ -1183,5 +1834,14 @@ migrateStoreToMMKV('vibra-player-storage').then((migrated) => {
     if (migrated) {
         if (__DEV__) console.log('[PlayerStore] AsyncStorage → MMKV migration complete. Rehydrating...');
         usePlayerStore.persist.rehydrate();
+    }
+});
+
+// Auto-sync Android Auto catalog cache whenever the queue changes
+let lastQueueRef: any = null;
+usePlayerStore.subscribe((state) => {
+    if (state.queue !== lastQueueRef) {
+        lastQueueRef = state.queue;
+        syncAutoCache(state.queue);
     }
 });

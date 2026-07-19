@@ -1,15 +1,17 @@
 // components/SaveToPlaylistButton.tsx
 import React, { useMemo, useRef } from 'react';
-import { TouchableOpacity, StyleSheet, View } from 'react-native';
-import { Plus, Check } from 'lucide-react-native';
+import { TouchableOpacity, StyleSheet } from 'react-native';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import AddTrackBottomSheet, { AddTrackBottomSheetRef } from './AddTrackBottomSheet';
 import Colors from '@/constants/Colors';
+import SaveStateIcon, { SaveStateVariant } from './SaveStateIcon';
+import { useNetworkStore } from '@/stores/useNetworkStore';
+import { useToastStore } from '@/stores/useToastStore';
 
 interface SaveToPlaylistButtonProps {
     track: any;
-    size?: number;
+    variant?: SaveStateVariant;
     color?: string;
     activeColor?: string;
     iconColor?: string;
@@ -18,7 +20,7 @@ interface SaveToPlaylistButtonProps {
 
 export const SaveToPlaylistButton = React.memo(({
     track,
-    size = 24,
+    variant = "large",
     iconColor = "#000000",
     checkmarkColor
 }: SaveToPlaylistButtonProps) => {
@@ -37,6 +39,15 @@ export const SaveToPlaylistButton = React.memo(({
     const isSaved = isLiked || isInAnyPlaylist;
 
     const handlePress = async () => {
+        if (!useNetworkStore.getState().isOnline) {
+            useToastStore.getState().showToast({
+                message: "Available when you're back online.",
+                iconType: 'none',
+                duration: 2500
+            });
+            return;
+        }
+
         if (isSaved) {
             // If already saved (liked or in playlist), open the sheet for more options
             bottomSheetRef.current?.open(track);
@@ -54,23 +65,12 @@ export const SaveToPlaylistButton = React.memo(({
                 activeOpacity={0.7}
                 style={styles.container}
             >
-                {isSaved ? (
-                    <View style={[styles.iconCircleActive, { width: size, height: size, borderRadius: size / 2 }]}>
-                        <Check
-                            size={size * 0.6}
-                            color={checkmarkColor || iconColor}
-                            strokeWidth={3}
-                        />
-                    </View>
-                ) : (
-                    <View style={[styles.iconCircle, { width: size, height: size, borderRadius: size / 2, borderWidth: Math.max(1.5, size * 0.09) }]}>
-                        <Plus
-                            size={size * 0.7}
-                            color={Colors.textPrimary}
-                            strokeWidth={3}
-                        />
-                    </View>
-                )}
+                <SaveStateIcon
+                    variant={variant}
+                    isSaved={isSaved}
+                    checkmarkColor={checkmarkColor || iconColor}
+                    outlineColor={Colors.textPrimary}
+                />
             </TouchableOpacity>
 
             <AddTrackBottomSheet ref={bottomSheetRef} />
@@ -81,23 +81,6 @@ export const SaveToPlaylistButton = React.memo(({
 const styles = StyleSheet.create({
     container: {
         padding: 4,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    iconCircle: {
-        width: 22,
-        height: 22,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: Colors.textPrimary,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    iconCircleActive: {
-        width: 22,
-        height: 22,
-        borderRadius: 12,
-        backgroundColor: Colors.accent,
         alignItems: 'center',
         justifyContent: 'center',
     },

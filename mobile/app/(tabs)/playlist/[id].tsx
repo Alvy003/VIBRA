@@ -1,55 +1,65 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import {
-    StyleSheet,
-    View,
-    Text,
-    TouchableOpacity,
-    Dimensions,
-    Alert,
-    BackHandler,
-    Share
-} from 'react-native';
-import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter, useGlobalSearchParams } from 'expo-router';
-import { usePlaylistStore } from '@/stores/usePlaylistStore';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { useStreamStore } from '@/stores/useStreamStore';
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    useAnimatedScrollHandler,
-    interpolate,
-    Extrapolate
-} from 'react-native-reanimated';
-import {
-    ArrowLeft,
-    Play,
-    Pause,
-    MoreVertical,
-    Shuffle,
-    Share2,
-} from 'lucide-react-native';
-import { SharpPlay, SharpPause, SharpShuffle, SharpPlus, SharpCheck } from '@/components/SharpIcons';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { resolveAssetUrl } from '@/lib/url';
-import { useDynamicColors } from '@/hooks/useDynamicColors';
-import { useUser } from '@clerk/clerk-expo';
-import { FlashList as OriginalFlashList } from '@shopify/flash-list';
-const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import { DownloadStateIcon } from '@/components/DownloadedIcon';
+import SaveStateIcon from '@/components/SaveStateIcon';
+import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
-import { MixCover } from '@/components/home/MixCover';
-import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
-import { useDownloadStore } from '@/stores/useDownloadStore';
+import { MixCover, getMixBaseColor } from '@/components/home/MixCover';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import EditPlaylistModal from '@/components/modals/EditPlaylistModal';
-import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
-import { DownloadedIcon } from '@/components/DownloadedIcon';
-import { Music, CircleArrowDown } from 'lucide-react-native';
 import Colors from '@/constants/Colors';
+import { useDynamicColors } from '@/hooks/useDynamicColors';
+import { resolveAssetUrl } from '@/lib/url';
+import { useDownloadStore } from '@/stores/useDownloadStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { usePlaylistStore } from '@/stores/usePlaylistStore';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
+import { useStreamStore } from '@/stores/useStreamStore';
+import { useUser } from '@clerk/clerk-expo';
+import { FlashList as OriginalFlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
+import {
+    ArrowLeft,
+    MoreVertical,
+    Music,
+    Share2
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+    Alert,
+    BackHandler,
+    Dimensions,
+    Share,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import Animated, {
+    Extrapolate,
+    interpolate,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue
+} from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 
 const { width } = Dimensions.get('window');
 const ACCENT_COLOR = Colors.accent;
+const DUMMY_URL = 'https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3';
+
+const getTrackId = (track: any) => {
+    if (!track) return '';
+    const rawId = track.externalId || track._id || track.id;
+    const source = track.source || 'jiosaavn';
+    if (rawId && source === 'jiosaavn' && !String(rawId).startsWith('jiosaavn_')) {
+        return `jiosaavn_${rawId}`;
+    }
+    return String(rawId || '');
+};
 
 // ─── PlaylistHeader is defined OUTSIDE the screen component ───────────────────
 // This is critical: if defined inside, React creates a new type on each render
@@ -105,57 +115,64 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
 
     return (
         <View style={{ backgroundColor: colors.primary }}>
-            <LinearGradient
-                colors={[
-                    'transparent',
-                    'rgba(9,9,11,0.05)',
-                    'rgba(9,9,11,0.15)',
-                    'rgba(9,9,11,0.3)',
-                    'rgba(9,9,11,0.5)',
-                    'rgba(9,9,11,0.7)',
-                    'rgba(9,9,11,0.85)',
-                    Colors.background,
-                    Colors.background,
-                ]}
-                locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
-                style={{ paddingTop: 60, paddingBottom: 10 }}
-            >
+        <LinearGradient
+            colors={[
+                'rgba(0, 0, 0, 0.5)',    // status bar/top area
+                'rgba(0, 0, 0, 0.65)',   // Muted, rich primary color behind cover art
+                'rgba(9, 9, 11, 0.85)',  // Faster transition to dark background below cover art
+                'rgba(9, 9, 11, 0.98)',  // Deep transition
+                Colors.background,
+                Colors.background,
+            ]}
+            locations={[0, 0.3, 0.5, 0.7, 0.85, 1]}
+            style={{ paddingTop: 60, paddingBottom: 10 }}
+        >
                 <View className="items-center px-6">
                     <View style={{
-                        shadowColor: colors.primary,
-                        shadowOffset: { width: 0, height: 12 },
-                        shadowOpacity: 0.6,
+                        shadowColor: '#000000',
+                        shadowOffset: { width: 0, height: 16 },
+                        shadowOpacity: 0.45,
                         shadowRadius: 24,
                         elevation: 20,
                     }}>
-                        {artworkUrl ? (
+                        {isDiscovery ? (
+                            <View style={{ width: width * 0.62, height: width * 0.62, borderRadius: 3, overflow: 'hidden', borderWidth: 0.5, borderColor: 'rgba(255, 255, 255, 0.08)' }}>
+                                <MixCover title={playlist.name} variant={String(id)?.includes('weekly') ? 'weekly' : 'daily'} animated={false} style={{ width: '100%', height: '100%' }} />
+                            </View>
+                        ) : artworkUrl ? (
                             <Image
                                 source={{ uri: artworkUrl ?? undefined }}
-                                style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2 }}
+                                style={{ 
+                                    width: width * 0.62, 
+                                    height: width * 0.62, 
+                                    borderRadius: 3,
+                                    borderWidth: 0.5,
+                                    borderColor: 'rgba(255, 255, 255, 0.08)',
+                                }}
                                 contentFit="cover"
                                 transition={0}
                                 cachePolicy="memory-disk"
                             />
                         ) : (
                             <View style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2, overflow: 'hidden', backgroundColor: Colors.surfaceLighter, alignItems: 'center', justifyContent: 'center' }}>
-                                {isDiscovery ? (
-                                    <MixCover title={playlist.name} variant={String(id)?.includes('weekly') ? 'weekly' : 'daily'} />
-                                ) : (
-                                    <Music size={80} color="#52525b" />
-                                )}
+                                <Music size={80} color="#52525b" />
                             </View>
                         )}
                     </View>
 
                     <View className="w-full mt-5">
-                        <Text className="text-white text-[24px] font-semibold mb-2 leading-tight tracking-tight" numberOfLines={1}>
-                            {playlist.name}
-                        </Text>
-                        <Text className="text-zinc-400 text-sm font-medium mb-4 leading-5" numberOfLines={1}>
-                            {playlist.description || 'Curated for you by Vibra'}
-                        </Text>
+                        {!isDiscovery && (
+                            <>
+                                <Text className="text-white text-2xl font-semibold mb-2 leading-tight tracking-tight" numberOfLines={1}>
+                                    {playlist.name}
+                                </Text>
+                                <Text className="text-zinc-400 text-sm font-medium mb-4 leading-5" numberOfLines={2}>
+                                    {playlist.description || 'Curated for you by Vibra'}
+                                </Text>
+                            </>
+                        )}
 
-                        <View className="flex-row items-center">
+                        <View className={`flex-row items-center ${isDiscovery ? 'mt-1 mb-2' : ''}`}>
                             {creatorImage ? (
                                 <View className="mr-2 rounded-full overflow-hidden">
                                     <Image source={{ uri: creatorImage ?? undefined }} style={{ width: 24, height: 24 }} cachePolicy="memory-disk" />
@@ -178,22 +195,23 @@ const PlaylistHeader = React.memo<PlaylistHeaderProps>(({
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
                         {!isDiscovery ? (
                             <>
-                                <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
-                                    {isSaved ? (
-                                        <View style={{ width: 22, height: 22, backgroundColor: ACCENT_COLOR, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
-                                            <SharpCheck size={14} color="black" />
-                                        </View>
-                                    ) : (
-                                        <SharpPlus size={22} color="#b3b3b3" />
-                                    )}
-                                </TouchableOpacity>
+                                {!isOwner && (
+                                    <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
+                                        <SaveStateIcon
+                                            variant="medium"
+                                            isSaved={isSaved}
+                                            checkmarkColor="black"
+                                            outlineColor="#b3b3b3"
+                                        />
+                                    </TouchableOpacity>
+                                )}
 
                                 <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
-                                    {isPlaylistDownloaded ? (
-                                        <DownloadedIcon size={22} />
-                                    ) : (
-                                        <CircleArrowDown size={24} color="#b3b3b3" />
-                                    )}
+                                    <DownloadStateIcon
+                                        variant="medium"
+                                        status={isPlaylistDownloaded ? 'downloaded' : 'idle'}
+                                        color="#b3b3b3"
+                                    />
                                 </TouchableOpacity>
 
                                 <TouchableOpacity onPress={onShare} activeOpacity={0.7}>
@@ -255,6 +273,7 @@ export default function PlaylistScreen() {
     const [isEditModalVisible, setIsEditModalVisible] = useState(false);
     const optionsRef = React.useRef<CollectionOptionsRef>(null);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
+    const [isDownloadConfirmVisible, setIsDownloadConfirmVisible] = useState(false);
 
     const { playlists, fetchPlaylistById, updatePlaylist, isLoading: isLoadingPlaylist } = usePlaylistStore();
     const {
@@ -265,7 +284,10 @@ export default function PlaylistScreen() {
         toggleShuffle,
         pauseTrack
     } = usePlayerStore();
-    const { dailyMix, weeklyMix, isLoadingDailyMix, isLoadingWeeklyMix } = useStreamStore();
+    const dailyMix = useStreamStore(s => s.dailyMix);
+    const weeklyMix = useStreamStore(s => s.weeklyMix);
+    const isLoadingDailyMix = useStreamStore(s => s.isLoadingDailyMix);
+    const isLoadingWeeklyMix = useStreamStore(s => s.isLoadingWeeklyMix);
     const { isItemSaved, toggleSaveItem } = useSavedItemsStore();
     const { downloadPlaylist, downloadedPlaylists } = useDownloadStore();
 
@@ -414,64 +436,76 @@ export default function PlaylistScreen() {
         resolveAssetUrl(playlist?.imageUrl || (allSongs.length > 0 ? allSongs[0].imageUrl : null)),
         [playlist?.imageUrl, allSongs[0]?.imageUrl]
     );
+    let colors = useDynamicColors(artworkUrl);
 
-    const colors = useDynamicColors(artworkUrl);
-
+    if (isDiscovery) {
+        const variant = id === 'weekly-mix' ? 'weekly' : 'daily';
+        colors = { ...colors, primary: getMixBaseColor(variant) };
+    }
 
     const headerBaseColor = (colors.primary && colors.primary !== '#310a5b') ? colors.primary : Colors.surface;
 
     const filteredSongs = allSongs;
 
-    const isCurrentPlaylistPlaying = allSongs.some((s: any) => (s._id === currentTrack?.id || s.id === currentTrack?.id)) && isPlaying;
+    const isCurrentPlaylistPlaying = allSongs.some((s: any) => getTrackId(s) === currentTrack?.id) && isPlaying;
     const isSaved = isItemSaved(id as string);
     const isPlaylistDownloaded = !!downloadedPlaylists[id as string];
 
     const handlePlayPlaylist = useCallback(() => {
         const songsToPlay = filteredSongs.length > 0 ? filteredSongs : allSongs;
         if (songsToPlay.length > 0) {
-            const tracks = songsToPlay.map(s => ({
-                id: s._id || s.id || s.externalId,
-                url: s.streamUrl || s.audioUrl || s.url,
-                title: s.title,
-                artist: s.artist,
-                artwork: s.imageUrl || playlist?.imageUrl,
-                source: s.source || 'jiosaavn'
-            }));
+            const tracks = songsToPlay.map(s => {
+                const trackId = getTrackId(s);
+                const source = s.source || 'jiosaavn';
+                const initialUrl = s.url || s.streamUrl || s.audioUrl || '';
+                const isLocal = initialUrl.startsWith('file://');
+
+                return {
+                    id: trackId,
+                    url: isLocal ? initialUrl : DUMMY_URL,
+                    title: s.title,
+                    artist: s.artist,
+                    artwork: s.imageUrl || playlist?.imageUrl,
+                    source
+                };
+            });
             initializeQueue(tracks, 0, { type: 'playlist', id: id as string, title: playlist?.name });
         }
     }, [filteredSongs, allSongs, playlist, id, initializeQueue]);
 
     const handlePlayTrack = useCallback((song: any, index: number) => {
-        const tracks = filteredSongs.map(s => ({
-            id: s._id || s.id || s.externalId,
-            url: s.streamUrl || s.audioUrl || s.url,
-            title: s.title,
-            artist: s.artist,
-            artwork: s.imageUrl || playlist?.imageUrl,
-            source: s.source || 'jiosaavn'
-        }));
-        initializeQueue(tracks, index, { type: 'playlist', id: id as string, title: playlist?.name });
-    }, [filteredSongs, playlist, id, initializeQueue]);
+        const songsToPlay = filteredSongs.length > 0 ? filteredSongs : allSongs;
+        const tracks = songsToPlay.map(s => {
+            const trackId = getTrackId(s);
+            const source = s.source || 'jiosaavn';
+            const initialUrl = s.url || s.streamUrl || s.audioUrl || '';
+            const isLocal = initialUrl.startsWith('file://');
 
-    const handleDownloadPlaylist = useCallback(async () => {
+            return {
+                id: trackId,
+                url: isLocal ? initialUrl : DUMMY_URL,
+                title: s.title,
+                artist: s.artist,
+                artwork: s.imageUrl || playlist?.imageUrl,
+                source
+            };
+        });
+        initializeQueue(tracks, index, { type: 'playlist', id: id as string, title: playlist?.name });
+    }, [filteredSongs, allSongs, playlist, id, initializeQueue]);
+
+    const handleDownloadPlaylist = useCallback(() => {
         if (!allSongs.length) return;
-        Alert.alert(
-            "Download Playlist",
-            `Do you want to download all ${allSongs.length} songs in "${playlist?.name}"?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Download",
-                    onPress: async () => {
-                        await downloadPlaylist(playlist, allSongs.map(s => ({
-                            ...s,
-                            id: s._id || s.id || s.externalId,
-                            artwork: s.imageUrl || playlist?.imageUrl
-                        })));
-                    }
-                }
-            ]
-        );
+        setIsDownloadConfirmVisible(true);
+    }, [allSongs.length]);
+
+    const confirmDownloadPlaylist = useCallback(async () => {
+        setIsDownloadConfirmVisible(false);
+        if (!playlist) return;
+        await downloadPlaylist(playlist, allSongs.map(s => ({
+            ...s,
+            id: s._id || s.id || s.externalId,
+            artwork: s.imageUrl || playlist?.imageUrl
+        })));
     }, [allSongs, playlist, downloadPlaylist]);
 
     const handleShare = useCallback(async () => {
@@ -529,7 +563,7 @@ export default function PlaylistScreen() {
         <TrackListItem
             track={song}
             index={index}
-            isCurrent={currentTrack?.id === (song._id || song.id || song.externalId)}
+            isCurrent={currentTrack?.id === getTrackId(song)}
             onPress={() => handlePlayTrack(song, index)}
             playlistImageUrl={playlist?.imageUrl}
         />
@@ -556,7 +590,7 @@ export default function PlaylistScreen() {
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
             >
-                <SafeAreaView edges={['top']} className="px-4 py-2">
+                <SafeAreaView edges={['top']} className="px-4 py-2" pointerEvents="box-none">
                     <TouchableOpacity
                         onPress={handleBack}
                         className="w-10 h-10 items-center justify-center"
@@ -571,10 +605,14 @@ export default function PlaylistScreen() {
                 style={[stickyHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }]}
                 pointerEvents="box-none"
             >
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
-
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: headerBaseColor }]} />
                 <LinearGradient
-                    colors={[headerBaseColor, Colors.background]}
+                    colors={[
+                        'rgba(0, 0, 0, 0.47)', // Top of sticky bar
+                        'rgba(0, 0, 0, 0.60)', // Middle dimming stop
+                        'rgba(0, 0, 0, 0.70)', // Bottom dimming stop
+                    ]}
+                    locations={[0, 0.5, 1]}
                     style={StyleSheet.absoluteFill}
                 />
 
@@ -607,12 +645,14 @@ export default function PlaylistScreen() {
                     ref={listRef}
                     data={displaySongs}
                     renderItem={renderTrackItem}
-                    keyExtractor={(item: any) => item._id || item.id || item.externalId}
+                    keyExtractor={(item: any) => getTrackId(item)}
                     onScroll={scrollHandler}
                     scrollEventThrottle={16}
                     ListHeaderComponent={headerComponent}
                     estimatedItemSize={80}
                     contentContainerStyle={{ paddingBottom: 100 }}
+                    overScrollMode="never"
+                    bounces={false}
                 />
                 <CollectionOptions ref={optionsRef} />
 
@@ -622,6 +662,15 @@ export default function PlaylistScreen() {
                 onSave={handleEditSave}
                 initialName={playlist.name}
                 initialDescription={playlist.description || ''}
+            />
+
+            <ConfirmationModal
+                visible={isDownloadConfirmVisible}
+                title="Download Playlist"
+                message="Download this playlist for offline listening?"
+                confirmLabel="Download"
+                onConfirm={confirmDownloadPlaylist}
+                onCancel={() => setIsDownloadConfirmVisible(false)}
             />
         </View>
     );

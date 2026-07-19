@@ -1,15 +1,12 @@
 // hooks/useSectionReveal.ts
-import { useEffect, useRef } from 'react';
+import { useRef } from 'react';
 import {
-  useSharedValue,
-  useAnimatedStyle,
-  withDelay,
-  withTiming,
-  withSpring,
   interpolate,
-  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withSpring
 } from 'react-native-reanimated';
-import { ViewToken } from 'react-native';
 
 const REVEAL_SPRING = {
   damping: 20,

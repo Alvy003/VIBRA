@@ -1,13 +1,12 @@
 // components/AnimatedCard.tsx
+import * as Haptics from 'expo-haptics';
 import React, { useCallback } from 'react';
 import { Pressable, ViewStyle } from 'react-native';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
-  withSpring,
-  interpolate,
+  useSharedValue,
+  withSpring
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -63,12 +62,10 @@ export const AnimatedCard: React.FC<AnimatedCardProps> = React.memo(({
 
   const handleLongPress = useCallback(() => {
     if (onLongPress) {
-      if (enableHaptic) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       onLongPress();
     }
-  }, [onLongPress, enableHaptic]);
+  }, [onLongPress]);
 
   return (
     <AnimatedPressable

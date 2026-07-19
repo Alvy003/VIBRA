@@ -1,19 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    TouchableOpacity,
-    Platform,
-    Keyboard,
-    Dimensions,
-} from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import BottomSheet, { BottomSheetRef } from '../BottomSheet';
+import Colors from '@/constants/Colors';
 import { resolveAssetUrl } from '@/lib/url';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Image } from 'expo-image';
 import { Music, Trash } from 'lucide-react-native';
-import Colors from '@/constants/Colors';
+import React, { useEffect, useState } from 'react';
+import {
+    Dimensions,
+    Keyboard,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import BottomSheet, { BottomSheetRef } from '../BottomSheet';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const ACCENT_COLOR = Colors.accent;

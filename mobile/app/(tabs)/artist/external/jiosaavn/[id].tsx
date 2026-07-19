@@ -1,26 +1,27 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Dimensions, ScrollView, StyleSheet, InteractionManager, BackHandler } from 'react-native';
-import { Image } from 'expo-image';
-import Animated, { 
-    useSharedValue, 
-    useAnimatedStyle, 
-    useAnimatedScrollHandler, 
-    interpolate, 
-    Extrapolate 
-} from 'react-native-reanimated';
-import { useLocalSearchParams, useRouter, useGlobalSearchParams } from 'expo-router';
-import { useStreamStore } from '@/stores/useStreamStore';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { ArrowLeft, MoreVertical, Music } from 'lucide-react-native';
-import SongOptions from '@/components/SongOptions';
-import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { resolveAssetUrl } from '@/lib/url';
-import { useDynamicColors } from '@/hooks/useDynamicColors';
-import { ArtistSkeleton } from '@/components/Skeleton';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
+import { ArtistSkeleton } from '@/components/Skeleton';
+import SongOptions from '@/components/SongOptions';
 import Colors from '@/constants/Colors';
+import { useDynamicColors } from '@/hooks/useDynamicColors';
+import { resolveAssetUrl } from '@/lib/url';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
+import { useStreamStore } from '@/stores/useStreamStore';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
+import { ArrowLeft, MoreVertical, Music } from 'lucide-react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { BackHandler, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, {
+    Extrapolate,
+    interpolate,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue
+} from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 interface ArtistHeaderProps {
     artist: any;
@@ -74,6 +75,7 @@ export default function ExternalArtistScreen() {
     const { from } = useGlobalSearchParams();
     const router = useRouter();
     const scrollRef = React.useRef<ScrollView>(null);
+    const optionsRef = React.useRef<CollectionOptionsRef>(null);
     const [isInitialLoading, setIsInitialLoading] = useState(true);
     
     const {
@@ -83,7 +85,7 @@ export default function ExternalArtistScreen() {
         clearDetail
     } = useStreamStore();
 
-    const { currentTrack, isPlaying, initializeQueue } = usePlayerStore();
+    const { currentTrack, isPlaying, initializeQueue, shuffleMode, toggleShuffle } = usePlayerStore();
     const { toggleSaveItem, isItemSaved } = useSavedItemsStore();
     const [showAllSongs, setShowAllSongs] = useState(false);
 
@@ -167,7 +169,7 @@ export default function ExternalArtistScreen() {
             source: 'jiosaavn'
         }));
 
-        initializeQueue(tracks, startIndex);
+        initializeQueue(tracks, startIndex, { type: 'artist', id: artist.externalId || (id as string), title: artist.name });
     };
 
     const floatingHeaderStyle = useAnimatedStyle(() => {
@@ -237,7 +239,7 @@ export default function ExternalArtistScreen() {
                 style={[floatingHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }]}
                 pointerEvents="box-none"
             >
-                <SafeAreaView edges={['top']} className="px-4 py-2">
+                <SafeAreaView edges={['top']} className="px-4 py-2" pointerEvents="box-none">
                     <TouchableOpacity
                         onPress={handleBack}
                         className="w-10 h-10 rounded-full bg-black/40 items-center justify-center"
@@ -254,11 +256,16 @@ export default function ExternalArtistScreen() {
                 pointerEvents="box-none"
             >
                 {/* Opaque Background Layer */}
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: headerBaseColor }]} />
                 
                 {/* Gradient Layer for depth */}
                 <LinearGradient
-                    colors={[headerBaseColor, Colors.background]}
+                    colors={[
+                        'rgba(0, 0, 0, 0.47)', // Top of sticky bar
+                        'rgba(0, 0, 0, 0.60)', // Middle dimming stop
+                        'rgba(0, 0, 0, 0.70)', // Bottom dimming stop
+                    ]}
+                    locations={[0, 0.5, 1]}
                     style={StyleSheet.absoluteFill}
                 />
                 
@@ -286,6 +293,8 @@ export default function ExternalArtistScreen() {
                 showsVerticalScrollIndicator={false}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
+                overScrollMode="never"
+                bounces={false}
             >
                 <ArtistHeader
                     artist={artist}
@@ -307,19 +316,35 @@ export default function ExternalArtistScreen() {
                             </Text>
                         </TouchableOpacity>
                         
-                        <TouchableOpacity activeOpacity={0.7}>
+                        <TouchableOpacity 
+                            onPress={() => optionsRef.current?.open({ ...artist, title: artist.name }, 'artist')}
+                            activeOpacity={0.7}
+                        >
                             <MoreVertical size={24} color="#b3b3b3" />
                         </TouchableOpacity>
                     </View>
                    
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
-                        <TouchableOpacity activeOpacity={0.7}>
-                            <SharpShuffle size={24} color={Colors.accent} />
+                        <TouchableOpacity onPress={toggleShuffle} activeOpacity={0.7}>
+                            <View style={{ alignItems: 'center' }}>
+                                <SharpShuffle size={24} color={shuffleMode ? Colors.accent : "#b3b3b3"} />
+                                {shuffleMode && (
+                                    <View style={{
+                                        width: 4,
+                                        height: 4,
+                                        borderRadius: 2,
+                                        backgroundColor: Colors.accent,
+                                        marginTop: 2,
+                                        position: 'absolute',
+                                        bottom: -6
+                                    }} />
+                                )}
+                            </View>
                         </TouchableOpacity>
                     
                         <TouchableOpacity
                             onPress={() => handlePlayTopSongs(0)}
-                            style={{ backgroundColor: Colors.accent, shadowColor: Colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.5, shadowRadius: 12, elevation: 12 }}
+                            style={{ backgroundColor: Colors.accent }}
                             className="w-14 h-14 rounded-full items-center justify-center"
                             activeOpacity={0.8}
                         >
@@ -439,6 +464,7 @@ export default function ExternalArtistScreen() {
                     </View>
                 )}
             </Animated.ScrollView>
+            <CollectionOptions ref={optionsRef} />
         </View>
     );
 }

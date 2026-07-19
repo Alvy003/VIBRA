@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Modal, Dimensions, useWindowDimensions } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated from 'react-native-reanimated';
@@ -10,22 +10,45 @@ import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useArtistStore } from '@/stores/useArtistStore';
 import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
 
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: STATIC_SCREEN_HEIGHT } = Dimensions.get('window');
 
 const ArtistModal = React.memo(() => {
     const insets = useSafeAreaInsets();
+    const { height: screenHeight } = useWindowDimensions();
     const currentTrack = usePlayerStore((state) => state.currentTrack);
-    const artistCache = useArtistStore((state) => state.artistCache);
+    const artistName = currentTrack?.artist;
+    const artistInfo = useArtistStore(React.useCallback((state) => artistName ? state.artistCache[artistName] : undefined, [artistName]));
     const isArtistModalVisible = usePlayerUIStore((state) => state.isArtistModalVisible);
     const setArtistModalVisible = usePlayerUIStore((state) => state.setArtistModalVisible);
 
     if (!currentTrack?.artist) return null;
-
-    const artistInfo = currentTrack.artist ? artistCache[currentTrack.artist] : undefined;
     if (!artistInfo) return null;
 
-    const hasArtistImage = !!(artistInfo?.imageUrl);
-    const backgroundImage = artistInfo?.imageUrl || currentTrack.artwork;
+    const isDefaultPlaceholderImage = (url?: string) => {
+        if (!url) return true;
+        const lower = url.toLowerCase();
+        return (
+            lower.includes('artist-default-music') ||
+            lower.includes('artist_default') ||
+            lower.includes('default_artist') ||
+            lower.includes('/artists/default') ||
+            lower.includes('default-music') ||
+            lower.includes('default_150x150') ||
+            lower.includes('default_500x500') ||
+            lower.includes('default_250x250') ||
+            lower.includes('default_50x50')
+        );
+    };
+
+    const isRealBio = (bioText?: string) => {
+        if (!bioText) return false;
+        const lower = bioText.toLowerCase().trim();
+        return !lower.startsWith('artist •') && !lower.includes('listeners');
+    };
+
+    const hasArtistImage = !!(artistInfo?.imageUrl) && !isDefaultPlaceholderImage(artistInfo?.imageUrl);
+    const backgroundImage = hasArtistImage ? artistInfo?.imageUrl : currentTrack.artwork;
+    const hasRealBiography = artistInfo?.fullBio && isRealBio(artistInfo.fullBio);
 
     const formatListeners = (count?: number) => {
         if (!count) return null;
@@ -47,7 +70,7 @@ const ArtistModal = React.memo(() => {
         >
             <View style={styles.artistModalContainer}>
                 {/* Header Image */}
-                <View style={styles.artistModalImageContainer}>
+                <View style={[styles.artistModalImageContainer, { height: screenHeight * 0.45 }]}>
                     <Image
                         source={typeof backgroundImage === 'string' ? { uri: backgroundImage } : backgroundImage}
                         style={styles.artistModalImage}
@@ -77,6 +100,8 @@ const ArtistModal = React.memo(() => {
                     style={styles.artistModalContent}
                     contentContainerStyle={{ paddingBottom: insets.bottom + 40 }}
                     showsVerticalScrollIndicator={false}
+                    overScrollMode="never"
+                    bounces={false}
                 >
                     <Text style={styles.artistModalName}>{artistInfo?.name || currentTrack?.artist?.split(',')[0].trim()}</Text>
 
@@ -86,7 +111,7 @@ const ArtistModal = React.memo(() => {
                         </Text>
                     )}
 
-                    {artistInfo?.fullBio && (
+                    {artistInfo?.fullBio && hasRealBiography && (
                         <View style={styles.artistModalBioSection}>
                             <Text style={styles.artistModalBioTitle}>About</Text>
                             <Text style={styles.artistModalBioText}>{artistInfo.fullBio}</Text>
@@ -107,7 +132,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#09090b',
     },
     artistModalImageContainer: {
-        height: SCREEN_HEIGHT * 0.45,
+        height: STATIC_SCREEN_HEIGHT * 0.45,
         position: 'relative',
     },
     artistModalImage: {

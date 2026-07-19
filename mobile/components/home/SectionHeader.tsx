@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react-native';
 import { COLORS, RADIUS, TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
 
 interface SectionHeaderProps {
-  title: string;
+  title: string | React.ReactNode;
   subtitle?: string;
   onSeeAll?: () => void;
   showSeeAll?: boolean;
@@ -30,7 +30,11 @@ export const SectionHeader = React.memo(({
     <View style={styles.container}>
       <View style={styles.titleContainer}>
         <View style={styles.textContainer}>
-          <Text style={styles.title}>{title}</Text>
+          {typeof title === 'string' ? (
+            <Text style={styles.title}>{title}</Text>
+          ) : (
+            title
+          )}
           {!!subtitle && (
             <Text style={styles.subtitle}>{subtitle}</Text>
           )}
@@ -61,7 +65,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    marginBottom: 14,
+    marginBottom: 12,
   },
   titleContainer: {
     flexDirection: 'row',

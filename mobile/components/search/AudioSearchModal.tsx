@@ -1,37 +1,37 @@
 // components/search/AudioSearchModal.tsx
-import React, { useRef, useCallback, useState, useEffect } from 'react';
+import Colors from '@/constants/Colors';
+import { useSearchStore } from '@/stores/useSearchStore';
 import {
-  View,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+} from 'expo-audio';
+import Constants from 'expo-constants';
+import * as Haptics from 'expo-haptics';
+import { AudioLines, Check, RotateCcw } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Pressable,
-  ActivityIndicator,
+  View,
 } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
-  withSpring,
   cancelAnimation,
   Easing,
   FadeIn,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
 } from 'react-native-reanimated';
-import { X, AudioLines, Check, RotateCcw } from 'lucide-react-native';
-import {
-  useAudioRecorder,
-  requestRecordingPermissionsAsync,
-  setAudioModeAsync,
-  RecordingPresets,
-} from 'expo-audio';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useSearchStore } from '@/stores/useSearchStore';
-import * as Haptics from 'expo-haptics';
-import Constants from 'expo-constants';
 import BottomSheet from '../BottomSheet';
-import Colors from '@/constants/Colors';
 
 type ModalState = 'idle' | 'listening' | 'recognizing' | 'result' | 'error';
 

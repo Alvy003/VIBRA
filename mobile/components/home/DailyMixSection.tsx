@@ -1,29 +1,37 @@
-import React, { useCallback, useEffect } from 'react';
-import { View, StyleSheet, FlatList, Dimensions } from 'react-native';
-import { useRouter } from 'expo-router';
 import { PremiumCard } from '@/components/PremiumCard';
-import { useStreamStore } from '@/stores/useStreamStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useStreamStore } from '@/stores/useStreamStore';
+import React, { useCallback, useEffect } from 'react';
+import { Dimensions, FlatList, StyleSheet, View } from 'react-native';
 import { SectionHeader } from './SectionHeader';
 
+import { useMusicStore } from '@/stores/useMusicStore';
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.4;
+const CARD_WIDTH = SCREEN_WIDTH * 0.40;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const DailyMixSection = React.memo(() => {
-    const { dailyMix, fetchDailyMix } = useStreamStore();
+    if (__DEV__) {
+        console.log('[DailyMixSection] Render');
+    }
+    const dailyMix = useStreamStore(s => s.dailyMix);
+    const isLoading = useStreamStore(s => s.isLoadingDailyMix);
+    const fetchDailyMix = useStreamStore(s => s.fetchDailyMix);
     const initializeQueue = usePlayerStore(state => state.initializeQueue);
+    const refreshVersion = useStreamStore(state => state.refreshVersion);
+    const isAuthReady = useMusicStore(s => s.isAuthReady);
 
     useEffect(() => {
-        if (!dailyMix) {
-            fetchDailyMix();
+        if (isAuthReady) {
+            fetchDailyMix(refreshVersion > 0);
         }
-    }, []);
+    }, [fetchDailyMix, refreshVersion, isAuthReady]);
 
     const handlePlay = useCallback((index: number) => {
         if (dailyMix) {
-            initializeQueue(dailyMix, index);
+            initializeQueue(dailyMix, index, { type: 'discovery', id: 'daily-mix', title: 'Daily Mix' });
         }
     }, [initializeQueue, dailyMix]);
 
@@ -32,12 +40,16 @@ export const DailyMixSection = React.memo(() => {
             title={item.title}
             subtitle={item.artist}
             imageUrl={item.imageUrl}
-            onPress={() => handlePlay(index)}
+            onPress={item.isPlaceholder ? undefined : () => handlePlay(index)}
             index={index}
+            width={CARD_WIDTH}
+            isPlaceholder={item.isPlaceholder}
         />
     ), [handlePlay]);
 
-    if (!dailyMix || dailyMix.length === 0) return null;
+    const displayMix = dailyMix && dailyMix.length > 0 ? dailyMix : (isLoading ? Array(4).fill({ isPlaceholder: true }) : []);
+
+    if (displayMix.length === 0) return null;
 
     return (
         <View style={styles.sectionContainer}>
@@ -49,9 +61,9 @@ export const DailyMixSection = React.memo(() => {
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
-                data={dailyMix}
-                keyExtractor={(item, idx) => `${item.externalId || item._id || item.id}-${idx}`}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
+                data={displayMix}
+                keyExtractor={(item, idx) => item.isPlaceholder ? `placeholder-${idx}` : `${item.externalId || item._id || item.id}-${idx}`}
                 renderItem={renderPick}
                 snapToInterval={ITEM_SIZE}
                 decelerationRate="fast"
@@ -68,5 +80,5 @@ export const DailyMixSection = React.memo(() => {
 DailyMixSection.displayName = 'DailyMixSection';
 
 const styles = StyleSheet.create({
-    sectionContainer: { marginTop: 28 },
+    sectionContainer: { marginTop: 24 },
 });

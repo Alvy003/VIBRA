@@ -1,46 +1,43 @@
-import React, { useEffect, useCallback, useMemo } from 'react';
-import {
-    StyleSheet,
-    View,
-    Text,
-    TouchableOpacity,
-    Dimensions,
-    Alert,
-    BackHandler
-} from 'react-native';
-import { Image } from 'expo-image';
-import { useLocalSearchParams, useRouter, useGlobalSearchParams } from 'expo-router';
-import { useStreamStore } from '@/stores/useStreamStore';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    useAnimatedScrollHandler,
-    interpolate,
-    Extrapolate
-} from 'react-native-reanimated';
-import {
-    ArrowLeft,
-    Play,
-    Pause,
-    Heart,
-    MoreVertical,
-    Share2,
-    CircleArrowDown,
-    Check
-} from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { resolveAssetUrl } from '@/lib/url';
-import { useDynamicColors } from '@/hooks/useDynamicColors';
-import { useDownloadStore } from '@/stores/useDownloadStore';
-import { DownloadedIcon } from '@/components/DownloadedIcon';
-import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
-import { FlashList as OriginalFlashList } from '@shopify/flash-list';
-const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import { DownloadStateIcon } from '@/components/DownloadedIcon';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
+import SaveStateIcon from '@/components/SaveStateIcon';
+import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
 import Colors from '@/constants/Colors';
+import { useDynamicColors } from '@/hooks/useDynamicColors';
+import { resolveAssetUrl } from '@/lib/url';
+import { useDownloadStore } from '@/stores/useDownloadStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
+import { useStreamStore } from '@/stores/useStreamStore';
+import { FlashList as OriginalFlashList } from '@shopify/flash-list';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
+import {
+    ArrowLeft,
+    MoreVertical
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import {
+    BackHandler,
+    Dimensions,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View
+} from 'react-native';
+import Animated, {
+    Extrapolate,
+    interpolate,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue
+} from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+const AnimatedFlashList = Animated.createAnimatedComponent(OriginalFlashList) as any;
 
 const { width } = Dimensions.get('window');
 const ACCENT_COLOR = Colors.accent;
@@ -49,11 +46,16 @@ interface ExternalAlbumHeaderProps {
     album: any;
     artworkUrl: string | null | undefined;
     colors: any;
+    isSaved: boolean;
     isAlbumDownloaded: boolean;
     isCurrentAlbumPlaying: boolean;
+    shuffleMode: boolean;
+    onToggleSave: () => void;
     onDownload: () => void;
+    onToggleShuffle: () => void;
     onPlay: () => void;
     onPause: () => void;
+    onOptions: () => void;
     width: number;
 }
 
@@ -61,40 +63,48 @@ const ExternalAlbumHeader = React.memo<ExternalAlbumHeaderProps>(({
     album,
     artworkUrl,
     colors,
+    isSaved,
     isAlbumDownloaded,
     isCurrentAlbumPlaying,
+    shuffleMode,
+    onToggleSave,
     onDownload,
+    onToggleShuffle,
     onPlay,
     onPause,
+    onOptions,
     width,
 }) => (
     <View style={{ backgroundColor: colors.primary }}>
-            <LinearGradient
-                colors={[
-                    'transparent',
-                    'rgba(9,9,11,0.05)',
-                    'rgba(9,9,11,0.15)',
-                    'rgba(9,9,11,0.3)',
-                    'rgba(9,9,11,0.5)',
-                    'rgba(9,9,11,0.7)',
-                    'rgba(9,9,11,0.85)',
-                    Colors.background,
-                    Colors.background,
-                ]}
-                locations={[0, 0.1, 0.2, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
-                style={{ paddingTop: 60, paddingBottom: 10 }}
-            >
+        <LinearGradient
+            colors={[
+                'rgba(0, 0, 0, 0.5)',    // status bar/top area
+                'rgba(0, 0, 0, 0.65)',   // Muted, rich primary color behind cover art
+                'rgba(9, 9, 11, 0.85)',  // Faster transition to dark background below cover art
+                'rgba(9, 9, 11, 0.98)',  // Deep transition
+                Colors.background,
+                Colors.background,
+            ]}
+            locations={[0, 0.3, 0.5, 0.7, 0.85, 1]}
+            style={{ paddingTop: 60, paddingBottom: 10 }}
+        >
             <View className="items-center px-6">
                 <View style={{
-                    shadowColor: colors.primary,
-                    shadowOffset: { width: 0, height: 12 },
-                    shadowOpacity: 0.6,
+                    shadowColor: '#000000',
+                    shadowOffset: { width: 0, height: 16 },
+                    shadowOpacity: 0.45,
                     shadowRadius: 24,
                     elevation: 20,
                 }}>
                     <Image
                         source={{ uri: artworkUrl ?? undefined }}
-                        style={{ width: width * 0.62, height: width * 0.62, borderRadius: 2 }}
+                        style={{
+                            width: width * 0.62,
+                            height: width * 0.62,
+                            borderRadius: 3,
+                            borderWidth: 0.5,
+                            borderColor: 'rgba(255, 255, 255, 0.08)',
+                        }}
                         contentFit="cover"
                         transition={0}
                         cachePolicy="memory-disk"
@@ -102,10 +112,10 @@ const ExternalAlbumHeader = React.memo<ExternalAlbumHeaderProps>(({
                 </View>
 
                 <View className="w-full mt-5">
-                    <Text className="text-white text-[24px] font-semibold mb-3 leading-tight tracking-tight" numberOfLines={1}>
+                    <Text className="text-white text-2xl font-semibold mb-3 leading-tight tracking-tight" numberOfLines={1}>
                         {album.title}
                     </Text>
-                    <Text className="text-white text-sm font-semibold mb-4" numberOfLines={1}>{album.artist}</Text>
+                    <Text className="text-white text-sm font-semibold mb-4" numberOfLines={2}>{album.artist}</Text>
                     <View className="flex-row items-center">
                         <Text className="text-zinc-400 text-[12px] font-medium tracking-wider">
                             Album <Text className="text-zinc-400 font-medium lowercase">• {album.year || '2024'}</Text>
@@ -116,36 +126,57 @@ const ExternalAlbumHeader = React.memo<ExternalAlbumHeaderProps>(({
 
             <View className="px-6 pt-4 pb-0 flex-row items-center justify-between">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
-                    <TouchableOpacity activeOpacity={0.7}>
-                        <Heart size={22} color="#b3b3b3" />
+                    <TouchableOpacity onPress={onToggleSave} activeOpacity={0.7}>
+                        <SaveStateIcon
+                            variant="medium"
+                            isSaved={isSaved}
+                            checkmarkColor="black"
+                            outlineColor="#b3b3b3"
+                        />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
-                        {isAlbumDownloaded ? (
-                            <DownloadedIcon size={22} />
-                        ) : (
-                            <CircleArrowDown size={24} color="#b3b3b3" />
-                        )}
+                        <DownloadStateIcon
+                            variant="medium"
+                            status={isAlbumDownloaded ? 'downloaded' : 'idle'}
+                            color="#b3b3b3"
+                        />
                     </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7}>
-                        <Share2 size={22} color="#b3b3b3" />
-                    </TouchableOpacity>
-                    <TouchableOpacity activeOpacity={0.7}>
+                    <TouchableOpacity onPress={onOptions} activeOpacity={0.7}>
                         <MoreVertical size={22} color="#b3b3b3" />
                     </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity
-                    onPress={isCurrentAlbumPlaying ? onPause : onPlay}
-                    style={{ backgroundColor: ACCENT_COLOR }}
-                    className="w-[52px] h-[52px] rounded-full items-center justify-center shadow-2xl"
-                    activeOpacity={0.8}
-                >
-                    {isCurrentAlbumPlaying ? (
-                        <SharpPause size={26} color="black" />
-                    ) : (
-                        <SharpPlay size={26} color="black" style={{ marginLeft: 3 }} />
-                    )}
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+                    <TouchableOpacity onPress={onToggleShuffle} activeOpacity={0.7}>
+                        <View style={{ alignItems: 'center' }}>
+                            <SharpShuffle size={24} color={shuffleMode ? ACCENT_COLOR : "#b3b3b3"} />
+                            {shuffleMode && (
+                                <View style={{
+                                    width: 4,
+                                    height: 4,
+                                    borderRadius: 2,
+                                    backgroundColor: ACCENT_COLOR,
+                                    marginTop: 2,
+                                    position: 'absolute',
+                                    bottom: -6
+                                }} />
+                            )}
+                        </View>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        onPress={isCurrentAlbumPlaying ? onPause : onPlay}
+                        style={{ backgroundColor: ACCENT_COLOR }}
+                        className="w-[52px] h-[52px] rounded-full items-center justify-center shadow-2xl"
+                        activeOpacity={0.8}
+                    >
+                        {isCurrentAlbumPlaying ? (
+                            <SharpPause size={26} color="black" />
+                        ) : (
+                            <SharpPlay size={26} color="black" style={{ marginLeft: 3 }} />
+                        )}
+                    </TouchableOpacity>
+                </View>
             </View>
         </LinearGradient>
     </View>
@@ -158,7 +189,9 @@ export default function ExternalAlbumScreen() {
     const { from } = useGlobalSearchParams();
     const router = useRouter();
     const listRef = React.useRef<any>(null);
+    const optionsRef = React.useRef<CollectionOptionsRef>(null);
     const [isInitialLoading, setIsInitialLoading] = React.useState(true);
+    const [isDownloadConfirmVisible, setIsDownloadConfirmVisible] = React.useState(false);
 
     const {
         currentExternalAlbum: album,
@@ -167,8 +200,9 @@ export default function ExternalAlbumScreen() {
         clearDetail
     } = useStreamStore();
 
-    const { currentTrack, isPlaying, initializeQueue, pauseTrack } = usePlayerStore();
+    const { currentTrack, isPlaying, initializeQueue, pauseTrack, shuffleMode, toggleShuffle } = usePlayerStore();
     const { downloadAlbum, downloadedAlbums, downloadedSongs } = useDownloadStore();
+    const { isItemSaved, toggleSaveItem } = useSavedItemsStore();
 
     const handleBack = useCallback(() => {
         // If we have a clear context of where we came from, use it to switch back to that tab
@@ -313,6 +347,7 @@ export default function ExternalAlbumScreen() {
 
     const isCurrentAlbumPlaying = displayAlbum?.songs?.some((s: any) => s.externalId === currentTrack?.id) && isPlaying;
     const isAlbumDownloaded = !!downloadedAlbums[(album as any)?.externalId || (id as string)];
+    const isSaved = isItemSaved(displayAlbum?.externalId || (displayAlbum as any)?._id || id);
 
     const handlePlayAll = useCallback(() => {
         if (!album?.songs?.length) return;
@@ -340,40 +375,48 @@ export default function ExternalAlbumScreen() {
         initializeQueue(tracks, index, { type: 'album', id: displayAlbum.externalId, title: displayAlbum.title });
     }, [displayAlbum, initializeQueue]);
 
-    const handleDownloadAlbum = useCallback(async () => {
+    const handleDownloadAlbum = useCallback(() => {
         if (!album?.songs?.length) return;
-        Alert.alert(
-            "Download Album",
-            `Do you want to download all ${album.songs.length} songs in "${album.title}"?`,
-            [
-                { text: "Cancel", style: "cancel" },
-                {
-                    text: "Download",
-                    onPress: async () => {
-                        await downloadAlbum(album, album.songs.map((s: any) => ({
-                            ...s,
-                            id: s.externalId,
-                            artwork: s.imageUrl || album.imageUrl
-                        })));
-                    }
-                }
-            ]
-        );
+        setIsDownloadConfirmVisible(true);
+    }, [album?.songs?.length]);
+
+    const confirmDownloadAlbum = useCallback(async () => {
+        setIsDownloadConfirmVisible(false);
+        if (!album) return;
+        await downloadAlbum(album, album.songs.map((s: any) => ({
+            ...s,
+            id: s.externalId,
+            artwork: s.imageUrl || album.imageUrl
+        })));
     }, [album, downloadAlbum]);
+
+    const handleToggleSave = useCallback(() => {
+        if (!displayAlbum) return;
+        toggleSaveItem({
+            ...displayAlbum,
+            externalId: displayAlbum.externalId || (displayAlbum as any)?._id || id,
+            type: 'album'
+        });
+    }, [displayAlbum, id, toggleSaveItem]);
 
     const headerComponent = useMemo(() => (
         <ExternalAlbumHeader
             album={displayAlbum}
             artworkUrl={artworkUrl}
             colors={colors}
+            isSaved={isSaved}
             isAlbumDownloaded={isAlbumDownloaded}
             isCurrentAlbumPlaying={isCurrentAlbumPlaying}
+            shuffleMode={shuffleMode}
+            onToggleSave={handleToggleSave}
             onDownload={handleDownloadAlbum}
+            onToggleShuffle={toggleShuffle}
             onPlay={handlePlayAll}
             onPause={pauseTrack}
+            onOptions={() => optionsRef.current?.open(displayAlbum, 'album')}
             width={width}
         />
-    ), [displayAlbum, artworkUrl, colors, isAlbumDownloaded, isCurrentAlbumPlaying, handleDownloadAlbum, handlePlayAll, pauseTrack]);
+    ), [displayAlbum, artworkUrl, colors, isSaved, isAlbumDownloaded, isCurrentAlbumPlaying, shuffleMode, handleToggleSave, handleDownloadAlbum, toggleShuffle, handlePlayAll, pauseTrack]);
 
     const displaySongs = useMemo(() => {
         return (album?.songs || []).map((s: any) => ({
@@ -406,7 +449,7 @@ export default function ExternalAlbumScreen() {
                 style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 40 }}
                 pointerEvents="box-none"
             >
-                <SafeAreaView edges={['top']} className="px-4 py-2">
+                <SafeAreaView edges={['top']} className="px-4 py-2" pointerEvents="box-none">
                     <TouchableOpacity
                         onPress={handleBack}
                         className="w-10 h-10 items-center justify-center"
@@ -421,17 +464,21 @@ export default function ExternalAlbumScreen() {
                 style={[stickyHeaderStyle, { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 30 }]}
                 pointerEvents="box-none"
             >
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
-
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: headerBaseColor }]} />
                 <LinearGradient
-                    colors={[headerBaseColor, Colors.background]}
+                    colors={[
+                        'rgba(0, 0, 0, 0.47)', // Top of sticky bar
+                        'rgba(0, 0, 0, 0.60)', // Middle dimming stop
+                        'rgba(0, 0, 0, 0.70)', // Bottom dimming stop
+                    ]}
+                    locations={[0, 0.5, 1]}
                     style={StyleSheet.absoluteFill}
                 />
 
                 <SafeAreaView edges={['top']} className="px-4 py-2 flex-row items-center w-full">
                     <View className="w-10 mr-2" />
                     <Animated.View style={[headerTitleStyle]} className="flex-1">
-                        <Text className="text-white text-sm font-semibold" numberOfLines={1}>
+                        <Text className="text-white text-base font-semibold" numberOfLines={1}>
                             {album?.title}
                         </Text>
                     </Animated.View>
@@ -444,9 +491,9 @@ export default function ExternalAlbumScreen() {
                             activeOpacity={0.8}
                         >
                             {isCurrentAlbumPlaying ? (
-                                <Pause size={20} color="black" fill="black" />
+                                <SharpPause size={22} color="black"/>
                             ) : (
-                                <Play size={20} color="black" fill="black" className="ml-0.5" />
+                                <SharpPlay size={22} color="black" style={{ marginLeft: 3 }} />
                             )}
                         </TouchableOpacity>
                     </Animated.View>
@@ -463,7 +510,18 @@ export default function ExternalAlbumScreen() {
                     ListHeaderComponent={headerComponent}
                     estimatedItemSize={80}
                     contentContainerStyle={{ paddingBottom: 100 }}
+                    overScrollMode="never"
+                    bounces={false}
                 />
+            <CollectionOptions ref={optionsRef} />
+            <ConfirmationModal
+                visible={isDownloadConfirmVisible}
+                title="Download Album"
+                message="Download this album for offline listening?"
+                confirmLabel="Download"
+                onConfirm={confirmDownloadAlbum}
+                onCancel={() => setIsDownloadConfirmVisible(false)}
+            />
         </View>
     );
 }

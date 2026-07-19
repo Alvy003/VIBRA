@@ -1,23 +1,22 @@
-import '../global.css';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { ClerkProvider, useAuth } from '@clerk/clerk-expo';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { useFonts } from 'expo-font';
-import { Stack, useRouter, useSegments, useRootNavigationState, useNavigationContainerRef } from 'expo-router';
-import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState, useCallback } from 'react'; // Added useCallback
-import 'react-native-reanimated';
-import { ClerkProvider, ClerkLoaded, useAuth } from '@clerk/clerk-expo';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { DarkTheme, ThemeProvider } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
+import { Stack, useNavigationContainerRef, useRootNavigationState, useRouter, useSegments } from 'expo-router';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect, useState } from 'react'; // Added useCallback
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import 'react-native-reanimated';
+import '../global.css';
 
 import * as SecureStore from 'expo-secure-store';
 
-import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors'; // Added Colors import
 import * as Sentry from '@sentry/react-native';
 
 const reactNavigationIntegration = Sentry.reactNavigationIntegration();
-const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN || 'https://025040216b5dea5b8eeebc2cbdb8d9b2@o4511495279673344.ingest.de.sentry.io/4511495316897872';
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
 
 Sentry.init({
   dsn: SENTRY_DSN,
@@ -34,11 +33,11 @@ Sentry.init({
       const exceptionType = event.exception?.values?.[0]?.type || '';
 
       // 1. Ignore AbortController cancellation errors and benign noise
-      const isCanceled = 
-        message.includes('canceled') || 
-        message.includes('ERR_CANCELED') || 
-        message.includes('AbortError') || 
-        exceptionValue.includes('canceled') || 
+      const isCanceled =
+        message.includes('canceled') ||
+        message.includes('ERR_CANCELED') ||
+        message.includes('AbortError') ||
+        exceptionValue.includes('canceled') ||
         exceptionValue.includes('ERR_CANCELED') ||
         exceptionValue.includes('AbortError') ||
         exceptionValue.includes('canceled request') ||
@@ -50,7 +49,7 @@ Sentry.init({
 
       // Ignore harmless React warnings (we don't want JS warnings to spam Sentry)
       if (
-        message.includes('React state update') || 
+        message.includes('React state update') ||
         exceptionValue.includes('React state update')
       ) {
         return null;
@@ -141,7 +140,7 @@ if (!publishableKey) {
 
 export {
   // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
+  ErrorBoundary
 } from 'expo-router';
 
 export const unstable_settings = {
@@ -149,12 +148,9 @@ export const unstable_settings = {
   initialRouteName: '(tabs)',
 };
 
-import TrackPlayer from 'react-native-track-player';
-import { PlaybackService } from '@/services/playbackService';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { useOnboardingStore } from '@/stores/useOnboardingStore';
 import { ClerkAuthHandler } from '@/components/ClerkAuthHandler';
-
+import { useAuthBootstrapStore } from '@/stores/useAuthBootstrapStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -166,50 +162,73 @@ function InitialLayout({ onReady }: { onReady: () => void }) {
   const rootNavState = useRootNavigationState();
   const [bootTimeout, setBootTimeout] = useState(false);
 
+  const { hasValidSession, isBootstrapped, setBootstrapped } = useAuthBootstrapStore();
+  const [bootAuthenticated, setBootAuthenticated] = useState(false);
+
+  useEffect(() => {
+    const bootstrapAuth = async () => {
+      if (hasValidSession) {
+        // Double check local token exists to prevent forcing entry on corrupt cache
+        const token = await tokenCache.getToken('__clerk_client_jwt');
+        if (token) {
+          setBootAuthenticated(true);
+        } else {
+          setBootAuthenticated(false);
+        }
+      } else {
+        setBootAuthenticated(false);
+      }
+      setBootstrapped(true);
+    };
+    bootstrapAuth();
+  }, [hasValidSession, setBootstrapped]);
+
+  const isEffectivelySignedIn = isLoaded ? isSignedIn : (isSignedIn || bootAuthenticated);
+
   useEffect(() => {
     // Fail-safe: if Clerk doesn't load in 2.5 seconds (likely offline/stuck), 
     // proceed anyway so the user can at least see cached data.
     const timer = setTimeout(() => {
-        if (!isLoaded) setBootTimeout(true);
+      if (!isLoaded) setBootTimeout(true);
     }, 2500);
     return () => clearTimeout(timer);
   }, [isLoaded]);
 
   useEffect(() => {
     // Notify RootLayout when we're ready to hide splash
-    if (isLoaded || bootTimeout) {
+    if ((isLoaded || bootTimeout || bootAuthenticated) && isBootstrapped) {
       onReady();
     }
-  }, [isLoaded, bootTimeout, onReady]);
+  }, [isLoaded, bootTimeout, bootAuthenticated, isBootstrapped, onReady]);
 
   useEffect(() => {
-    // Only redirect if Clerk is definitely loaded or we've timed out,
-    // AND the Expo Router navigation container is ready.
-    // Without the rootNavState guard, tapping a media-session notification while
-    // the service is alive (ContinuePlayback) can trigger navigation before the
-    // Root Layout has finished mounting — causing the "navigate before mounting" error.
+    // Only redirect if Expo Router navigation container is ready
     if (!rootNavState?.key) return;
-    if (!isLoaded && !bootTimeout) return;
+    if (!isBootstrapped) return;
+
+    // Allow routing if we are offline-bootstrapped OR Clerk finished loading
+    if (!bootAuthenticated && !isLoaded && !bootTimeout) return;
 
     const inAuthGroup = segments[0] === '(auth)';
 
-    if (isSignedIn && inAuthGroup) {
+    if (isEffectivelySignedIn && inAuthGroup) {
       router.replace('/(tabs)');
-    } else if (!isSignedIn && !inAuthGroup) {
+    } else if (!isEffectivelySignedIn && !inAuthGroup) {
       router.replace('/(auth)/login');
     }
-  }, [isSignedIn, isLoaded, bootTimeout, segments, rootNavState?.key]);
+  }, [isEffectivelySignedIn, isLoaded, bootTimeout, bootAuthenticated, isBootstrapped, segments, rootNavState?.key]);
 
   useEffect(() => {
     // Initialize the main player store on app boot
     usePlayerStore.getState().initPlayer();
   }, []);
 
-  if (!isLoaded && !bootTimeout) return null;
+  if (!isBootstrapped) return null;
+  if (!bootAuthenticated && !isLoaded && !bootTimeout) return null;
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      {isSignedIn ? (
+      {isEffectivelySignedIn ? (
         <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
       ) : (
         <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />

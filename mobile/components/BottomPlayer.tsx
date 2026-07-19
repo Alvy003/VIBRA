@@ -1,44 +1,42 @@
 // components/BottomPlayer.tsx
-import React, { useEffect, useCallback, useRef } from 'react';
+import Colors from '@/constants/Colors';
+import { useNativeAudioDevices } from '@/hooks/useNativeAudioDevices';
+import { resolveAssetUrl } from '@/lib/url';
+import { useColorStore } from '@/stores/useColorStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Music } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef } from 'react';
 import {
-  View,
+  Dimensions,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  Dimensions,
+  View,
 } from 'react-native';
-import { Image } from 'expo-image';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  interpolate,
-  Easing,
-  FadeIn,
-  FadeOut,
-  runOnJS,
-  Extrapolation,
-  useDerivedValue,
-  useAnimatedReaction,
-  SharedValue,
-} from 'react-native-reanimated';
 import {
   Gesture,
   GestureDetector,
 } from 'react-native-gesture-handler';
-import { LinearGradient } from 'expo-linear-gradient';
-import Colors from '@/constants/Colors';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { useColorStore } from '@/stores/useColorStore';
-import { useProgress, State } from 'react-native-track-player';
-import { Music } from 'lucide-react-native';
+import Animated, {
+  Easing,
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  SharedValue,
+  useAnimatedReaction,
+  useAnimatedStyle,
+  useDerivedValue,
+  useSharedValue,
+  withSpring,
+  withTiming
+} from 'react-native-reanimated';
+import { useProgress } from 'react-native-track-player';
+import { BottomPlaybackButton } from './BottomPlaybackButton';
+import DeviceSelector, { DeviceIcon, DeviceSelectorRef } from './DeviceSelector';
 import MarqueeText from './MarqueeText';
-import { SharpPlay, SharpPause } from './SharpIcons';
-import DeviceSelector, { DeviceSelectorRef, DeviceIcon } from './DeviceSelector';
-import { useNativeAudioDevices } from '@/hooks/useNativeAudioDevices';
 import { SaveToPlaylistButton } from './SaveToPlaylistButton';
-import { resolveAssetUrl } from '@/lib/url';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -233,10 +231,6 @@ interface BottomPlayerProps {
 
 export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
   const currentTrack = usePlayerStore(s => s.currentTrack);
-  const isPlaying = usePlayerStore(s => s.isPlaying);
-  const playbackState = usePlayerStore(s => s.playbackState);
-
-  const togglePlay = usePlayerStore(s => s.togglePlay);
   const playNext = usePlayerStore(s => s.playNext);
   const playPrevious = usePlayerStore(s => s.playPrevious);
 
@@ -276,8 +270,6 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
   const swipeContentOpacity = useSharedValue(1);
   const artworkSlide = useSharedValue(0);
   const textFade = useSharedValue(1);
-  const playButtonScale = useSharedValue(1);
-  const nextButtonScale = useSharedValue(1);
 
   const prevTrackKeyRef = useRef<string | null>(null);
   const isFirstMount = useRef(true);
@@ -393,12 +385,6 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
   }));
 
   // Handlers
-  const handlePlayPress = useCallback(() => {
-    playButtonScale.value = withTiming(0.78, { duration: 60 }, () => {
-      playButtonScale.value = withSpring(1, { damping: 12, stiffness: 300 });
-    });
-    togglePlay();
-  }, [togglePlay]);
 
   const handleExpand = useCallback(() => {
     const id = currentTrack?.id ?? currentTrack?.url ?? '';
@@ -422,8 +408,6 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
       <ProgressBridgeMemo progressSV={progressSV} durationSV={durationSV} />
 
       <Animated.View
-        entering={FadeIn.duration(200)}
-        exiting={FadeOut.duration(150)}
         style={styles.container}
       >
         {/* ✅ Spotify-style subtle gradient background */}
@@ -461,6 +445,7 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
 
                     <Animated.View style={[styles.trackInfo, textAnimStyle]}>
                       <MarqueeText
+                        key={displayTrack?.id || displayTrack?.url || 'bottom-marquee'}
                         text={displayTrack?.title || ''}
                         style={styles.title}
                         delay={2000}
@@ -488,21 +473,11 @@ export const BottomPlayer = React.memo(({ onExpand }: BottomPlayerProps) => {
                   {/* ✅ Pass background color to SaveToPlaylistButton */}
                   <SaveToPlaylistButton
                     track={currentTrack}
-                    size={24}
+                    variant="medium"
                     checkmarkColor={backgroundColor}
                   />
 
-                  <TouchableOpacity
-                    onPress={handlePlayPress}
-                    style={styles.controlButton}
-                    activeOpacity={1}
-                  >
-                    {isPlaying || playbackState === State.Buffering || playbackState === State.Loading ? (
-                      <SharpPause size={24} color={Colors.textPrimary} />
-                    ) : (
-                      <SharpPlay size={24} color={Colors.textPrimary} style={{ marginLeft: 2 }} />
-                    )}
-                  </TouchableOpacity>
+                  <BottomPlaybackButton />
                 </View>
               </View>
             </TouchableOpacity>

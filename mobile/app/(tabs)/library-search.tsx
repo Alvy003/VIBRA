@@ -1,27 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import Colors from '@/constants/Colors';
+import { resolveAssetUrl } from '@/lib/url';
+import { useDownloadStore } from '@/stores/useDownloadStore';
+import { useMusicStore } from '@/stores/useMusicStore';
+import { usePlaylistStore } from '@/stores/usePlaylistStore';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
+import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, Download, Heart, Music, User, X } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
 import {
-    View,
-    Text,
-    StyleSheet,
-    TextInput,
     FlatList,
+    StyleSheet,
+    Text,
+    TextInput,
     TouchableOpacity,
-    Dimensions,
-    KeyboardAvoidingView,
-    Platform
+    View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-import { ArrowLeft, Search, X, Music, Disc, User, Heart, Download } from 'lucide-react-native';
-import { Image } from 'expo-image';
-import { usePlaylistStore } from '@/stores/usePlaylistStore';
-import { useMusicStore } from '@/stores/useMusicStore';
-import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
-import { useDownloadStore } from '@/stores/useDownloadStore';
-import { resolveAssetUrl } from '@/lib/url';
-import Colors from '@/constants/Colors';
-
-const { width } = Dimensions.get('window');
 
 export default function LibrarySearchScreen() {
     const router = useRouter();
@@ -191,6 +186,8 @@ export default function LibrarySearchScreen() {
                     maxToRenderPerBatch={10}
                     windowSize={5}
                     removeClippedSubviews={true}
+                    overScrollMode="never"
+                    bounces={false}
                     contentContainerStyle={[
                         styles.listContent,
                         { flexGrow: 1 }

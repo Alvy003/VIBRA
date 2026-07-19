@@ -89,7 +89,7 @@ const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 const AnimatedFlashList = Animated.createAnimatedComponent(FlashList) as any;
 
 // ✅ OPTIMIZED: Extract constants
-const LINE_HEIGHT = 80;
+const LINE_HEIGHT = 70;
 const SCROLL_OFFSET_MULTIPLIER = 0.25;
 const AUTO_HIDE_SYNC_DELAY = 5000;
 
@@ -97,7 +97,10 @@ const LyricsModal = React.memo(() => {
     const insets = useSafeAreaInsets();
 
     const currentTrack = usePlayerStore((s) => s.currentTrack);
-    const { isPlaying, togglePlay, playNext, playPrevious } = usePlayerStore();
+    const isPlaying = usePlayerStore((s) => s.isPlaying);
+    const togglePlay = usePlayerStore((s) => s.togglePlay);
+    const playNext = usePlayerStore((s) => s.playNext);
+    const playPrevious = usePlayerStore((s) => s.playPrevious);
     const getLyrics = useLyricsStore((s) => s.getLyrics);
     const getTrackColors = useColorStore((s) => s.getTrackColors);
 
@@ -257,7 +260,7 @@ const LyricsModal = React.memo(() => {
     const isLoading = lyricsState.status === 'loading';
     const hasNoLyrics = lyricsState.status === 'not_found' || lyricsState.status === 'error';
     const baseColor = trackColors.dominant || '#3a3a5c';
-    const backgroundColor = darkenColor(baseColor, 0.2);
+    const backgroundColor = darkenColor(baseColor, 0.65);
 
     return (
         <Modal
@@ -324,6 +327,8 @@ const LyricsModal = React.memo(() => {
                                 maxToRenderPerBatch={10}
                                 updateCellsBatchingPeriod={50}
                                 windowSize={11}
+                                overScrollMode="never"
+                                bounces={false}
                             />
 
                             {/* ✅ NEW: Bottom gradient shadow */}
@@ -351,6 +356,8 @@ const LyricsModal = React.memo(() => {
                                 ]}
                                 showsVerticalScrollIndicator={false}
                                 removeClippedSubviews={true}
+                                overScrollMode="never"
+                                bounces={false}
                             >
                                 <Text style={styles.plainLyricsText}>
                                     {(lyricsState as any).text}
@@ -455,20 +462,24 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
     },
     lyricText: {
-        fontSize: 20,
-        fontWeight: '800',
-        lineHeight: 30,
+        fontSize: 19,
+        fontWeight: '600',
+        paddingVertical: 1,
         textAlign: 'left',
         letterSpacing: -0.3,
     },
     lyricTextActive: {
         color: '#fff',
+        fontSize: 21,
+        fontWeight: '800',
+        paddingVertical: 2,
+        marginVertical: 10,
     },
     lyricTextPast: {
-        color: 'rgba(255,255,255,0.4)',
+        color: 'rgba(255,255,255,0.25)',
     },
     lyricTextInactive: {
-        color: 'rgba(255,255,255,0.25)',
+        color: 'rgba(255,255,255,0.4)',
     },
     noLyricsContainer: {
         flex: 1,

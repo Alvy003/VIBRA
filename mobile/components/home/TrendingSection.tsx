@@ -13,7 +13,7 @@ import { resolveAssetUrl } from '@/lib/url';
 import Colors from '@/constants/Colors';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.38;
+const CARD_WIDTH = SCREEN_WIDTH * 0.40;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
@@ -43,6 +43,7 @@ export const TrendingSection = React.memo(() => {
             imageUrl={item.imageUrl}
             onPress={() => handlePlay(item)}
             index={index}
+            width={CARD_WIDTH}
         />
     ), [handlePlay]);
 
@@ -95,7 +96,7 @@ export const TrendingSection = React.memo(() => {
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
                 data={trendingSongs.slice(1, 9)}
                 keyExtractor={(item, index) => `${item._id || item.id}-${index}`}
                 renderItem={renderTrendingSong}
@@ -118,7 +119,7 @@ export const TrendingSection = React.memo(() => {
 TrendingSection.displayName = 'TrendingSection';
 
 const styles = StyleSheet.create({
-    sectionContainer: { marginTop: 28 },
+    sectionContainer: { marginTop: 24 },
     heroCardWrapper: { marginHorizontal: 20, marginBottom: 14 },
     highlightCard: {
         flexDirection: 'row',

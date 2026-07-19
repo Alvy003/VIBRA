@@ -8,12 +8,15 @@ import { Music } from 'lucide-react-native';
 import { resolveAssetUrl } from '@/lib/url';
 import Colors from '@/constants/Colors';
 
+import { useSearchStore } from '@/stores/useSearchStore';
+
 interface PlaylistResultRowProps {
   playlist: any;
 }
 
 export const PlaylistResultRow = React.memo(({ playlist }: PlaylistResultRowProps) => {
   const router = useRouter();
+  const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -21,7 +24,15 @@ export const PlaylistResultRow = React.memo(({ playlist }: PlaylistResultRowProp
     const rawId = playlist.id || playlist._id || playlist.externalId;
     
     if (rawId) {
-      const cleanId = rawId.replace(/^jiosaavn_playlist_/, '');
+      addRecentSearch({
+        id: String(rawId),
+        title: playlist.title || playlist.name || '',
+        artist: playlist.artist || playlist.subtitle || playlist.description || '',
+        imageUrl: playlist.imageUrl || playlist.image || '',
+        type: 'playlist',
+        timestamp: Date.now(),
+      });
+      const cleanId = String(rawId).replace(/^jiosaavn_playlist_/, '');
       // Playlists are only supported for JioSaavn source currently
       router.push(`/(tabs)/playlist/external/jiosaavn/${cleanId}?from=search` as any);
     }

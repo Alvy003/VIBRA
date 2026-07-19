@@ -9,18 +9,15 @@ import { LyricLine } from '@/lib/lyrics';
 const LYRICS_PREVIEW_HEIGHT = 260;
 const PREVIEW_LINE_COUNT = 4;
 
-function getVibrantColor(hex: string): string {
+function getDarkenedColor(hex: string, factor = 0.35): string {
     const color = hex.replace('#', '');
     let r = parseInt(color.substring(0, 2), 16);
     let g = parseInt(color.substring(2, 4), 16);
     let b = parseInt(color.substring(4, 6), 16);
 
-    const gray = (r + g + b) / 3;
-    const saturationBoost = 1.3;
-
-    r = Math.min(255, Math.max(0, Math.floor(gray + (r - gray) * saturationBoost)));
-    g = Math.min(255, Math.max(0, Math.floor(gray + (g - gray) * saturationBoost)));
-    b = Math.min(255, Math.max(0, Math.floor(gray + (b - gray) * saturationBoost)));
+    r = Math.floor(r * factor);
+    g = Math.floor(g * factor);
+    b = Math.floor(b * factor);
 
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
@@ -57,8 +54,7 @@ const LyricsPreviewCard = React.memo(() => {
     }, [hasSyncedLyrics, hasPlainLyrics, activeIndex, syncedLines, lyricsState]);
 
     const baseColor = trackColors.dominant || '#3a3a5c';
-    const vibrantColor = getVibrantColor(baseColor);
-    const cardBackground = `${vibrantColor}99`;
+    const cardBackground = getDarkenedColor(baseColor, 0.35);
 
     return (
         <TouchableOpacity
@@ -129,7 +125,7 @@ export default LyricsPreviewCard;
 
 const styles = StyleSheet.create({
     lyricsPreviewContainer: {
-        marginTop: 10,
+        marginTop: 16,
         marginHorizontal: 16,
         borderRadius: 16,
         padding: 20,
@@ -147,16 +143,16 @@ const styles = StyleSheet.create({
         fontWeight: '800',
     },
     expandButton: {
-        marginTop: 25,
-        paddingVertical: 8,
+        marginTop: 20,
+        paddingVertical: 6,
         paddingHorizontal: 16,
-        backgroundColor: 'rgba(255,255,255,0.2)',
-        borderRadius: 16,
+        backgroundColor: '#ffffff',
+        borderRadius: 20,
         alignSelf: 'flex-start',
     },
     expandButtonText: {
-        color: '#fff',
-        fontSize: 12,
+        color: '#000000',
+        fontSize: 13,
         fontWeight: '600',
     },
     lyricsPreviewContentWrapper: {
@@ -173,21 +169,26 @@ const styles = StyleSheet.create({
     },
     lyricsPreviewLine: {
         fontSize: 18,
-        fontWeight: '800',
+        fontWeight: '600',
+        lineHeight: 26,
         textAlign: 'left',
         letterSpacing: -0.3,
     },
     lyricsPreviewActive: {
         color: '#fff',
-        fontSize: 18,
+        fontSize: 20,
+        fontWeight: '800',
+        paddingVertical: 2
     },
     lyricsPreviewPast: {
-        color: 'rgba(255,255,255,0.4)',
+        color: 'rgba(255,255,255,0.25)',
         fontSize: 18,
+        fontWeight: '800',
     },
     lyricsPreviewInactive: {
-        color: 'rgba(255,255,255,0.25)',
-        fontSize: 20,
+        color: 'rgba(255,255,255,0.4)',
+        fontSize: 18,
+        fontWeight: '800',
     },
     plainLyricsPreview: {
         height: LYRICS_PREVIEW_HEIGHT,

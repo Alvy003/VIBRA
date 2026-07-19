@@ -1,6 +1,7 @@
 // components/search/RecentSearches.tsx
 import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList } from 'react-native';
+import { useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { X } from 'lucide-react-native';
@@ -69,6 +70,8 @@ export const RecentSearches = React.memo(({
   const query = useSearchStore((s) => s.query);
   const playTrack = usePlayerStore((s) => s.playTrack);
 
+  const router = useRouter();
+
   const handleSelect = useCallback((item: RecentSearchItem) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -80,10 +83,19 @@ export const RecentSearches = React.memo(({
         artwork: item.imageUrl,
         source: 'jiosaavn',
       } as any);
+    } else if (item.type === 'artist') {
+      const cleanId = item.id.replace('jiosaavn_artist_', '');
+      router.push(`/(tabs)/artist/external/jiosaavn/${cleanId}?from=search` as any);
+    } else if (item.type === 'album') {
+      const cleanId = item.id.replace(/^jiosaavn_album_/, '');
+      router.push(`/(tabs)/album/external/jiosaavn/${cleanId}?from=search` as any);
+    } else if (item.type === 'playlist') {
+      const cleanId = item.id.replace(/^jiosaavn_playlist_/, '');
+      router.push(`/(tabs)/playlist/external/jiosaavn/${cleanId}?from=search` as any);
     }
     
     onSelect(item);
-  }, [playTrack, onSelect]);
+  }, [playTrack, router, onSelect]);
 
   const handleRemove = useCallback((id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -129,6 +141,8 @@ export const RecentSearches = React.memo(({
         contentContainerStyle={styles.listContent}
         initialNumToRender={10}
         maxToRenderPerBatch={10}
+        overScrollMode="never"
+        bounces={false}
       />
     </Animated.View>
   );

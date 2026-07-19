@@ -1,15 +1,14 @@
 // components/home/AnimatedHeader.tsx
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { UserProfileIcon } from '../UserProfileIcon';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
-  useAnimatedStyle,
-  interpolate,
   Extrapolation,
+  interpolate,
   SharedValue,
+  useAnimatedStyle,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { COLORS } from '@/constants/design';
+import { UserProfileIcon } from '../UserProfileIcon';
 
 interface AnimatedHeaderProps {
   scrollY: SharedValue<number>;
@@ -23,8 +22,8 @@ export const AnimatedHeader = React.memo(({ scrollY, userImageUrl }: AnimatedHea
   const contentAnimatedStyle = useAnimatedStyle(() => ({
     opacity: interpolate(
       scrollY.value,
-      [0, 30, 60],
-      [1, 0.5, 0],
+      [0, 25, 50],
+      [1, 0.2, 0],
       Extrapolation.CLAMP
     ),
     transform: [{

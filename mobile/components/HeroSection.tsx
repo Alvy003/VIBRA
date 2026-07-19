@@ -1,24 +1,24 @@
 // components/HeroSection.tsx
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import Colors from '@/constants/Colors';
+import * as Haptics from 'expo-haptics';
+import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Play } from 'lucide-react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  View,
+  GestureResponderEvent,
+  StyleSheet,
   Text,
   useWindowDimensions,
-  StyleSheet,
-  GestureResponderEvent,
+  View,
 } from 'react-native';
-import { Image } from 'expo-image';
 import Animated, {
-  useSharedValue,
   useAnimatedStyle,
+  useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Play, Heart, Sparkles } from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
-import { AnimatedCard } from './AnimatedCard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Colors from '@/constants/Colors';
+import { AnimatedCard } from './AnimatedCard';
 
 const CROSSFADE_DURATION = 1000;
 const AUTO_ROTATE_MS = 10000;

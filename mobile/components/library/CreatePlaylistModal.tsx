@@ -1,20 +1,19 @@
-import React, { useState } from 'react';
-import {
-    View,
-    Text,
-    StyleSheet,
-    Modal,
-    TextInput,
-    TouchableOpacity,
-    KeyboardAvoidingView,
-    Platform,
-    TouchableWithoutFeedback,
-    Keyboard
-} from 'react-native';
 import Colors from '@/constants/Colors';
 import { BlurView } from 'expo-blur';
-import { COLORS, RADIUS } from '@/constants/design';
 import * as Haptics from 'expo-haptics';
+import React, { useState } from 'react';
+import {
+    Keyboard,
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    TouchableWithoutFeedback,
+    View
+} from 'react-native';
 
 interface CreatePlaylistModalProps {
     visible: boolean;

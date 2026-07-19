@@ -2,8 +2,7 @@
 import TrackPlayer, {
   AppKilledPlaybackBehavior,
   Capability,
-  RepeatMode,
-  Event,
+  RepeatMode
 } from 'react-native-track-player';
 
 let isSetup = false;

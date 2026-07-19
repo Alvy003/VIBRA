@@ -1,35 +1,35 @@
 // components/AddTrackBottomSheet.tsx
-import React, { useCallback, useMemo, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import {
-    View,
-    Text,
-    TouchableOpacity,
-    StyleSheet,
-    Image,
-    Dimensions,
-    BackHandler,
-} from 'react-native';
+import Colors from '@/constants/Colors';
+import { resolveAssetUrl } from '@/lib/url';
+import { useMusicStore } from '@/stores/useMusicStore';
+import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
+import { usePlaylistStore } from '@/stores/usePlaylistStore';
 import {
     BottomSheetFlatList,
     BottomSheetTextInput,
 } from '@gorhom/bottom-sheet';
-import {
-    Plus,
-    Music,
-    X,
-    Check,
-    Search,
-    Heart
-} from 'lucide-react-native';
-import { usePlaylistStore } from '@/stores/usePlaylistStore';
-import { useMusicStore } from '@/stores/useMusicStore';
-import { resolveAssetUrl } from '@/lib/url';
-import { CreatePlaylistModal } from './library/CreatePlaylistModal';
-import BottomSheet from './BottomSheet';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import {
+    Heart,
+    Music,
+    Search,
+    X
+} from 'lucide-react-native';
+import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from 'react';
+import {
+    BackHandler,
+    Dimensions,
+    Image,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Colors from '@/constants/Colors';
+import BottomSheet from './BottomSheet';
+import { CreatePlaylistModal } from './library/CreatePlaylistModal';
+import SaveStateIcon from './SaveStateIcon';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -53,18 +53,28 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
         const [isCreateModalVisible, setIsCreateModalVisible] = useState(false);
         const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-        useImperativeHandle(ref, () => ({
-            open: (track: any) => {
-                setTargetTrack(track);
-                setSearchQuery('');
-                setIsCreateModalVisible(false);
-                fetchUserPlaylists();
-                setIsSheetOpen(true);
-            },
-            close: () => {
-                setIsSheetOpen(false);
-            }
-        }));
+        useImperativeHandle(ref, () => {
+            const api = {
+                open: (track: any) => {
+                    setTargetTrack(track);
+                    setSearchQuery('');
+                    setIsCreateModalVisible(false);
+                    fetchUserPlaylists();
+                    setIsSheetOpen(true);
+                },
+                close: () => {
+                    setIsSheetOpen(false);
+                }
+            };
+            usePlayerUIStore.setState({ addTrackSheetRef: api });
+            return api;
+        });
+
+        React.useEffect(() => {
+            return () => {
+                usePlayerUIStore.setState({ addTrackSheetRef: null });
+            };
+        }, []);
 
         // Handle Back button on Android
         React.useEffect(() => {
@@ -112,7 +122,11 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Rigid);
             try {
                 if (inPlaylist) {
-                    const idToRemove = targetTrack._id || targetTrack.externalId || targetTrack.id;
+                    const isExternal = targetTrack.source === 'jiosaavn' || targetTrack.source === 'youtube' || 
+                        (targetTrack.externalId && !/^[0-9a-fA-F]{24}$/.test(String(targetTrack.externalId)));
+                    const idToRemove = isExternal 
+                        ? (targetTrack.externalId || targetTrack.id) 
+                        : (targetTrack._id || targetTrack.id || targetTrack.externalId);
                     await removeTrackFromPlaylist(playlist._id, String(idToRemove));
                 } else {
                     await addTrackToPlaylist(playlist._id, targetTrack);
@@ -159,13 +173,12 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                         <Text style={styles.playlistName} numberOfLines={1}>{item.name}</Text>
                         <Text style={styles.playlistCount}>{item.songs?.length || 0} songs</Text>
                     </View>
-                    <View style={[styles.checkCircle, inPlaylist && styles.checkCircleActive]}>
-                        {inPlaylist ? (
-                            <Check size={16} color={Colors.surfaceLighter} strokeWidth={3} />
-                        ) : (
-                            <Plus size={16} color={Colors.textMuted} strokeWidth={2} />
-                        )}
-                    </View>
+                    <SaveStateIcon
+                        variant="medium"
+                        isSaved={inPlaylist}
+                        outlineColor={Colors.textSecondary}
+                        checkmarkColor={Colors.surfaceLighter}
+                    />
                 </TouchableOpacity>
             );
         };
@@ -239,15 +252,14 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                                 </LinearGradient>
                                 <View style={styles.playlistInfo}>
                                     <Text style={styles.playlistName}>Liked Songs</Text>
-                                    <Text style={styles.playlistCount}>{likedSongs.length} songs</Text>
+                                    <Text style={styles.playlistCount}>{likedSongs.filter((s: any) => s.externalId?.startsWith('jiosaavn_')).length} songs</Text>
                                 </View>
-                                <View style={[styles.checkCircle, isLiked && styles.checkCircleActive]}>
-                                    {isLiked ? (
-                                        <Check size={16} color={Colors.surfaceLighter} strokeWidth={3} />
-                                    ) : (
-                                        <Plus size={16} color={Colors.textMuted} strokeWidth={2} />
-                                    )}
-                                </View>
+                                <SaveStateIcon
+                                    variant="medium"
+                                    isSaved={isLiked}
+                                    outlineColor={Colors.textSecondary}
+                                    checkmarkColor={Colors.surfaceLighter}
+                                />
                             </TouchableOpacity>
                         </View>
                     }
@@ -371,24 +383,12 @@ const styles = StyleSheet.create({
         color: Colors.textPrimary,
         fontSize: 16,
         fontWeight: '400',
+        marginRight: 16,
     },
     playlistCount: {
-        color: Colors.textMuted,
+        color: Colors.textSecondary,
         fontSize: 12,
         marginTop: 2,
-    },
-    checkCircle: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: '#3f3f46',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    checkCircleActive: {
-        backgroundColor: Colors.accent,
-        borderColor: Colors.accent,
     },
     emptyContainer: {
         paddingTop: 40,

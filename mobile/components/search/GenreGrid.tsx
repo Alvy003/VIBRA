@@ -1,13 +1,13 @@
+import { Disc, Dumbbell, Globe, Guitar, Leaf, Mic2, Music2, Zap } from 'lucide-react-native';
 import React, { useCallback } from 'react';
 import {
-    View,
-    Text,
-    FlatList,
-    TouchableOpacity,
-    StyleSheet,
     Dimensions,
+    FlatList,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
-import { Music2, Mic2, Headphones, Dumbbell, Leaf, Guitar, Zap, Globe, Disc } from 'lucide-react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = (SCREEN_WIDTH - 48) / 2; // 2 columns with gaps

@@ -1,7 +1,7 @@
 // components/MarqueeText.tsx
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import TextTicker from 'react-native-text-ticker';
+import { Marquee } from '@animatereactnative/marquee';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedView from '@react-native-masked-view/masked-view';
 
@@ -29,37 +29,33 @@ const MarqueeText = React.memo(({
   const [containerWidth, setContainerWidth] = React.useState(0);
   const [textWidth, setTextWidth] = React.useState(0);
 
+  const [isReady, setIsReady] = React.useState(false);
+
   // Consider it overflowing only if it exceeds the animation threshold securely
   const isOverflowing = containerWidth > 0 && textWidth > containerWidth + 2;
 
-  // Calculate dynamic duration based on text width to maintain constant speed
-  const dynamicDuration = React.useMemo(() => {
-    // Speed: ~40 pixels per second (Standard for music apps like Spotify)
-    const speed = 30;
-    if (textWidth > 0) {
-      return (textWidth / speed) * 1000;
+  React.useEffect(() => {
+    if (isOverflowing && !disableFade) {
+      setIsReady(false);
+      const timer = setTimeout(() => {
+        setIsReady(true);
+      }, delay);
+      return () => clearTimeout(timer);
     }
-    // Fallback if measurement hasn't happened yet
-    return (text.length * 10 / speed) * 1000;
-  }, [textWidth, text, duration]);
+  }, [isOverflowing, delay, disableFade]);
 
   const ticker = (
-    <TextTicker
+    <Marquee
+      spacing={50}
+      speed={isReady ? 0.5 : 0}
       style={style}
-      duration={dynamicDuration}
-      loop
-      bounce={false}
-      repeatSpacer={50}
-      marqueeDelay={delay}
-      shouldAnimateTreshold={10}
-      animationType="auto"
     >
-      {text}
-    </TextTicker>
+      <Text style={style}>{text}</Text>
+    </Marquee>
   );
 
   return (
-    <View 
+    <View
       style={[styles.container, { height: lineHeight }]}
       onLayout={(e) => setContainerWidth(e.nativeEvent.layout.width)}
     >
@@ -75,31 +71,33 @@ const MarqueeText = React.memo(({
         {text}
       </Text>
 
-      {(!isOverflowing || disableFade) ? (
-        <View style={[styles.tickerWrapper, { height: lineHeight }]}>
+      {/* Static text visible instantly, stays visible during delay */}
+      {(!isOverflowing || disableFade || !isReady) && (
+        <View style={[styles.tickerWrapper, { height: lineHeight, position: (isOverflowing && !disableFade) ? 'absolute' : 'relative', top: 0, left: 0 }]}>
           <Text style={style} numberOfLines={1}>{text}</Text>
         </View>
-      ) : (
-        <MaskedView
-          style={styles.maskedView}
-          maskElement={
-            <View style={styles.maskRow}>
-              {/* Spotify uses a sharp clip on the left, so no mask gradient here! */}
-              <View style={styles.solidMask} />
-              {/* Only the right edge fades out to indicate more text */}
+      )}
+
+      {/* Marquee mounts invisibly to measure, then fades in and starts moving after delay */}
+      {isOverflowing && !disableFade && (
+        <View style={{ flex: 1, opacity: isReady ? 1 : 0 }}>
+          <MaskedView
+            style={styles.maskedView}
+            maskElement={
               <LinearGradient
-                colors={['#000', 'transparent']}
+                colors={['transparent', '#000', '#000', 'transparent']}
+                locations={[0, 0.05, 0.95, 1]}
                 start={{ x: 0, y: 0.5 }}
                 end={{ x: 1, y: 0.5 }}
-                style={{ width: fadeWidth, height: '100%' }}
+                style={styles.maskRow}
               />
+            }
+          >
+            <View style={[styles.tickerWrapper, { height: lineHeight }]}>
+              {ticker}
             </View>
-          }
-        >
-          <View style={[styles.tickerWrapper, { height: lineHeight }]}>
-            {ticker}
-          </View>
-        </MaskedView>
+          </MaskedView>
+        </View>
       )}
     </View>
   );
@@ -118,12 +116,8 @@ const styles = StyleSheet.create({
   },
   maskRow: {
     flex: 1,
-    flexDirection: 'row',
+    width: '100%',
     height: '100%',
-  },
-  solidMask: {
-    flex: 1,
-    backgroundColor: '#000',
   },
   tickerWrapper: {
     justifyContent: 'center',

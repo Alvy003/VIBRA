@@ -1,9 +1,9 @@
 // components/home/HeroPatternAlt.tsx
-import React, { useMemo } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
-import Svg, { Defs, Pattern, Circle, Line, Rect } from 'react-native-svg';
-import { LinearGradient } from 'expo-linear-gradient';
 import { TIME_GRADIENTS, getTimeOfDay } from '@/constants/design';
+import { LinearGradient } from 'expo-linear-gradient';
+import React, { useMemo } from 'react';
+import { Dimensions, StyleSheet, View } from 'react-native';
+import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -54,7 +54,7 @@ export const HeroPatternAlt = React.memo(({ height = 260 }: HeroPatternProps) =>
       {/* Fade to black */}
       <LinearGradient
         colors={['transparent', 'rgba(9,9,11,0.6)', '#09090b']}
-        locations={[0.2, 0.6, 1]}
+        locations={[0.6, 0.8, 1]}
         style={styles.gradient}
       />
 

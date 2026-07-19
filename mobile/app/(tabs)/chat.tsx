@@ -1,52 +1,44 @@
 // app/(tabs)/chat.tsx
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { PlaylistResult } from '@/components/ai-playlist/PlaylistResult';
+import BottomSheet, { BottomSheetRef } from '@/components/BottomSheet';
+import { UserProfileIcon } from '@/components/UserProfileIcon';
+import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
+import { useAuth, useUser } from '@clerk/clerk-expo';
+import * as Haptics from 'expo-haptics';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
-  View,
-  Text,
+  Link2,
+  Music2,
+  Plus,
+  Send,
+  Sparkles,
+  X,
+  Youtube,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
   StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
-  Platform,
-  StatusBar,
-  Dimensions,
-  ScrollView,
-  Image,
-  KeyboardAvoidingView,
-  Modal,
-  Keyboard,
+  View,
 } from 'react-native';
-import BottomSheet, { BottomSheetRef } from '@/components/BottomSheet';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
 import Animated, {
-  FadeOut,
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  FadeInDown,
   FadeIn,
+  FadeInDown,
+  FadeOut,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
 } from 'react-native-reanimated';
-import {
-  Sparkles,
-  Send,
-  X,
-  Trash2,
-  Music2,
-  Link2,
-  Plus,
-  Youtube,
-  Globe,
-  ArrowRight,
-} from 'lucide-react-native';
-import * as Haptics from 'expo-haptics';
-import { useAuth, useUser } from '@clerk/clerk-expo';
-import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
-import { PlaylistResult } from '@/components/ai-playlist/PlaylistResult';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { UserProfileIcon } from '@/components/UserProfileIcon';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface AIPlaylistTrack {
   externalId: string;
@@ -224,15 +216,8 @@ export default function ChatScreen() {
     }
   };
 
-  const [placeholderIndex, setPlaceholderIndex] = useState(0);
-  const placeholders = ["Ask for a playlist...", "Chat about music..."];
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setPlaceholderIndex((prev) => (prev + 1) % placeholders.length);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+
 
   const isWorking = generationStage === 'analyzing' || generationStage === 'generating';
 
@@ -316,6 +301,8 @@ export default function ChatScreen() {
                 onOpenPlaylist={(p) => setSelectedPlaylist(p)}
               />
             )}
+            overScrollMode="never"
+            bounces={false}
             ListEmptyComponent={!isWorking ? (
               <EmptyDiscoveryState />
             ) : null}
@@ -395,7 +382,7 @@ export default function ChatScreen() {
                   </TouchableOpacity>
                   <TextInput
                     style={styles.input}
-                    placeholder={placeholders[placeholderIndex]}
+                    placeholder="Ask for a playlist..."
                     placeholderTextColor="#52525b"
                     selectionColor="#8B5CF6"
                     value={input}

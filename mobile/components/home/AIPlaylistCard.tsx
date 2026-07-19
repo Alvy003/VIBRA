@@ -1,21 +1,17 @@
 // components/home/AIPlaylistCard.tsx
-import React, { useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions, Pressable } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import { ArrowRight, Sparkles } from 'lucide-react-native';
+import React, { useEffect } from 'react';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withTiming,
-  withSequence,
   Easing,
   FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles, ArrowRight } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface AIPlaylistCardProps {
   index?: number;
@@ -25,6 +21,9 @@ interface AIPlaylistCardProps {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export const AIPlaylistCard = React.memo(({ index = 0, noAnim = false }: AIPlaylistCardProps) => {
+  if (__DEV__) {
+    console.log('[AIPlaylistCard] Render');
+  }
   const router = useRouter();
   const glowValue = useSharedValue(0);
   const pressedScale = useSharedValue(1);
@@ -54,7 +53,6 @@ export const AIPlaylistCard = React.memo(({ index = 0, noAnim = false }: AIPlayl
   };
   
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push({
       pathname: '/(tabs)/chat'
     });

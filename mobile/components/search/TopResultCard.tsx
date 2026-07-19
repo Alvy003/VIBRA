@@ -25,9 +25,10 @@ export const TopResultCard = React.memo(({ result, type, searchQuery }: TopResul
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
+    const source = result.source || 'jiosaavn';
+    const rawId = result.externalId || result.id || result._id;
+
     if (type === 'song') {
-      const source = result.source || 'jiosaavn';
-      const rawId = result.externalId || result._id || result.videoId || result.id;
       // Ensure JioSaavn IDs are prefixed so getPlayableUrl cleanId logic works correctly
       const songId = rawId
           ? (source === 'jiosaavn' && !String(rawId).startsWith('jiosaavn_')
@@ -38,8 +39,8 @@ export const TopResultCard = React.memo(({ result, type, searchQuery }: TopResul
       addRecentSearch({
         id: songId,
         title: result.title,
-        artist: result.artist,
-        imageUrl: result.imageUrl,
+        artist: result.artist || '',
+        imageUrl: result.imageUrl || '',
         type: 'song',
         timestamp: Date.now(),
       });
@@ -57,26 +58,45 @@ export const TopResultCard = React.memo(({ result, type, searchQuery }: TopResul
       } as any, searchQuery ? { type: 'search', id: 'search', title: searchQuery } : undefined);
     } 
     else if (type === 'artist') {
-      // All search results are external (JioSaavn)
-      if (result.type === 'artist') {
-        const cleanId = result.externalId.replace('jiosaavn_artist_', '');
+      if (rawId) {
+        addRecentSearch({
+          id: String(rawId),
+          title: result.name || result.title || '',
+          artist: '',
+          imageUrl: result.imageUrl || '',
+          type: 'artist',
+          timestamp: Date.now(),
+        });
+        const cleanId = String(rawId).replace('jiosaavn_artist_', '');
         router.push(`/(tabs)/artist/external/jiosaavn/${cleanId}?from=search` as any);
-        return;
       }
     } 
     else if (type === 'album') {
-      // All search results are external (JioSaavn)
-      if (result.type === 'album') {
-        const cleanId = result.externalId.replace('jiosaavn_album_', '');
+      if (rawId) {
+        addRecentSearch({
+          id: String(rawId),
+          title: result.title || '',
+          artist: result.artist || '',
+          imageUrl: result.imageUrl || '',
+          type: 'album',
+          timestamp: Date.now(),
+        });
+        const cleanId = String(rawId).replace(/^jiosaavn_album_/, '');
         router.push(`/(tabs)/album/external/jiosaavn/${cleanId}?from=search` as any);
-        return;
       }
     }
     else if (type === 'playlist') {
-      if (result.type === 'playlist') {
-        const cleanId = result.externalId.replace('jiosaavn_playlist_', '');
+      if (rawId) {
+        addRecentSearch({
+          id: String(rawId),
+          title: result.title || result.name || '',
+          artist: result.artist || result.subtitle || result.description || '',
+          imageUrl: result.imageUrl || result.image || '',
+          type: 'playlist',
+          timestamp: Date.now(),
+        });
+        const cleanId = String(rawId).replace(/^jiosaavn_playlist_/, '');
         router.push(`/(tabs)/playlist/external/jiosaavn/${cleanId}?from=search` as any);
-        return;
       }
     }
   };
@@ -137,23 +157,23 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: '#1a1a1a',
     borderRadius: 8,
-    padding: 20,
-    marginBottom: 24,
+    padding: 12,
+    marginBottom: 12,
   },
   image: {
-    width: 92,
-    height: 92,
-    borderRadius: 4,
-    marginBottom: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 3,
+    marginBottom: 12,
   },
   content: {
-    gap: 8,
+    gap: 6,
   },
   title: {
     color: '#fff',
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '600',
-    letterSpacing: -0.5,
+    letterSpacing: -0.3,
   },
   meta: {
     flexDirection: 'row',
@@ -162,13 +182,13 @@ const styles = StyleSheet.create({
   },
   badge: {
     backgroundColor: '#000000ff',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 4,
   },
   badgeText: {
     color: '#fff',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
@@ -180,17 +200,17 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   imageRect: {
-    width: 92,
-    height: 92,
-    borderRadius: 4,
-    marginBottom: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 3,
+    marginBottom: 12,
     overflow: 'hidden',
   },
   imageCircle: {
-    width: 92,
-    height: 92,
-    borderRadius: 46,
-    marginBottom: 16,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    marginBottom: 12,
     overflow: 'hidden',
   },
   imageOverlay: {

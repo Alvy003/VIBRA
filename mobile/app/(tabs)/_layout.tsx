@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Tabs, useSegments, useGlobalSearchParams } from 'expo-router';
 import {
   View,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Animated,
   Dimensions,
+  Text,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -14,9 +15,12 @@ import { BottomPlayer } from '@/components/BottomPlayer';
 import FullScreenPlayer from '@/components/FullScreenPlayer';
 import QueueBottomSheet from '@/components/QueueBottomSheet';
 import { GlobalSongOptionsHost } from '@/components/GlobalSongOptionsHost';
+import { GlobalToast } from '@/components/GlobalToast';
 import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Sparkles, Library } from 'lucide-react-native';
+import { BottomTabBar, BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import { useNetworkStore } from '@/stores/useNetworkStore';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -87,10 +91,77 @@ const TabIcon: React.FC<TabIconProps> = ({ children }) => {
   );
 };
 
+interface CustomTabBarProps extends BottomTabBarProps {
+  heightAnim: Animated.Value;
+}
+
+const CustomTabBar = ({ heightAnim, ...props }: CustomTabBarProps) => {
+  const { isOnline, hasInitialized } = useNetworkStore();
+  const [status, setStatus] = useState<'hidden' | 'offline'>('hidden');
+
+  const focusedRoute = props.state.routes[props.state.index];
+  const focusedOptions = props.descriptors[focusedRoute.key].options as any;
+  const tabBarStyle = focusedOptions.tabBarStyle;
+  
+  const isTabBarHidden = 
+    focusedOptions.tabBarVisible === false ||
+    (Array.isArray(tabBarStyle)
+      ? tabBarStyle.some((s: any) => s?.display === 'none')
+      : tabBarStyle?.display === 'none');
+
+  useEffect(() => {
+    if (!hasInitialized) return;
+
+    if (!isOnline) {
+      setStatus('offline');
+      Animated.timing(heightAnim, {
+        toValue: 24,
+        duration: 300,
+        useNativeDriver: false,
+      }).start();
+    } else if (isOnline && status === 'offline') {
+      Animated.timing(heightAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: false,
+      }).start(() => {
+        setStatus('hidden');
+      });
+    }
+  }, [isOnline, hasInitialized, status]);
+
+  if (isTabBarHidden) {
+    return null;
+  }
+
+  const showStatus = status !== 'hidden';
+
+  return (
+    <View style={styles.tabBarWrapper}>
+      <BottomTabBar {...props} />
+      {showStatus && (
+        <Animated.View
+          style={[
+            styles.statusArea,
+            { height: heightAnim },
+          ]}
+        >
+          <Text style={styles.statusText}>
+            You're offline
+          </Text>
+        </Animated.View>
+      )}
+    </View>
+  );
+};
+
 export default function TabLayout() {
   const segments = useSegments();
   const { from } = useGlobalSearchParams();
-  const { isPlayerExpanded, setIsPlayerExpanded, isQueueVisible, setQueueVisible } = usePlayerUIStore();
+  const isPlayerExpanded = usePlayerUIStore(s => s.isPlayerExpanded);
+  const setIsPlayerExpanded = usePlayerUIStore(s => s.setIsPlayerExpanded);
+  const isQueueVisible = usePlayerUIStore(s => s.isQueueVisible);
+  const setQueueVisible = usePlayerUIStore(s => s.setQueueVisible);
   const miniPlayerOpacity = useRef(new Animated.Value(1)).current;
   const insets = useSafeAreaInsets();
 
@@ -108,7 +179,7 @@ export default function TabLayout() {
     Animated.timing(miniPlayerOpacity, {
       toValue: 0,
       duration: 100,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(() => {
       setIsPlayerExpanded(true);
     });
@@ -121,16 +192,18 @@ export default function TabLayout() {
     Animated.timing(miniPlayerOpacity, {
       toValue: 1,
       duration: 250,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [setIsPlayerExpanded, miniPlayerOpacity]);
 
   const handleOpenQueue = useCallback(() => setQueueVisible(true), [setQueueVisible]);
   const handleCloseQueue = useCallback(() => setQueueVisible(false), [setQueueVisible]);
+  const offlineBannerHeight = useRef(new Animated.Value(0)).current;
 
   return (
     <View style={styles.container}>
       <Tabs
+        tabBar={(props) => <CustomTabBar {...props} heightAnim={offlineBannerHeight} />}
         screenOptions={{
           headerShown: false,
           tabBarActiveTintColor: COLORS.activeTab,
@@ -249,6 +322,7 @@ export default function TabLayout() {
         <Tabs.Screen name="artist/external/jiosaavn/[id]" options={{ href: null }} />
         <Tabs.Screen name="downloads" options={{ href: null }} />
         <Tabs.Screen name="library-search" options={{ href: null }} />
+        <Tabs.Screen name="profile" options={{ href: null }} />
       </Tabs>
 
       {!isPlayerExpanded && (
@@ -256,7 +330,10 @@ export default function TabLayout() {
           pointerEvents="box-none"
           style={[
             styles.miniPlayerContainer,
-            { bottom: 52 + insets.bottom, opacity: miniPlayerOpacity },
+            { 
+              bottom: Animated.add(52 + insets.bottom, offlineBannerHeight), 
+              opacity: miniPlayerOpacity 
+            },
           ]}
         >
           <View style={styles.miniPlayerShadow}>
@@ -272,7 +349,8 @@ export default function TabLayout() {
           initialColors={playerColors}
         />
       )}
-      <QueueBottomSheet visible={isQueueVisible} onClose={handleCloseQueue} />
+      <GlobalToast />
+      <QueueBottomSheet />
       <GlobalSongOptionsHost />
     </View>
   );
@@ -281,7 +359,6 @@ export default function TabLayout() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   tabBar: {
-    position: 'absolute',
     borderTopWidth: 0,
     elevation: 0,
     backgroundColor: 'transparent',
@@ -324,5 +401,24 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 12,
     elevation: 12,
+  },
+  tabBarWrapper: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  statusArea: {
+    backgroundColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '100%',
+    overflow: 'hidden',
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 10.5,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
 });

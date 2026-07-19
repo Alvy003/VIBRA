@@ -1,35 +1,34 @@
 // app/ai-playlist.tsx
+import { useAuth } from '@clerk/clerk-expo';
+import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+import { ArrowLeft, MessageSquare, SlidersHorizontal, Sparkles, X } from 'lucide-react-native';
 import React, { useCallback, useEffect } from 'react';
 import {
-  View,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  ScrollView,
+  View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
 import Animated, {
-  FadeInDown,
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
   Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
-import { X, ArrowLeft, MessageSquare, SlidersHorizontal, Sparkles } from 'lucide-react-native';
-import { useAuth } from '@clerk/clerk-expo';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
+import { EraSelector } from '@/components/ai-playlist/EraSelector';
+import { ErrorView } from '@/components/ai-playlist/ErrorView';
+import { GeneratingView } from '@/components/ai-playlist/GeneratingView';
+import { LanguageSelector } from '@/components/ai-playlist/LanguageSelector';
+import { PlaylistResult } from '@/components/ai-playlist/PlaylistResult';
+import { SizeSelector } from '@/components/ai-playlist/SizeSelector';
 import { StepIndicator } from '@/components/ai-playlist/StepIndicator';
 import { VibeSelector } from '@/components/ai-playlist/VibeSelector';
-import { LanguageSelector } from '@/components/ai-playlist/LanguageSelector';
-import { EraSelector } from '@/components/ai-playlist/EraSelector';
-import { SizeSelector } from '@/components/ai-playlist/SizeSelector';
-import { GeneratingView } from '@/components/ai-playlist/GeneratingView';
-import { PlaylistResult } from '@/components/ai-playlist/PlaylistResult';
-import { ErrorView } from '@/components/ai-playlist/ErrorView';
+import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mode toggle pill (Chat vs Step-by-step)
@@ -248,6 +247,8 @@ export default function AIPlaylistScreen() {
           style={styles.scrollArea}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          overScrollMode="never"
+          bounces={false}
         >
           <Animated.View style={[styles.stepContent, stepStyle]}>
             {inputMode === 'chat' ? (

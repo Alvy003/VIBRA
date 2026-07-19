@@ -1,12 +1,11 @@
 // hooks/useAnimatedScroll.ts
 import {
-  useSharedValue,
+  Extrapolation,
+  interpolate,
   useAnimatedScrollHandler,
   useAnimatedStyle,
-  interpolate,
-  Extrapolation,
-  withTiming,
-  type SharedValue,
+  useSharedValue,
+  type SharedValue
 } from 'react-native-reanimated';
 
 export function useHomeScrollHandler() {

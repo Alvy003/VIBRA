@@ -1,33 +1,26 @@
 // components/CollectionOptions.tsx
-import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, Image as RNImage, StyleSheet, Share } from 'react-native';
+import ConfirmationModal from '@/components/modals/ConfirmationModal';
+import EditPlaylistModal from '@/components/modals/EditPlaylistModal';
+import Colors from '@/constants/Colors';
+import { useDownloadStore } from '@/stores/useDownloadStore';
+import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
+import { usePlaylistStore } from '@/stores/usePlaylistStore';
+import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
+import { useUser } from '@clerk/clerk-expo';
 import { Image } from 'expo-image';
+import { useRouter } from 'expo-router';
 import {
-    MoreVertical,
-    Share2,
-    Music,
-    User,
-    CircleArrowDown,
-    Loader2,
     Disc,
     ListMusic,
     Pencil,
-    Trash
+    Share2,
+    User
 } from 'lucide-react-native';
-import { useUser } from '@clerk/clerk-expo';
-import { usePlaylistStore } from '@/stores/usePlaylistStore';
-import { SharpPlus, SharpCheck } from './SharpIcons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
-import { useDownloadStore } from '@/stores/useDownloadStore';
-import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
-import { useArtistStore } from '@/stores/useArtistStore';
-import { DownloadedIcon } from './DownloadedIcon';
+import React, { useCallback, useState } from 'react';
+import { Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import BottomSheet from './BottomSheet';
-import { useRouter } from 'expo-router';
-import EditPlaylistModal from '@/components/modals/EditPlaylistModal';
-import ConfirmationModal from '@/components/modals/ConfirmationModal';
-import Colors from '@/constants/Colors';
+import { DownloadStateIcon } from './DownloadedIcon';
+import SaveStateIcon from './SaveStateIcon';
 
 export type CollectionType = 'album' | 'playlist' | 'artist';
 
@@ -82,7 +75,7 @@ const CollectionOptions = React.forwardRef<CollectionOptionsRef, CollectionOptio
     const handleShare = async () => {
         handleCloseModal();
         try {
-            const cleanId = String(externalId).replace(/^(jiosaavn_track_|jiosaavn_album_|jiosaavn_playlist_)/, '');
+            const cleanId = String(externalId).replace(/^(jiosaavn_track_|jiosaavn_album_|jiosaavn_playlist_|jiosaavn_artist_)/, '');
             let url = '';
             if (currentType === 'album') url = `https://vibra-969f.onrender.com/album/${cleanId}`;
             else if (currentType === 'playlist') url = `https://vibra-969f.onrender.com/playlist/external/jiosaavn/${cleanId}`;
@@ -140,7 +133,7 @@ const CollectionOptions = React.forwardRef<CollectionOptionsRef, CollectionOptio
     const menuItems = [
         { 
             label: isSaved ? 'In Library' : 'Save to Library', 
-            icon: isSaved ? SharpCheck : SharpPlus, 
+            icon: () => null, 
             onPress: handleToggleSave,
             show: currentType !== 'artist' && !isOwner,
             special: 'save',
@@ -148,11 +141,11 @@ const CollectionOptions = React.forwardRef<CollectionOptionsRef, CollectionOptio
         },
         { 
             label: isDownloaded ? 'Downloaded' : 'Download', 
-            icon: isDownloaded ? DownloadedIcon : CircleArrowDown, 
+            icon: () => null, 
             onPress: handleDownload,
             show: currentType !== 'artist',
-            active: isDownloaded,
-            color: isDownloaded ? Colors.accent : Colors.textSecondary
+            special: 'download',
+            active: isDownloaded
         },
         { label: 'Share', icon: Share2, onPress: handleShare, show: true },
         { label: 'Edit Details', icon: Pencil, onPress: () => { handleCloseModal(); setIsEditModalVisible(true); }, show: isOwner },
@@ -173,7 +166,10 @@ const CollectionOptions = React.forwardRef<CollectionOptionsRef, CollectionOptio
 
     const Header = (
         <View style={styles.header}>
-            <View style={styles.artworkContainer}>
+            <View style={[
+                styles.artworkContainer,
+                currentType === 'artist' && { borderRadius: 24 }
+            ]}>
                 {currentItem.imageUrl || currentItem.artwork ? (
                     <Image
                         source={{ uri: currentItem.imageUrl || currentItem.artwork }}
@@ -183,17 +179,27 @@ const CollectionOptions = React.forwardRef<CollectionOptionsRef, CollectionOptio
                     />
                 ) : (
                     <View style={styles.artworkPlaceholder}>
-                        {currentType === 'album' ? <Disc size={24} color={Colors.textMuted} /> : <ListMusic size={24} color={Colors.textMuted} />}
+                        {currentType === 'album' ? (
+                            <Disc size={24} color={Colors.textMuted} />
+                        ) : currentType === 'artist' ? (
+                            <User size={24} color={Colors.textMuted} />
+                        ) : (
+                            <ListMusic size={24} color={Colors.textMuted} />
+                        )}
                     </View>
                 )}
             </View>
             <View style={styles.headerText}>
                 <Text style={styles.title} numberOfLines={1}>{currentItem.title || currentItem.name}</Text>
                 <Text style={styles.subtitle} numberOfLines={1}>
-                    {currentType.charAt(0).toUpperCase() + currentType.slice(1)} • {
-                        currentType === 'album' ? (currentItem.artist || 'Unknown Artist') :
-                        (isOwner ? 'By You' : 'By Vibra')
-                    }
+                    {currentType === 'artist' ? (
+                        'Artist'
+                    ) : (
+                        currentType.charAt(0).toUpperCase() + currentType.slice(1) + ' • ' + (
+                            currentType === 'album' ? (currentItem.artist || 'Unknown Artist') :
+                            (isOwner ? 'By You' : 'By Vibra')
+                        )
+                    )}
                 </Text>
             </View>
         </View>
@@ -223,26 +229,30 @@ const CollectionOptions = React.forwardRef<CollectionOptionsRef, CollectionOptio
                         >
                             <View style={styles.iconWrapper}>
                                 {item.special === 'save' ? (
-                                    <View style={[
-                                        styles.saveIconBox,
-                                        item.active && { backgroundColor: Colors.accent, borderColor: Colors.accent }
-                                    ]}>
-                                        <item.icon
-                                            size={item.active ? 14 : 16}
-                                            color={item.active ? "black" : "white"}
-                                        />
-                                    </View>
+                                    <SaveStateIcon
+                                        variant="small"
+                                        isSaved={item.active}
+                                        outlineColor={Colors.textSecondary}
+                                        checkmarkColor="black"
+                                    />
+                                ) : item.special === 'download' ? (
+                                    <DownloadStateIcon
+                                        variant="small"
+                                        status={item.active ? 'downloaded' : 'idle'}
+                                        color={Colors.textSecondary}
+                                        accentColor={Colors.accent}
+                                    />
                                 ) : (
                                     <item.icon
                                         size={22}
-                                        color={item.color || Colors.textSecondary}
+                                        color={(item as any).color || Colors.textSecondary}
                                         strokeWidth={2.2}
                                     />
                                 )}
                             </View>
                             <Text style={[
                                 styles.menuLabel,
-                                item.active && item.special !== 'save' && { color: Colors.accent }
+                                item.active && item.special !== 'save' && item.special !== 'download' && { color: Colors.accent }
                             ]}>
                                 {item.label}
                             </Text>

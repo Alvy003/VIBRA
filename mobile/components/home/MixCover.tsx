@@ -1,5 +1,5 @@
 import React, { useMemo, useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, Dimensions, Platform } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import Animated, {
@@ -24,6 +24,7 @@ const FloatingOrb = React.memo(({
     gradientStart = { x: 0.3, y: 0.3 },
     gradientEnd = { x: 1, y: 1 },
     opacity = 1,
+    animated = true,
 }: {
     color: string;
     size: number;
@@ -33,12 +34,31 @@ const FloatingOrb = React.memo(({
     gradientStart?: { x: number; y: number };
     gradientEnd?: { x: number; y: number };
     opacity?: number;
+    animated?: boolean;
 }) => {
     const translateX = useSharedValue(0);
     const translateY = useSharedValue(0);
     const scale = useSharedValue(1);
 
     useEffect(() => {
+        if (!animated) return;
+
+        if (Platform.OS === 'android') {
+            // Simplified animation for Android to reduce CPU/GPU redraws on Xiaomi/lower-end devices
+            translateX.value = withRepeat(
+                withTiming(dominant ? 8 : 12, { duration: duration * 1.5, easing: Easing.inOut(Easing.sin) }),
+                -1,
+                true
+            );
+            translateY.value = withRepeat(
+                withTiming(dominant ? -10 : -14, { duration: duration * 1.8, easing: Easing.inOut(Easing.sin) }),
+                -1,
+                true
+            );
+            scale.value = 1.0; // Disable real-time gradient scale redraws on Android!
+            return;
+        }
+
         const delay = Math.random() * 800;
         const timer = setTimeout(() => {
             translateX.value = withRepeat(
@@ -128,14 +148,30 @@ const getTimeContext = () => {
     return { type: 'night', isWeekend };
 };
 
+export const getMixBaseColor = (variant: 'daily' | 'weekly') => {
+    const { type } = getTimeContext();
+    if (variant === 'daily') {
+        if (type === 'morning') return '#772269';
+        if (type === 'afternoon') return '#9e30e0';
+        if (type === 'evening') return '#ba2899';
+        return '#9333ea'; // night
+    } else {
+        if (type === 'morning') return '#6640e9';
+        if (type === 'afternoon') return '#522cbe';
+        if (type === 'evening') return '#351c70';
+        return '#2d306eff'; // night
+    }
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 interface MixCoverProps {
     variant: 'daily' | 'weekly';
     title?: string;
     style?: any;
+    animated?: boolean;
 }
 
-export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
+export const MixCover = React.memo(({ variant, style, animated = true }: MixCoverProps) => {
     const isDaily = variant === 'daily';
     const context = useMemo(() => getTimeContext(), []);
 
@@ -145,7 +181,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
         const palettes: Record<string, any> = {
             morning: {
                 daily: {
-                    gradient: ['#e11d48', '#7c3aed', '#000'],
+                    gradient: ['#771126', '#3b1c70', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(225,29,72,0.85)', size: 300, 
@@ -178,7 +214,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
                     subtitle: 'Morning Energy',
                 },
                 weekly: {
-                    gradient: ['#4f46e5', '#7c3aed', '#000'],
+                    gradient: ['#282375', '#3b1c70', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(99,102,241,0.9)', size: 300, 
@@ -208,12 +244,12 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
                         { color: 'rgba(255,255,255,0.6)', size: 3, pos: { x: 130, y: 140 } },
                     ],
                     label: 'WEEKLY MIX',
-                    subtitle: 'Your Week in Music',
+                    subtitle: 'Just for you',
                 },
             },
             afternoon: {
                 daily: {
-                    gradient: ['#c026d3', '#7c3aed', '#000'],
+                    gradient: ['#61176b', '#3b1c70', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(192,38,211,0.9)', size: 300, 
@@ -246,7 +282,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
                     subtitle: "Today's Energy",
                 },
                 weekly: {
-                    gradient: ['#3730a3', '#6d28d9', '#000'],
+                    gradient: ['#1c1852', '#35136b', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(79,70,229,0.9)', size: 300, 
@@ -276,12 +312,12 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
                         { color: 'rgba(255,255,255,0.6)', size: 3, pos: { x: 135, y: 130 } },
                     ],
                     label: 'WEEKLY MIX',
-                    subtitle: 'Your Week in Music',
+                    subtitle: 'Just for you',
                 },
             },
             evening: {
                 daily: {
-                    gradient: ['#9333ea', '#e11d48', '#000'],
+                    gradient: ['#4a1a75', '#700e24', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(147,51,234,0.9)', size: 300, 
@@ -314,7 +350,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
                     subtitle: 'Evening Vibes',
                 },
                 weekly: {
-                    gradient: ['#1e1b4b', '#4c1d95', '#000'],
+                    gradient: ['#0f0d26', '#260f4a', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(99,102,241,0.8)', size: 300, 
@@ -349,7 +385,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
             },
             night: {
                 daily: {
-                    gradient: ['#581c87', '#312e81', '#000'],
+                    gradient: ['#2c0e44', '#181740', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(126,34,206,0.9)', size: 300, 
@@ -382,7 +418,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
                     subtitle: 'Late Night Vibes',
                 },
                 weekly: {
-                    gradient: ['#1e1b4b', '#0f172a', '#000'],
+                    gradient: ['#0f0d26', '#070b14', '#050507'],
                     orbs: [
                         { 
                             color: 'rgba(79,70,229,0.75)', size: 300, 
@@ -441,6 +477,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
                     gradientStart={orb.gradientStart}
                     gradientEnd={orb.gradientEnd}
                     opacity={orb.opacity ?? 1}
+                    animated={animated}
                     />
             ))}
 
@@ -453,6 +490,7 @@ export const MixCover = React.memo(({ variant, style }: MixCoverProps) => {
             {/* 4. Bottom vignette for text readability */}
             <LinearGradient
                 colors={['transparent', 'rgba(0,0,0,0.75)']}
+                locations={[0.6, 1]}
                 style={styles.vignette}
             />
 
@@ -470,7 +508,7 @@ MixCover.displayName = 'MixCover';
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#000',
+        backgroundColor: '#09090b',
         overflow: 'hidden',
     },
     vignette: {
@@ -488,16 +526,13 @@ const styles = StyleSheet.create({
     },
     label: {
         color: '#fff',
-        fontSize: 22,
+        fontSize: 20,
         fontWeight: '800',
-        letterSpacing: -0.5,
+        letterSpacing: -0.3,
         textTransform: 'uppercase',
-        // textShadowColor: 'rgba(0,0,0,0.4)',
-        // textShadowOffset: { width: 0, height: 1 },
-        // textShadowRadius: 4,
     },
     subtitle: {
-        color: 'rgba(255,255,255,0.75)',
+        color: 'rgba(255,255,255,0.60)',
         fontSize: 11,
         fontWeight: '600',
         marginTop: 3,

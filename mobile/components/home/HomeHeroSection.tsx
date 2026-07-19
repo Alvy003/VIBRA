@@ -13,6 +13,9 @@ interface HomeHeroSectionProps {
 export const HomeHeroSection = React.memo(({ 
   heroParallaxStyle 
 }: HomeHeroSectionProps) => {
+  if (__DEV__) {
+    console.log('[HomeHeroSection] Render');
+  }
   const insets = useSafeAreaInsets();
 
   return (
@@ -23,7 +26,7 @@ export const HomeHeroSection = React.memo(({
       </Animated.View>
 
       {/* Content overlaid on pattern */}
-      <View style={[styles.contentWrapper, { paddingTop: insets.top + 60 }]}>
+      <View style={[styles.contentWrapper, { paddingTop: insets.top + 50 }]}>
         <QuickPicksGrid />
       </View>
     </View>

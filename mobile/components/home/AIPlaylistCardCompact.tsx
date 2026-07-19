@@ -5,12 +5,12 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Sparkles } from 'lucide-react-native';
 import { router } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 
 export const AIPlaylistCardCompact = React.memo(() => {
   const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/(tabs)/chat');
+    router.push({
+      pathname: '/(tabs)/chat'
+    });
   };
 
   return (

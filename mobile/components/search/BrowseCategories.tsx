@@ -40,6 +40,8 @@ export const BrowseCategories = React.memo(({
       style={styles.container}
       contentContainerStyle={styles.content}
       showsVerticalScrollIndicator={false}
+      overScrollMode="never"
+      bounces={false}
     >
       <Text style={styles.title}>Browse all</Text>
       

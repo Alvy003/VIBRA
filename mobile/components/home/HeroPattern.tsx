@@ -96,7 +96,7 @@ export const HeroPattern = React.memo(({
       {/* Secondary gradient for smoother blend */}
       <LinearGradient
         colors={['transparent', 'rgba(9,9,11,0.4)', 'rgba(9,9,11,0.8)', '#09090b']}
-        locations={[0, 0.4, 0.7, 1]}
+        locations={[0.5, 0.7, 0.9, 1]}
         style={styles.gradient}
       />
 

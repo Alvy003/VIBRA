@@ -1,12 +1,12 @@
-import React, { useCallback } from 'react';
-import {
-    View,
-    Text,
-    ScrollView,
-    TouchableOpacity,
-    StyleSheet,
-} from 'react-native';
 import { TrendingUp } from 'lucide-react-native';
+import React from 'react';
+import {
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
 
 const TRENDING = [
     'Arijit Singh',

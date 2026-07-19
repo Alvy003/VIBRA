@@ -18,6 +18,9 @@ interface PlayerUIStore {
     openSongOptions: (song: any) => void;
     closeSongOptions: () => void;
 
+    // Global add track bottom sheet ref (for change button on toasts)
+    addTrackSheetRef: any | null;
+
     reset: () => void;
 }
 
@@ -39,6 +42,9 @@ export const usePlayerUIStore = create<PlayerUIStore>((set) => ({
     openSongOptions: (song) => set({ selectedSongForOptions: { ...song }, isSongOptionsVisible: true }),
     closeSongOptions: () => set({ isSongOptionsVisible: false }),
 
+    // Global add track bottom sheet ref
+    addTrackSheetRef: null,
+
     reset: () => set({
         activeIndex: -1,
         isLyricsModalVisible: false,
@@ -47,6 +53,7 @@ export const usePlayerUIStore = create<PlayerUIStore>((set) => ({
         isPlayerExpanded: false,
         selectedSongForOptions: null,
         isSongOptionsVisible: false,
+        addTrackSheetRef: null,
     }),
 }));
 

@@ -39,7 +39,8 @@ export const SongResultCard = React.memo(({ song, searchQuery }: SongResultCardP
                 contentFit="cover"
                 cachePolicy="memory-disk"
                 recyclingKey={song.imageUrl}
-                transition={150}
+                transition={120}
+                placeholder="#1C1C22"
             />
             <View style={styles.info}>
                 <Text style={styles.title} numberOfLines={1}>{song.title}</Text>

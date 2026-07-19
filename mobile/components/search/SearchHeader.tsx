@@ -21,6 +21,8 @@ import { SlideInLeft, SlideOutLeft } from 'react-native-reanimated';
 import { useSearchStore } from '@/stores/useSearchStore';
 import { UserProfileIcon } from '../UserProfileIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useNetworkStore } from '@/stores/useNetworkStore';
+import { useToastStore } from '@/stores/useToastStore';
 import Colors from '@/constants/Colors';
 
 interface SearchHeaderProps {
@@ -30,19 +32,30 @@ interface SearchHeaderProps {
   isFocused: boolean;
 }
 
-export const SearchHeader = React.memo(({
-  onMicPress,
-  onFocus,
-  onBlur,
-  isFocused,
-}: SearchHeaderProps) => {
-  const insets = useSafeAreaInsets();
-  const query = useSearchStore((s) => s.query);
-  const setQuery = useSearchStore((s) => s.setQuery);
-  const fetchSuggestions = useSearchStore((s) => s.fetchSuggestions);
-  const fetchResults = useSearchStore((s) => s.fetchResults);
-  const clearSearch = useSearchStore((s) => s.clearSearch);
-  const inputRef = useRef<TextInput>(null);
+export const SearchHeader = React.memo(
+  React.forwardRef<{ focus: () => void; blur: () => void }, SearchHeaderProps>(
+    ({
+      onMicPress,
+      onFocus,
+      onBlur,
+      isFocused,
+    }, ref) => {
+      const insets = useSafeAreaInsets();
+      const query = useSearchStore((s) => s.query);
+      const setQuery = useSearchStore((s) => s.setQuery);
+      const fetchSuggestions = useSearchStore((s) => s.fetchSuggestions);
+      const fetchResults = useSearchStore((s) => s.fetchResults);
+      const clearSearch = useSearchStore((s) => s.clearSearch);
+      const inputRef = useRef<TextInput>(null);
+
+      React.useImperativeHandle(ref, () => ({
+        focus: () => {
+          inputRef.current?.focus();
+        },
+        blur: () => {
+          inputRef.current?.blur();
+        },
+      }));
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusAnimation = useSharedValue(0);
@@ -57,9 +70,6 @@ export const SearchHeader = React.memo(({
   const normalizeQuery = (q: string): string => {
     return q
       .replace(/\s+/g, ' ')          // collapse multiple spaces
-      .replace(/\bsong\b/gi, '')     // strip accidental suffixes
-      .replace(/\bmp3\b/gi, '')
-      .replace(/\blyrics\b/gi, '')
       .trim();
   };
 
@@ -68,21 +78,30 @@ export const SearchHeader = React.memo(({
 
     if (debounceRef.current) clearTimeout(debounceRef.current);
     
+    if (!useNetworkStore.getState().isOnline) return;
+
     // Minimum 2-character guard
     const normalizedText = normalizeQuery(text);
     if (normalizedText.length < 2) {
-      if (text.trim().length === 0) {
-        useSearchStore.getState().clearSearch();
-      }
+      // Clear suggestions and results but keep query text
+      useSearchStore.setState({ suggestions: null, results: null, isSuggesting: false });
       return;
     }
 
     debounceRef.current = setTimeout(() => {
       fetchSuggestions(normalizedText);
-    }, 400); // 400ms debounce
+    }, 250); // 250ms debounce
   }, [setQuery, fetchSuggestions]);
 
   const handleSubmit = useCallback(() => {
+    if (!useNetworkStore.getState().isOnline) {
+      Keyboard.dismiss();
+      useToastStore.getState().showToast({
+        message: "Search unavailable while offline",
+        iconType: 'none',
+      });
+      return;
+    }
     const normalizedText = normalizeQuery(query);
     if (normalizedText.length >= 2) {
       fetchResults(normalizedText);
@@ -195,7 +214,7 @@ export const SearchHeader = React.memo(({
       </View>
     </Animated.View>
   );
-});
+}));
 
 SearchHeader.displayName = 'SearchHeader';
 

@@ -16,18 +16,27 @@ export interface RecentSearchItem {
   title: string;
   artist: string;
   imageUrl: string;
-  type: 'song' | 'artist' | 'album';
+  type: 'song' | 'artist' | 'album' | 'playlist';
   timestamp: number;
+}
+
+export interface AutocompleteSuggestion {
+  type: 'song' | 'artist' | 'album' | 'playlist';
+  title: string;
+  artist: string;
+  imageUrl: string;
+  id: string;
 }
 
 interface SearchStore {
   query: string;
-  suggestions: SearchSuggestions | null;
+  suggestions: AutocompleteSuggestion[] | null;
   results: SearchSuggestions | null;
   isSearching: boolean;
   isSuggesting: boolean;
   recentSearches: RecentSearchItem[];
   audioSearchResult: { title: string; artist: string } | null;
+  searchError: string | null;
 
   setQuery: (q: string) => void;
   fetchSuggestions: (q: string) => Promise<void>;
@@ -52,8 +61,14 @@ export const useSearchStore = create<SearchStore>()(
       isSuggesting: false,
       recentSearches: [],
       audioSearchResult: null,
+      searchError: null,
 
-      setQuery: (q) => set({ query: q }),
+      setQuery: (q) => {
+        const prevQuery = get().query;
+        if (q !== prevQuery) {
+          set({ query: q, results: null });
+        }
+      },
 
       fetchSuggestions: async (q) => {
         if (!q.trim()) {
@@ -64,24 +79,15 @@ export const useSearchStore = create<SearchStore>()(
         suggestionAbortController?.abort();
         suggestionAbortController = new AbortController();
 
-        set({ isSuggesting: true });
+        set({ isSuggesting: true, searchError: null });
         try {
           const res = await axiosInstance.get('/stream/autocomplete', {
             params: { q },
             signal: suggestionAbortController.signal
           });
-          
+
           if (get().query.trim() !== '') {
-            // Group flat autocomplete array into categorized format for SearchResults
-            const items = res.data.suggestions || [];
-            set({
-              suggestions: {
-                songs: items.filter((i: any) => i.type === 'song'),
-                albums: items.filter((i: any) => i.type === 'album'),
-                artists: items.filter((i: any) => i.type === 'artist'),
-                playlists: items.filter((i: any) => i.type === 'playlist'),
-              }
-            });
+            set({ suggestions: res.data.suggestions || [] });
           }
         } catch (e: any) {
           if (e.name === 'CanceledError') return;
@@ -99,7 +105,7 @@ export const useSearchStore = create<SearchStore>()(
         resultAbortController?.abort();
         resultAbortController = new AbortController();
 
-        set({ isSearching: true, results: null });
+        set({ isSearching: true, results: null, searchError: null });
         try {
           const res = await axiosInstance.get('/stream/search/all', {
             params: { q, limit: 20 },
@@ -109,14 +115,15 @@ export const useSearchStore = create<SearchStore>()(
         } catch (e: any) {
           if (e.name === 'CanceledError') return;
           console.error('[SearchStore] fetchResults failed:', e);
-          set({ results: null });
+          const isNetworkError = !e.response && (e.request || e.message === 'Network Error');
+          set({ results: null, searchError: isNetworkError ? 'network_error' : 'server_error' });
         } finally {
           set({ isSearching: false });
         }
       },
 
       clearSearch: () => {
-        set({ query: '', suggestions: null, results: null, isSuggesting: false });
+        set({ query: '', suggestions: null, results: null, isSuggesting: false, searchError: null });
       },
 
       addRecentSearch: (item) => {
@@ -154,7 +161,7 @@ export const useSearchStore = create<SearchStore>()(
 
 // Trigger one-time async migration on first launch
 migrateStoreToMMKV("search-storage").then((migrated) => {
-    if (migrated) {
-        useSearchStore.persist.rehydrate();
-    }
+  if (migrated) {
+    useSearchStore.persist.rehydrate();
+  }
 });

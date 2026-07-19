@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS } from '@/constants/design';
-import Animated, { FadeInUp, FadeOutUp } from 'react-native-reanimated';
+import Colors from '@/constants/Colors';
+import BottomSheet from '@/components/BottomSheet';
 
 interface UpdateBannerProps {
     apkLink: string;
@@ -13,95 +12,122 @@ interface UpdateBannerProps {
 export const UpdateBanner = ({ apkLink, version }: UpdateBannerProps) => {
     const [visible, setVisible] = useState(true);
 
-    if (!visible) return null;
-
     const handleUpdate = () => {
         Linking.openURL(apkLink).catch(err => {
             console.error('Failed to open update link:', err);
         });
+        setVisible(false);
     };
 
-    return (
-        <Animated.View 
-            entering={FadeInUp.delay(500)} 
-            exiting={FadeOutUp}
-            style={styles.container}
-        >
-            <BlurView intensity={60} tint="dark" style={styles.blur}>
-                <View style={styles.content}>
-                    <View style={styles.iconContainer}>
-                        <Ionicons name="cloud-download-outline" size={24} color="#a855f7" />
-                    </View>
-                    
-                    <View style={styles.textContainer}>
-                        <Text style={styles.title}>Update Available</Text>
-                        <Text style={styles.subtitle}>Version {version} is now ready with new features.</Text>
-                    </View>
+    const Header = (
+        <View style={styles.header}>
+            <View style={styles.iconContainer}>
+                <Ionicons name="cloud-download-outline" size={32} color={Colors.accent} />
+            </View>
+            <Text style={styles.title}>Update Available</Text>
+            <Text style={styles.subtitle}>Version {version} is now ready to install.</Text>
+        </View>
+    );
 
+    return (
+        <BottomSheet
+            isOpen={visible}
+            onClose={() => setVisible(false)}
+            snapPoints={['37%']}
+            header={Header}
+        >
+            <View style={styles.content}>
+                <Text style={styles.message}>
+                    A new version of Vibra is available with exciting new features, performance improvements, and bug fixes.
+                </Text>
+
+                <View style={styles.buttonContainer}>
+                    <TouchableOpacity style={styles.cancelButton} onPress={() => setVisible(false)}>
+                        <Text style={styles.cancelText}>Update later</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={styles.updateButton} onPress={handleUpdate}>
                         <Text style={styles.updateText}>Update</Text>
                     </TouchableOpacity>
-
-                    <TouchableOpacity style={styles.closeButton} onPress={() => setVisible(false)}>
-                        <Ionicons name="close" size={20} color="rgba(255,255,255,0.5)" />
-                    </TouchableOpacity>
                 </View>
-            </BlurView>
-        </Animated.View>
+            </View>
+        </BottomSheet>
     );
 };
 
 const styles = StyleSheet.create({
-    container: {
-        marginHorizontal: 16,
-        marginTop: Platform.OS === 'ios' ? 10 : 10, // Adjust for status bar/header
-        borderRadius: 16,
-        overflow: 'hidden',
-        borderWidth: 1,
-        zIndex: 100,
-    },
-    blur: {
-        padding: 12,
-    },
-    content: {
-        flexDirection: 'row',
+    header: {
         alignItems: 'center',
+        paddingTop: 10,
     },
     iconContainer: {
-        width: 44,
-        height: 44,
-        borderRadius: 12,
-        backgroundColor: 'rgba(168, 85, 247, 0.15)', // Purple tint
+        width: 64,
+        height: 64,
+        borderRadius: 32,
+        backgroundColor: Colors.primaryAlpha10,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    title: {
+        color: Colors.textPrimary,
+        fontSize: 20,
+        fontWeight: '600',
+        textAlign: 'center',
+    },
+    subtitle: {
+        color: Colors.textSecondary,
+        fontSize: 13,
+        fontWeight: '500',
+        marginTop: 4,
+        textAlign: 'center',
+    },
+    content: {
+        paddingHorizontal: 24,
+        paddingTop: 16,
+    },
+    message: {
+        color: Colors.textMuted,
+        fontSize: 13,
+        textAlign: 'center',
+        lineHeight: 22,
+        marginBottom: 32,
+    },
+    buttonContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    cancelButton: {
+        flex: 1,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: Colors.surface,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
+        borderWidth: 1,
+        borderColor: Colors.border,
     },
-    textContainer: {
-        flex: 1,
-    },
-    title: {
-        color: '#fff',
-        fontSize: 15,
-        fontWeight: '600',
-    },
-    subtitle: {
-        color: 'rgba(255,255,255,0.6)',
-        fontSize: 12,
-        marginTop: 1,
+    cancelText: {
+        color: Colors.accent,
+        fontSize: 14,
+        fontWeight: '500',
     },
     updateButton: {
-        backgroundColor: '#a855f7',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        marginRight: 8,
+        flex: 1,
+        height: 48,
+        borderRadius: 24,
+        backgroundColor: Colors.accent,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 4,
     },
     updateText: {
-        color: '#fff',
-        fontSize: 13,
+        color: Colors.black,
+        fontSize: 14,
         fontWeight: '600',
     },
-    closeButton: {
-        padding: 4,
-    }
 });

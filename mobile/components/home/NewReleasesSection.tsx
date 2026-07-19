@@ -9,13 +9,17 @@ import { ExternalItem } from './types';
 import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.45;
+const CARD_WIDTH = SCREEN_WIDTH * 0.40;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const NewReleasesSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
+    if (__DEV__) {
+        console.log('[NewReleasesSection] Render');
+    }
     const router = useRouter();
     const newAlbums = useStreamStore(s => s.homepageData?.newAlbums);
+    const isLoading = useStreamStore(s => s.isLoadingHomepage);
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
@@ -25,18 +29,22 @@ export const NewReleasesSection = React.memo(({ onOptions }: { onOptions?: (item
         [router]
     );
 
-    const renderNewRelease = useCallback(({ item, index }: { item: ExternalItem; index: number }) => (
+    const renderNewRelease = useCallback(({ item, index }: { item: any; index: number }) => (
         <PremiumCard
             title={item.title}
             subtitle={item.artist}
             imageUrl={item.imageUrl}
-            onPress={() => handleNavigateExternal(item)}
-            onLongPress={() => onOptions?.(item, 'album')}
+            onPress={item.isPlaceholder ? undefined : () => handleNavigateExternal(item)}
+            onLongPress={item.isPlaceholder ? undefined : () => onOptions?.(item, 'album')}
             index={index}
+            width={CARD_WIDTH}
+            isPlaceholder={item.isPlaceholder}
         />
     ), [handleNavigateExternal, onOptions]);
 
-    if (!newAlbums || newAlbums.length === 0) return null;
+    const displayAlbums = newAlbums && newAlbums.length > 0 ? newAlbums.slice(0, 8) : (isLoading ? Array(4).fill({ isPlaceholder: true }) : []);
+
+    if (displayAlbums.length === 0) return null;
 
     return (
         <View style={styles.sectionContainer}>
@@ -47,9 +55,9 @@ export const NewReleasesSection = React.memo(({ onOptions }: { onOptions?: (item
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
-                data={newAlbums.slice(0, 8)}
-                keyExtractor={(item) => item.externalId || item.id || String(item._id)}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
+                data={displayAlbums}
+                keyExtractor={(item, idx) => item.isPlaceholder ? `placeholder-${idx}` : (item.externalId || item.id || String(item._id))}
                 renderItem={renderNewRelease}
                 snapToInterval={ITEM_SIZE}
                 decelerationRate="fast"
@@ -70,5 +78,5 @@ export const NewReleasesSection = React.memo(({ onOptions }: { onOptions?: (item
 NewReleasesSection.displayName = 'NewReleasesSection';
 
 const styles = StyleSheet.create({
-    sectionContainer: { marginTop: 28 },
+    sectionContainer: { marginTop: 24 },
 });

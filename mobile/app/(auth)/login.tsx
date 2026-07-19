@@ -16,13 +16,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import * as Haptics from 'expo-haptics';
 import { useWarmUpBrowser } from '@/hooks/useWarmUpBrowser';
+import { useAuthBootstrapStore } from '@/stores/useAuthBootstrapStore';
+import Colors from '@/constants/Colors';
+
 
 WebBrowser.maybeCompleteAuthSession();
 
-const { height } = Dimensions.get('window');
-
 export default function LoginScreen() {
   useWarmUpBrowser();
+
+  const { loginSyncState, setLoginSyncState } = useAuthBootstrapStore();
 
   const [isLoading, setIsLoading] = useState(false);
 
@@ -34,6 +37,15 @@ export default function LoginScreen() {
   const bottomOpacity = useRef(new Animated.Value(0)).current;
   const bottomTranslateY = useRef(new Animated.Value(16)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
+
+  // Pulsing logo animation values for transition
+  const pulseScale = useRef(new Animated.Value(1)).current;
+  const pulseOpacity = useRef(new Animated.Value(1)).current;
+
+  // Initialize loginSyncState to idle when the screen mounts
+  useEffect(() => {
+    setLoginSyncState('idle');
+  }, []);
 
   useEffect(() => {
     Animated.stagger(200, [
@@ -69,6 +81,50 @@ export default function LoginScreen() {
     ]).start();
   }, []);
 
+  // Premium pulsing logo animation effect
+  useEffect(() => {
+    let animation: Animated.CompositeAnimation | null = null;
+    if (loginSyncState !== 'idle') {
+      animation = Animated.loop(
+        Animated.parallel([
+          Animated.sequence([
+            Animated.timing(pulseScale, {
+              toValue: 1.06,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseScale, {
+              toValue: 0.94,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.sequence([
+            Animated.timing(pulseOpacity, {
+              toValue: 0.6,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+            Animated.timing(pulseOpacity, {
+              toValue: 1.0,
+              duration: 1200,
+              useNativeDriver: true,
+            }),
+          ]),
+        ])
+      );
+      animation.start();
+    } else {
+      pulseScale.setValue(1);
+      pulseOpacity.setValue(1);
+    }
+    return () => {
+      if (animation) {
+        animation.stop();
+      }
+    };
+  }, [loginSyncState]);
+
   const handlePressIn = () => {
     Animated.spring(buttonScale, {
       toValue: 0.97,
@@ -91,17 +147,61 @@ export default function LoginScreen() {
     }
     try {
       setIsLoading(true);
+      setLoginSyncState('authenticating');
       const { createdSessionId, setActive } = await startOAuthFlow();
       if (createdSessionId) {
+        setLoginSyncState('syncing_library');
         await setActive!({ session: createdSessionId });
       } else {
         setIsLoading(false);
+        setLoginSyncState('idle');
       }
     } catch (err) {
       console.error('OAuth error', err);
       setIsLoading(false);
+      setLoginSyncState('idle');
     }
   }, [isLoading]);
+
+  if (loginSyncState !== 'idle') {
+    let primaryText = "Connecting...";
+    let secondaryText = "Please wait a moment.";
+
+    if (loginSyncState === 'authenticating') {
+      primaryText = "Connecting to Google...";
+      secondaryText = "Please wait a moment.";
+    } else if (loginSyncState === 'syncing_library') {
+      primaryText = "Syncing your library...";
+      secondaryText = "Almost there...";
+    } else if (loginSyncState === 'preparing_account') {
+      primaryText = "Preparing your account...";
+      secondaryText = "This only takes a moment.";
+    }
+
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="light-content" />
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.transitionContainer}>
+            <Animated.Image
+              source={require('../../assets/images/vibra-white.png')}
+              style={[
+                styles.logoTransition,
+                {
+                  transform: [{ scale: pulseScale }],
+                  opacity: pulseOpacity,
+                }
+              ]}
+              resizeMode="contain"
+              tintColor={Colors.accent}
+            />
+            <Text style={styles.transitionPrimaryText}>{primaryText}</Text>
+            <Text style={styles.transitionSecondaryText}>{secondaryText}</Text>
+          </View>
+        </SafeAreaView>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -110,25 +210,26 @@ export default function LoginScreen() {
         <View style={styles.inner}>
 
           {/* Center: Logo + Hero text */}
-            <Animated.View
+          <Animated.View
             style={[
-                styles.heroSection,
-                {
+              styles.heroSection,
+              {
                 opacity: heroOpacity,
                 transform: [{ translateY: heroTranslateY }],
-                },
+              },
             ]}
-            >
+          >
             <Image
-                source={require('../../assets/images/vibra.png')}
-                style={styles.logo}
-                resizeMode="contain"
+              source={require('../../assets/images/vibra-white.png')}
+              style={styles.logo}
+              resizeMode="contain"
+              tintColor={Colors.accent}
             />
             <Text style={styles.heroText}>
-                Millions of songs.{'\n'}Free on{' '}
-                <Text style={styles.heroHighlight}>Vibra</Text>.
+              Millions of songs.{'\n'}Free on{' '}
+              <Text style={styles.heroHighlight}>Vibra</Text>.
             </Text>
-            </Animated.View>
+          </Animated.View>
 
           {/* Bottom: Actions */}
           <Animated.View
@@ -161,20 +262,6 @@ export default function LoginScreen() {
                 )}
               </TouchableOpacity>
             </Animated.View>
-
-            {/* Divider */}
-            <View style={styles.divider} />
-
-            {/* Footer */}
-            {/* <View style={styles.footer}>
-              <Text style={styles.footerLabel}>Don't have an account?</Text>
-              <TouchableOpacity
-                onPress={onPress}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.signUpText}>Sign Up</Text>
-              </TouchableOpacity>
-            </View> */}
           </Animated.View>
 
         </View>
@@ -210,14 +297,14 @@ const styles = StyleSheet.create({
   },
   heroText: {
     color: '#FFFFFF',
-    fontSize: 32,
+    fontSize: 30,
     fontWeight: '800',
     textAlign: 'center',
     lineHeight: 42,
     letterSpacing: -0.5,
   },
   heroHighlight: {
-    color: '#7F00FF',
+    color: Colors.accent,
   },
 
   // Bottom
@@ -244,27 +331,35 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.3,
   },
-
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    marginVertical: 28,
-  },
-
-  footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  footerLabel: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 14,
-    fontWeight: '500',
-  },
   signUpText: {
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  transitionContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+  },
+  logoTransition: {
+    width: 100,
+    height: 100,
+    marginBottom: 36,
+  },
+  transitionPrimaryText: {
+    color: Colors.textPrimary,
+    fontSize: 22,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 8,
+    letterSpacing: -0.3,
+  },
+  transitionSecondaryText: {
+    color: Colors.textSecondary,
+    fontSize: 15,
+    fontWeight: '500',
+    textAlign: 'center',
+    letterSpacing: 0.2,
   },
 });

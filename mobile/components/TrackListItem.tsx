@@ -32,7 +32,7 @@ export const TrackListItem = React.memo(({
   style,
   onOptionsPress,
 }: TrackListItemProps) => {
-  const artwork = track.imageUrl || playlistImageUrl;
+  const artwork = track.imageUrl || track.artwork || playlistImageUrl;
   // Reactive download badge — fine-grained selector keyed to this track's id.
   const trackId = track.id || track.externalId || track._id;
   const isDownloaded = useDownloadStore(
@@ -64,7 +64,8 @@ export const TrackListItem = React.memo(({
               contentFit="cover"
               cachePolicy="memory-disk"
               recyclingKey={artwork || trackId}
-              transition={200}
+              transition={120}
+              placeholder={Colors.placeholderBg}
             />
             {/* Subtle Overlay */}
             <View style={styles.imageOverlay} />
@@ -122,7 +123,7 @@ const styles = StyleSheet.create({
   imageContainer: {
     width: 46,
     height: 46,
-    borderRadius: 4,
+    borderRadius: 2,
     marginRight: 12,
     overflow: 'hidden',
     backgroundColor: Colors.surfaceLighter,

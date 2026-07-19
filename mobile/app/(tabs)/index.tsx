@@ -14,10 +14,10 @@ import Animated, {
   useAnimatedStyle,
   interpolate,
   Extrapolation,
+  runOnJS,
 } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useScrollToTop } from '@react-navigation/native';
-import { useUser } from '@clerk/clerk-expo';
+import { useUser, useAuth } from '@clerk/clerk-expo';
 
 import { useMusicStore } from '@/stores/useMusicStore';
 import { useStreamStore } from '@/stores/useStreamStore';
@@ -30,22 +30,30 @@ import { NewReleasesSection } from '@/components/home/NewReleasesSection';
 import { TopChartsSection } from '@/components/home/TopChartsSection';
 import { FeaturedPlaylistsSection } from '@/components/home/FeaturedPlaylistsSection';
 import { FrequentGridSection } from '@/components/home/FrequentGridSection';
-import { HeroSkeleton, CarouselSkeleton } from '@/components/home/HomeSkeleton';
 import { HomeFooter } from '@/components/home/HomeFooter';
 import { AIPlaylistCard } from '@/components/home/AIPlaylistCard';
 import { OnboardingModal } from '@/components/home/OnboardingModal';
 import { MixSection } from '@/components/home/MixSection';
-import { useOnboardingStore } from '@/stores/useOnboardingStore';
+import { ContinueListeningSection } from '@/components/home/ContinueListeningSection';
+import { BecauseYouPlayedSection } from '@/components/home/BecauseYouPlayedSection';
+import { RediscoverFavoritesSection } from '@/components/home/RediscoverFavoritesSection';
+import { FollowedArtistsSection } from '@/components/home/FollowedArtistsSection';
 import { useUpdateStore } from '@/stores/useUpdateStore';
 import { UpdateBanner } from '@/components/home/UpdateBanner';
 import { ForcedUpdateModal } from '@/components/home/ForcedUpdateModal';
+import { OfflineDownloadsCard } from '@/components/home/OfflineDownloadsCard';
+import { useNetworkStore } from '@/stores/useNetworkStore';
 import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 export default function HomeScreen() {
+  if (__DEV__) {
+    console.log('[HomeScreen] Render');
+  }
   const { user, isLoaded } = useUser();
-  const insets = useSafeAreaInsets();
+  const { isSignedIn } = useAuth();
+  const { isOnline } = useNetworkStore();
   const scrollRef = React.useRef(null);
   const optionsRef = React.useRef<CollectionOptionsRef>(null);
 
@@ -55,15 +63,11 @@ export default function HomeScreen() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [mountLevel, setMountLevel] = useState(0);
   
-  const isLoading = useMusicStore(s => s.isLoading);
   const featuredSongs = useMusicStore(s => s.featuredSongs) || [];
   const quickPicks = useMusicStore(s => s.quickPicks) || [];
   const featuredSongsLength = featuredSongs.length;
-  const isPreferencesLoaded = useOnboardingStore(s => s.isPreferencesLoaded);
-  const completedOnboarding = useOnboardingStore(s => s.preferences.completedOnboarding);
   // Reactive selectors — avoid stale getState() snapshots captured at mount time
   const hasHomepageData = useStreamStore(s => !!s.homepageData);
-  const isLoadingHomepage = useStreamStore(s => s.isLoadingHomepage);
 
   const { needsUpdate, forceUpdate, apkLink, currentVersion, checkUpdate } = useUpdateStore();
 
@@ -72,9 +76,14 @@ export default function HomeScreen() {
   const streamStore = useStreamStore.getState();
   const scrollY = useSharedValue(0);
 
+  const isMountedMax = useSharedValue(false);
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
       scrollY.value = event.contentOffset.y;
+      if (event.contentOffset.y > 50 && !isMountedMax.value) {
+        isMountedMax.value = true;
+        runOnJS(setMountLevel)(5);
+      }
     },
   });
 
@@ -115,51 +124,60 @@ export default function HomeScreen() {
 
     // Public fetches
     musicStore.fetchFeaturedSongs();
-    streamStore.fetchHomepage();
+    if (!isSignedIn) {
+      streamStore.fetchHomepage();
+    }
     checkUpdate();
 
-  }, [isLoaded]);
+  }, [isLoaded, isSignedIn]);
 
-  // ─── Progressive Mounting ───
   useEffect(() => {
-    // If we already have cached data, stagger the rendering slightly: mount level 2 (above-fold content)
-    // immediately, and level 3 (below-fold components) 150ms later to avoid startup thread block.
     if (hasHomepageData || featuredSongsLength > 0) {
-      setMountLevel(2);
-      const timer = setTimeout(() => {
-        setMountLevel(3);
-      }, 150);
-      return () => clearTimeout(timer);
+      setMountLevel(1);
+      const t2 = setTimeout(() => setMountLevel(prev => Math.max(prev, 2)), 200);
+      const t3 = setTimeout(() => setMountLevel(prev => Math.max(prev, 3)), 450);
+      const t4 = setTimeout(() => setMountLevel(prev => Math.max(prev, 4)), 750);
+      const t5 = setTimeout(() => setMountLevel(prev => Math.max(prev, 5)), 1100);
+      return () => {
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+        clearTimeout(t5);
+      };
     }
 
     const task = InteractionManager.runAfterInteractions(() => {
       setMountLevel(1);
-      setTimeout(() => setMountLevel(2), 120);
-      setTimeout(() => setMountLevel(3), 240);
+      const t2 = setTimeout(() => setMountLevel(prev => Math.max(prev, 2)), 200);
+      const t3 = setTimeout(() => setMountLevel(prev => Math.max(prev, 3)), 450);
+      const t4 = setTimeout(() => setMountLevel(prev => Math.max(prev, 4)), 750);
+      const t5 = setTimeout(() => setMountLevel(prev => Math.max(prev, 5)), 1100);
+      return () => {
+        clearTimeout(t2);
+        clearTimeout(t3);
+        clearTimeout(t4);
+        clearTimeout(t5);
+      };
     });
-    return () => task.cancel();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return () => {
+      task.cancel();
+    };
+  }, [hasHomepageData, featuredSongsLength]);
 
   // ─── Refresh Logic ───
   const onRefresh = useCallback(async () => {
     if (!isLoaded) return;
 
     setIsRefreshing(true);
+    
+    // Trigger reactive refresh for independent sections
+    streamStore.triggerRefresh();
+    musicStore.triggerRefresh();
+
     const fetchPromises = [
-      musicStore.fetchFeaturedSongs(),
+      musicStore.fetchFeaturedSongs(true),
       streamStore.fetchHomepage(true),
     ];
-
-    if (user) {
-      fetchPromises.push(
-        musicStore.fetchRecentlyPlayed(),
-        musicStore.fetchRecentCollections(),
-        musicStore.fetchFrequentCollections(),
-        streamStore.fetchDailyMix(),
-        streamStore.fetchWeeklyMix()
-      );
-    }
 
     await Promise.all(fetchPromises);
     setIsRefreshing(false);
@@ -187,13 +205,8 @@ export default function HomeScreen() {
     }],
   }));
 
-  // ─── Stale-while-revalidate skeleton strategy ───
-  // Show skeleton ONLY when we have truly zero data to display.
-  // Once content is rendered, NEVER replace it with a skeleton during background
-  // re-fetches — this eliminates the double-loading perception entirely.
-  // Warm users (MMKV cache) will almost never see a skeleton.
-  const hasAnyContent = featuredSongsLength > 0 || hasHomepageData;
-  const showSkeletons = !hasAnyContent && (isLoading || isLoadingHomepage || !isPreferencesLoaded);
+  // Warm users (MMKV cache) will render immediately, and cold users will display stable placeholders
+  // instead of shimmer skeletons.
 
   return (
     <View style={styles.container}>
@@ -203,9 +216,7 @@ export default function HomeScreen() {
           forceUpdate ? (
               <ForcedUpdateModal visible={true} apkLink={apkLink} version={currentVersion || ''} />
           ) : (
-              <View style={{ marginTop: insets.top }}>
-                   <UpdateBanner apkLink={apkLink} version={currentVersion || ''} />
-              </View>
+              <UpdateBanner apkLink={apkLink} version={currentVersion || ''} />
           )
       )}
 
@@ -219,6 +230,8 @@ export default function HomeScreen() {
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         decelerationRate="normal"
+        overScrollMode="never"
+        bounces={false}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -230,34 +243,26 @@ export default function HomeScreen() {
         }
       >
         {/* Hero + Quick Picks */}
-        {showSkeletons ? (
-          <HeroSkeleton />
-        ) : (
-          <HomeHeroSection heroParallaxStyle={heroParallaxStyle} />
-        )}
+        <HomeHeroSection heroParallaxStyle={heroParallaxStyle} />
 
         {/* Sections */}
         <View style={styles.sectionsContainer}>
-          {showSkeletons ? (
-            <>
-              <CarouselSkeleton />
-              <CarouselSkeleton />
-            </>
-          ) : (
-            <>
-              {mountLevel >= 1 ? <OnboardingModal /> : null}
-              {mountLevel >= 1 ? <AIPlaylistCard index={0} noAnim={mountLevel === 3} /> : null}
-              {mountLevel >= 1 ? <MixSection /> : null}
-              {mountLevel >= 1 ? <NewReleasesSection onOptions={handleOpenOptions} /> : null}
-              {mountLevel >= 2 ? <TopChartsSection onOptions={handleOpenOptions} /> : null}
-              {mountLevel >= 2 ? <FrequentGridSection onOptions={handleOpenOptions} /> : null}
-              {mountLevel >= 3 ? <FeaturedPlaylistsSection onOptions={handleOpenOptions} /> : null}
-            </>
-          )}
+          {mountLevel >= 1 ? <OnboardingModal /> : null}
+          {mountLevel >= 1 ? <AIPlaylistCard index={0} noAnim={mountLevel >= 3} /> : null}
+          {!isOnline && <OfflineDownloadsCard />}
+          {mountLevel >= 1 ? <MixSection /> : null}
+          {mountLevel >= 2 ? <BecauseYouPlayedSection onOptions={handleOpenOptions} /> : null}
+          {mountLevel >= 2 ? <RediscoverFavoritesSection onOptions={handleOpenOptions} /> : null}
+          {mountLevel >= 3 ? <ContinueListeningSection onOptions={handleOpenOptions} /> : null}
+          {mountLevel >= 3 ? <FollowedArtistsSection onOptions={handleOpenOptions} /> : null}
+          {mountLevel >= 3 ? <NewReleasesSection onOptions={handleOpenOptions} /> : null}
+          {mountLevel >= 4 ? <TopChartsSection onOptions={handleOpenOptions} /> : null}
+          {mountLevel >= 4 ? <FrequentGridSection onOptions={handleOpenOptions} /> : null}
+          {mountLevel >= 5 ? <FeaturedPlaylistsSection onOptions={handleOpenOptions} /> : null}
         </View>
 
         {/* Footer */}
-        {mountLevel >= 3 ? <HomeFooter /> : null}
+        {mountLevel >= 5 ? <HomeFooter /> : null}
       </AnimatedScrollView>
       <CollectionOptions ref={optionsRef} />
     </View>

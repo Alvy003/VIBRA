@@ -13,7 +13,12 @@ const Colors = {
   error: '#ef4444',
   success: '#10b981',
   white: '#ffffff',
-  
+  black: '#000000',
+  placeholderBg: '#1C1C22',
+  placeholderText: 'rgba(255, 255, 255, 0.08)',
+  placeholderSubtitleText: 'rgba(255, 255, 255, 0.05)',
+  placeholderGlyph: '#a1a1aa',
+
   // Semantic Alpha variations
   whiteAlpha08: 'rgba(255,255,255,0.08)',
   whiteAlpha10: 'rgba(255,255,255,0.1)',

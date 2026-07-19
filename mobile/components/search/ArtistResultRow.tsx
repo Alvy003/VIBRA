@@ -8,12 +8,15 @@ import { User } from 'lucide-react-native';
 import { resolveAssetUrl } from '@/lib/url';
 import Colors from '@/constants/Colors';
 
+import { useSearchStore } from '@/stores/useSearchStore';
+
 interface ArtistResultRowProps {
   artist: any;
 }
 
 export const ArtistResultRow = React.memo(({ artist }: ArtistResultRowProps) => {
   const router = useRouter();
+  const addRecentSearch = useSearchStore((s) => s.addRecentSearch);
 
   const handlePress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -22,7 +25,15 @@ export const ArtistResultRow = React.memo(({ artist }: ArtistResultRowProps) => 
     
     // All search results are external (JioSaavn)
     if (rawId) {
-      const cleanId = rawId.replace('jiosaavn_artist_', '');
+      addRecentSearch({
+        id: String(rawId),
+        title: artist.title || artist.name || '',
+        artist: '',
+        imageUrl: artist.imageUrl || '',
+        type: 'artist',
+        timestamp: Date.now(),
+      });
+      const cleanId = String(rawId).replace('jiosaavn_artist_', '');
       router.push(`/(tabs)/artist/external/jiosaavn/${cleanId}?from=search` as any);
     }
   };

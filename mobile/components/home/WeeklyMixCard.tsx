@@ -1,35 +1,45 @@
+import Colors from '@/constants/Colors';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { useStreamStore } from '@/stores/useStreamStore';
+import * as Haptics from 'expo-haptics';
+import { LinearGradient } from 'expo-linear-gradient';
+import { ArrowRight, Play, Sparkles, Trophy } from 'lucide-react-native';
 import React, { useCallback, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Dimensions } from 'react-native';
+import { Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    withRepeat,
-    withTiming,
-    withSequence,
     Easing,
     FadeInDown,
+    useAnimatedStyle,
+    useSharedValue,
+    withRepeat,
+    withSequence,
+    withTiming,
 } from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Sparkles, Play, Trophy, ArrowRight } from 'lucide-react-native';
-import { useStreamStore } from '@/stores/useStreamStore';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { COLORS, RADIUS } from '@/constants/design';
-import Colors from '@/constants/Colors';
-import * as Haptics from 'expo-haptics';
+
+import { useMusicStore } from '@/stores/useMusicStore';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
-    const { weeklyMix, fetchWeeklyMix, isLoadingWeeklyMix } = useStreamStore();
+    if (__DEV__) {
+        console.log('[WeeklyMixCard] Render');
+    }
+    const weeklyMix = useStreamStore(s => s.weeklyMix);
+    const fetchWeeklyMix = useStreamStore(s => s.fetchWeeklyMix);
+    const isLoadingWeeklyMix = useStreamStore(s => s.isLoadingWeeklyMix);
     const initializeQueue = usePlayerStore(state => state.initializeQueue);
+    const refreshVersion = useStreamStore(state => state.refreshVersion);
+    const isAuthReady = useMusicStore(s => s.isAuthReady);
 
     const glowValue = useSharedValue(0);
 
     useEffect(() => {
-        if (!weeklyMix && !isLoadingWeeklyMix) {
-            fetchWeeklyMix();
+        if (isAuthReady) {
+            fetchWeeklyMix(refreshVersion > 0);
         }
+    }, [fetchWeeklyMix, refreshVersion, isAuthReady]);
 
+    useEffect(() => {
         glowValue.value = withRepeat(
             withSequence(
                 withTiming(1, { duration: 3000, easing: Easing.inOut(Easing.sin) }),
@@ -38,7 +48,7 @@ export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
             -1,
             true
         );
-    }, [weeklyMix, isLoadingWeeklyMix, fetchWeeklyMix]);
+    }, []);
 
     const handlePlay = useCallback(() => {
         if (weeklyMix?.eligible && (weeklyMix.results?.length ?? 0) > 0) {

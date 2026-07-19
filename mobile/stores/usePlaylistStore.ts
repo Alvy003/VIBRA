@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { axiosInstance } from "@/lib/axios";
 import { mmkvStorage } from "@/lib/mmkvStorage";
 import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
+import { useToastStore } from './useToastStore';
 
 interface Playlist {
     _id: string;
@@ -50,10 +51,10 @@ export const usePlaylistStore = create<PlaylistStore>()(
                 try {
                     const response = await axiosInstance.get(`/playlists/${id}`);
                     const updatedPlaylist = response.data;
-                    
+
                     const currentPlaylists = get().playlists;
                     const index = currentPlaylists.findIndex(p => p._id === id);
-                    
+
                     if (index !== -1) {
                         const newPlaylists = [...currentPlaylists];
                         newPlaylists[index] = updatedPlaylist;
@@ -67,13 +68,17 @@ export const usePlaylistStore = create<PlaylistStore>()(
             },
 
             addTrackToPlaylist: async (playlistId: string, track: any) => {
-                const songId = track.id || track.externalId;
-                
+                const isExternal = track.source === 'jiosaavn' || track.source === 'youtube' ||
+                    (track.externalId && !/^[0-9a-fA-F]{24}$/.test(String(track.externalId)));
+                const songId = isExternal
+                    ? (track.externalId || track.id)
+                    : (track._id || track.id || track.externalId);
+
                 // Optimistic update
                 set(state => ({
                     playlists: state.playlists.map(p => {
                         if (p._id === playlistId) {
-                            if (!p.songs.some(s => (s._id || s.id || s.externalId) === songId)) {
+                            if (!p.songs.some(s => s._id === songId || s.id === songId || s.externalId === songId)) {
                                 return { ...p, songs: [...p.songs, track] };
                             }
                         }
@@ -86,7 +91,8 @@ export const usePlaylistStore = create<PlaylistStore>()(
                         title: track.title,
                         artist: track.artist,
                         imageUrl: track.artwork || track.imageUrl,
-                        audioUrl: track.url || track.audioUrl,
+                        audioUrl: track.url || track.audioUrl || track.streamUrl || "",
+                        streamUrl: track.streamUrl || track.url || track.audioUrl || "",
                         duration: track.duration,
                         source: track.source || 'jiosaavn',
                         externalId: songId
@@ -102,6 +108,13 @@ export const usePlaylistStore = create<PlaylistStore>()(
                     set(state => ({
                         playlists: state.playlists.map(p => p._id === playlistId ? response.data : p)
                     }));
+
+                    const playlist = get().playlists.find(p => p._id === playlistId);
+                    const playlistName = playlist ? playlist.name : "Playlist";
+                    useToastStore.getState().showToast({
+                        message: `Added to ${playlistName}`,
+                        duration: 2500
+                    });
                 } catch (error: any) {
                     console.error("[PlaylistStore] addTrackToPlaylist failed:", error);
                     // Revert on error
@@ -115,7 +128,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
                 set(state => ({
                     playlists: state.playlists.map(p => {
                         if (p._id === playlistId) {
-                            return { ...p, songs: p.songs.filter(s => (s._id || s.id || s.externalId) !== songId) };
+                            return { ...p, songs: p.songs.filter(s => s._id !== songId && s.id !== songId && s.externalId !== songId) };
                         }
                         return p;
                     })
@@ -129,6 +142,13 @@ export const usePlaylistStore = create<PlaylistStore>()(
                     set((state) => ({
                         playlists: state.playlists.map(p => p._id === playlistId ? response.data : p)
                     }));
+
+                    const playlist = get().playlists.find(p => p._id === playlistId);
+                    const playlistName = playlist ? playlist.name : "Playlist";
+                    useToastStore.getState().showToast({
+                        message: `Removed from ${playlistName}`,
+                        duration: 2500
+                    });
                 } catch (error: any) {
                     console.error("[PlaylistStore] Failed to remove track:", error.message);
                     // Revert

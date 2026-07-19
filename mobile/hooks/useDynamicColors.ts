@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { getColors } from 'react-native-image-colors';
-import { Platform } from 'react-native';
 
 export interface DynamicColors {
   primary: string;

@@ -8,13 +8,17 @@ import { ExternalItem } from './types';
 import { Dimensions } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const CARD_WIDTH = SCREEN_WIDTH * 0.45;
+const CARD_WIDTH = SCREEN_WIDTH * 0.40;
 const CARD_MARGIN = 14;
 const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const FeaturedPlaylistsSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
+    if (__DEV__) {
+        console.log('[FeaturedPlaylistsSection] Render');
+    }
     const router = useRouter();
     const topPlaylists = useStreamStore(s => s.homepageData?.topPlaylists);
+    const isLoading = useStreamStore(s => s.isLoadingHomepage);
 
     const handleNavigateExternal = useCallback(
         (item: ExternalItem) => {
@@ -24,18 +28,22 @@ export const FeaturedPlaylistsSection = React.memo(({ onOptions }: { onOptions?:
         [router]
     );
 
-    const renderFeaturedPlaylist = useCallback(({ item, index }: { item: ExternalItem; index: number }) => (
+    const renderFeaturedPlaylist = useCallback(({ item, index }: { item: any; index: number }) => (
         <PremiumCard
             title={item.title}
             subtitle={item.songCount ? `${item.songCount} songs` : item.description}
             imageUrl={item.imageUrl}
-            onPress={() => handleNavigateExternal(item)}
-            onLongPress={() => onOptions?.(item, 'playlist')}
+            onPress={item.isPlaceholder ? undefined : () => handleNavigateExternal(item)}
+            onLongPress={item.isPlaceholder ? undefined : () => onOptions?.(item, 'playlist')}
             index={index}
+            width={CARD_WIDTH}
+            isPlaceholder={item.isPlaceholder}
         />
     ), [handleNavigateExternal, onOptions]);
 
-    if (!topPlaylists || topPlaylists.length === 0) return null;
+    const displayPlaylists = topPlaylists && topPlaylists.length > 0 ? topPlaylists.slice(0, 8) : (isLoading ? Array(4).fill({ isPlaceholder: true }) : []);
+
+    if (displayPlaylists.length === 0) return null;
 
     return (
         <View style={styles.sectionContainer}>
@@ -46,9 +54,9 @@ export const FeaturedPlaylistsSection = React.memo(({ onOptions }: { onOptions?:
             <FlatList
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
-                data={topPlaylists.slice(0, 8)}
-                keyExtractor={(item) => item.externalId || item.id || String(item._id)}
+                contentContainerStyle={{ paddingHorizontal: 16 }}
+                data={displayPlaylists}
+                keyExtractor={(item, idx) => item.isPlaceholder ? `placeholder-${idx}` : (item.externalId || item.id || String(item._id))}
                 renderItem={renderFeaturedPlaylist}
                 snapToInterval={ITEM_SIZE}
                 decelerationRate="fast"
@@ -69,5 +77,5 @@ export const FeaturedPlaylistsSection = React.memo(({ onOptions }: { onOptions?:
 FeaturedPlaylistsSection.displayName = 'FeaturedPlaylistsSection';
 
 const styles = StyleSheet.create({
-    sectionContainer: { marginTop: 28 },
+    sectionContainer: { marginTop: 24 },
 });

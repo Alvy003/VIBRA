@@ -1,37 +1,36 @@
-import React, { useEffect, useCallback, useMemo, useRef } from 'react';
-import {
-    View,
-    Text,
-    TouchableOpacity,
-    Dimensions,
-    StyleSheet,
-    BackHandler,
-    StatusBar,
-} from 'react-native';
-import { useRouter } from 'expo-router';
-import { useMusicStore } from '@/stores/useMusicStore';
-import { usePlayerStore } from '@/stores/usePlayerStore';
-import { useDownloadStore } from '@/stores/useDownloadStore';
-import Animated, {
-    useSharedValue,
-    useAnimatedStyle,
-    useAnimatedScrollHandler,
-    interpolate,
-    Extrapolate,
-} from 'react-native-reanimated';
-import {
-    ArrowLeft,
-    CircleArrowDown,
-} from 'lucide-react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { FlashList as OriginalFlashList } from '@shopify/flash-list';
+import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
+import { DownloadStateIcon } from '@/components/DownloadedIcon';
+import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
 import { MediaListSkeleton } from '@/components/Skeleton';
 import { TrackListItem } from '@/components/TrackListItem';
-import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
-import { DownloadedIcon } from '@/components/DownloadedIcon';
-import { SharpPlay, SharpPause, SharpShuffle } from '@/components/SharpIcons';
 import Colors from '@/constants/Colors';
+import { useDownloadStore } from '@/stores/useDownloadStore';
+import { useMusicStore } from '@/stores/useMusicStore';
+import { usePlayerStore } from '@/stores/usePlayerStore';
+import { FlashList as OriginalFlashList } from '@shopify/flash-list';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
+import {
+    ArrowLeft,
+} from 'lucide-react-native';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import {
+    BackHandler,
+    Dimensions,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+} from 'react-native';
+import Animated, {
+    Extrapolate,
+    interpolate,
+    useAnimatedScrollHandler,
+    useAnimatedStyle,
+    useSharedValue,
+} from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 // Placeholder URL - resolveAudioUrl will replace with a fresh redirector URL at play time
 const DUMMY_URL = 'https://raw.githubusercontent.com/anars/blank-audio/master/1-second-of-silence.mp3';
@@ -92,11 +91,11 @@ const FavoritesHeader = React.memo<FavoritesHeaderProps>(({
             {/* Left Controls: Only Download */}
             <View style={styles.leftControls}>
                 <TouchableOpacity onPress={onDownload} activeOpacity={0.7}>
-                    {isDownloaded ? (
-                        <DownloadedIcon size={22} />
-                    ) : (
-                        <CircleArrowDown size={26} color={Colors.whiteAlpha60} />
-                    )}
+                    <DownloadStateIcon
+                        variant="medium"
+                        status={isDownloaded ? 'downloaded' : 'idle'}
+                        color={Colors.whiteAlpha60}
+                    />
                 </TouchableOpacity>
             </View>
 
@@ -252,10 +251,15 @@ export default function FavoritesScreen() {
 
             {/* Sticky Header */}
             <Animated.View style={[styles.stickyHeader, stickyHeaderStyle]}>
-                <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.surface }]} />
+                <View style={[StyleSheet.absoluteFill, { backgroundColor: '#5038a0' }]} />
                 {/* Branded Gradient Overlay for Sticky Header */}
                 <LinearGradient
-                    colors={['#5038a0', Colors.background]}
+                    colors={[
+                        'rgba(0, 0, 0, 0.47)', // Top of sticky bar
+                        'rgba(0, 0, 0, 0.60)', // Middle dimming stop
+                        'rgba(0, 0, 0, 0.70)', // Bottom dimming stop
+                    ]}
+                    locations={[0, 0.5, 1]}
                     style={StyleSheet.absoluteFill}
                 />
                 <SafeAreaView edges={['top']} style={styles.stickyHeaderContent}>
@@ -284,6 +288,8 @@ export default function FavoritesScreen() {
                 keyExtractor={(item: any) => item.externalId || item._id}
                 onScroll={scrollHandler}
                 scrollEventThrottle={16}
+                overScrollMode="never"
+                bounces={false}
                 renderItem={({ item, index }: any) => (
                     <TrackListItem
                         track={{ ...item, id: item.externalId || item._id }}
