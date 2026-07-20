@@ -21,6 +21,9 @@ import {
   redirectStream,
   getLyrics,
   getArtistInfo,
+  getBecauseYouPlayed,
+  getRediscoverFavorites,
+  getFollowedArtistsRecommendations,
 } from "../controller/stream.controller.js";
 import { recognizeSong } from "../controller/recognizeSong.controller.js";
 
@@ -43,6 +46,9 @@ router.get("/home", getHomepageData);
 router.get("/daily-mix", protectRoute, getDailyMix);
 router.get("/quick-picks", protectRoute, getQuickPicks);
 router.get("/weekly-mix", protectRoute, getWeeklyMix);
+router.get("/recommendations/because-you-played", protectRoute, getBecauseYouPlayed);
+router.get("/recommendations/rediscover-favorites", protectRoute, getRediscoverFavorites);
+router.get("/recommendations/followed-artists", protectRoute, getFollowedArtistsRecommendations);
 router.get("/play/:source/:id", redirectStream);
 router.get("/autocomplete", searchRateLimiter, getAutocomplete);
 router.get("/lyrics", getLyrics);

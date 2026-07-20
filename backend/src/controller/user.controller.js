@@ -1,5 +1,6 @@
 import { User } from "../models/user.model.js";
 import { Message } from "../models/message.model.js";
+import { deleteCache } from "../lib/cacheService.js";
 
 export const getAllUsers = async (req, res, next) => {
   try {
@@ -120,6 +121,11 @@ export const likeSong = async (req, res, next) => {
       { new: true }
     ).populate("likedSongs");
 
+    // Invalidate Rediscover Favorites cache
+    try {
+      await deleteCache(`vibra:recommendations:rediscover-favorites:${userId}`);
+    } catch (err) {}
+
     // Merge and return
     const merged = mergeLocalAndExternalLikedSongs(user);
     res.json(merged);
@@ -139,6 +145,11 @@ export const unlikeSong = async (req, res, next) => {
       { $pull: { likedSongs: songId } },
       { new: true }
     ).populate("likedSongs");
+
+    // Invalidate Rediscover Favorites cache
+    try {
+      await deleteCache(`vibra:recommendations:rediscover-favorites:${userId}`);
+    } catch (err) {}
 
     const merged = mergeLocalAndExternalLikedSongs(user);
     res.json(merged);
@@ -195,6 +206,11 @@ export const likeExternalSong = async (req, res, next) => {
       { new: true }
     ).populate("likedSongs");
 
+    // Invalidate Rediscover Favorites cache
+    try {
+      await deleteCache(`vibra:recommendations:rediscover-favorites:${userId}`);
+    } catch (err) {}
+
     const merged = mergeLocalAndExternalLikedSongs(user);
     res.json(merged);
   } catch (err) {
@@ -217,6 +233,11 @@ export const unlikeExternalSong = async (req, res, next) => {
       { $pull: { likedExternalSongs: { externalId } } },
       { new: true }
     ).populate("likedSongs");
+
+    // Invalidate Rediscover Favorites cache
+    try {
+      await deleteCache(`vibra:recommendations:rediscover-favorites:${userId}`);
+    } catch (err) {}
 
     const merged = mergeLocalAndExternalLikedSongs(user);
     res.json(merged);
@@ -249,21 +270,27 @@ export const getLikedSongs = async (req, res, next) => {
 // HELPER — Merge local populated songs + external songs into one array
 // ============================================================================
 
+import { FEATURES } from "../config/features.js";
+
 function mergeLocalAndExternalLikedSongs(user) {
   if (!user) return [];
 
-  // Local songs (populated from Song collection)
-  const localSongs = (user.likedSongs || [])
-    .filter((s) => s && s._id) // filter out any null populated refs
-    .map((s) => {
-      const obj = s.toObject ? s.toObject() : s;
-      return {
-        ...obj,
-        _id: obj._id.toString(),
-        source: obj.source || "local",
-        _likedType: "local",
-      };
-    });
+  let localSongs = [];
+  
+  if (FEATURES.LOCAL_LIBRARY) {
+    // Local songs (populated from Song collection)
+    localSongs = (user.likedSongs || [])
+      .filter((s) => s && s._id) // filter out any null populated refs
+      .map((s) => {
+        const obj = s.toObject ? s.toObject() : s;
+        return {
+          ...obj,
+          _id: obj._id.toString(),
+          source: obj.source || "local",
+          _likedType: "local",
+        };
+      });
+  }
 
   // External songs (embedded documents)
   const externalSongs = (user.likedExternalSongs || []).map((s) => {

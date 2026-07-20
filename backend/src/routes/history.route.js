@@ -2,6 +2,8 @@
 import express from "express";
 import {
   trackPlay,
+  updatePlayProgress,
+  getContinueListening,
   getRecentlyPlayed,
   getRecentCollections,
   getFrequentCollections,
@@ -14,6 +16,8 @@ const router = express.Router();
 router.use(protectRoute);
 
 router.post("/track", trackPlay);
+router.post("/track/progress", updatePlayProgress);
+router.get("/continue-listening", getContinueListening);
 router.get("/recently-played", getRecentlyPlayed);
 router.get("/recent-collections", getRecentCollections);
 router.get("/frequent-collections", getFrequentCollections);

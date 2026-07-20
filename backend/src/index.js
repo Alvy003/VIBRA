@@ -36,6 +36,10 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT;
 
+// Trust exactly one proxy hop (Render's load balancer) so that
+// express-rate-limit can correctly read the real client IP from X-Forwarded-For.
+app.set('trust proxy', 1);
+
 const httpServer = createServer(app);
 initializeSocket(httpServer);
 

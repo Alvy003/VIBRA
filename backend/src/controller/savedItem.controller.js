@@ -29,6 +29,16 @@ export const saveItem = async (req, res, next) => {
       { upsert: true, new: true }
     );
 
+    // Invalidate followed-artists recommendation cache if type is artist
+    if (type === "artist") {
+      try {
+        const { deleteCache } = await import("../lib/cacheService.js");
+        await deleteCache(`vibra:recommendations:followed-artists:${userId}`);
+      } catch (err) {
+        console.error("[SavedItem] Failed to invalidate followed-artists cache on follow:", err);
+      }
+    }
+
     res.status(201).json(item);
   } catch (err) {
     if (err.code === 11000) {
@@ -46,6 +56,16 @@ export const unsaveItem = async (req, res, next) => {
     const result = await SavedItem.findOneAndDelete({ userId, externalId });
     if (!result) {
       return res.status(404).json({ message: "Item not found" });
+    }
+
+    // Invalidate followed-artists recommendation cache if removed item is artist
+    if (result.type === "artist") {
+      try {
+        const { deleteCache } = await import("../lib/cacheService.js");
+        await deleteCache(`vibra:recommendations:followed-artists:${userId}`);
+      } catch (err) {
+        console.error("[SavedItem] Failed to invalidate followed-artists cache on unfollow:", err);
+      }
     }
 
     res.json({ message: "Removed from library" });

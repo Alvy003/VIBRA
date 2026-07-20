@@ -1,5 +1,6 @@
 import { Song } from "../models/song.model.js";
 import { Playlist } from "../models/playlist.model.js";
+import { getCache, setCache } from "../lib/cacheService.js";
 
 export const getAllSongs = async (req, res, next) => {
 	try {
@@ -12,6 +13,17 @@ export const getAllSongs = async (req, res, next) => {
 
 export const getFeaturedSongs = async (req, res, next) => {
 	try {
+		const cacheKey = "vibra:songs:featured";
+		let cached = null;
+		try {
+			cached = await getCache(cacheKey);
+		} catch (err) {
+			console.warn("[Cache Fallback] featured songs (Redis read error):", err.message);
+		}
+		if (cached) {
+			return res.json(cached);
+		}
+
 		const songs = await Song.aggregate([
 			{ $sample: { size: 8 } },
 			{
@@ -24,6 +36,12 @@ export const getFeaturedSongs = async (req, res, next) => {
 				},
 			},
 		]);
+
+		try {
+			await setCache(cacheKey, songs, 108000); // 30 hours Redis cache (30 * 3600 = 108,000s)
+		} catch (err) {
+			console.warn("[Cache Fallback] featured songs (Redis write error):", err.message);
+		}
 		res.json(songs);
 	} catch (error) {
 		next(error);

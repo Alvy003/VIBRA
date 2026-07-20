@@ -36,5 +36,6 @@ const playHistorySchema = new mongoose.Schema({
 
 playHistorySchema.index({ userId: 1, playedAt: -1 });
 playHistorySchema.index({ userId: 1, songId: 1, playedAt: -1 });
+playHistorySchema.index({ userId: 1, completionPercentage: 1, playedAt: -1 });
 
 export const PlayHistory = mongoose.model("PlayHistory", playHistorySchema);
