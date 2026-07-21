@@ -21,9 +21,7 @@ interface AIPlaylistCardProps {
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export const AIPlaylistCard = React.memo(({ index = 0, noAnim = false }: AIPlaylistCardProps) => {
-  if (__DEV__) {
-    console.log('[AIPlaylistCard] Render');
-  }
+
   const router = useRouter();
   const glowValue = useSharedValue(0);
   const pressedScale = useSharedValue(1);

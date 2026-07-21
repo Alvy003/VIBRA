@@ -4,6 +4,7 @@ import { axiosInstance } from "@/lib/axios";
 import { mmkvStorage } from "@/lib/mmkvStorage";
 import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
 import { useToastStore } from './useToastStore';
+import * as Sentry from '@sentry/react-native';
 
 interface Playlist {
     _id: string;
@@ -116,7 +117,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
                         duration: 2500
                     });
                 } catch (error: any) {
-                    console.error("[PlaylistStore] addTrackToPlaylist failed:", error);
+                    Sentry.captureException(error);
                     // Revert on error
                     get().fetchPlaylistById(playlistId);
                     throw error;
@@ -150,7 +151,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
                         duration: 2500
                     });
                 } catch (error: any) {
-                    console.error("[PlaylistStore] Failed to remove track:", error.message);
+                    Sentry.captureException(error);
                     // Revert
                     get().fetchPlaylistById(playlistId);
                 }
@@ -166,7 +167,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
                     set(state => ({ playlists: [newPlaylist, ...state.playlists] }));
                     return newPlaylist;
                 } catch (error: any) {
-                    console.error("[PlaylistStore] createPlaylist failed:", error);
+                    Sentry.captureException(error);
                     throw error;
                 }
             },
@@ -182,7 +183,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
                         playlists: state.playlists.map(p => p._id === id ? updatedPlaylist : p)
                     }));
                 } catch (error: any) {
-                    console.error("[PlaylistStore] updatePlaylist failed:", error);
+                    Sentry.captureException(error);
                     throw error;
                 }
             },
@@ -194,7 +195,7 @@ export const usePlaylistStore = create<PlaylistStore>()(
                         playlists: state.playlists.filter(p => p._id !== id)
                     }));
                 } catch (error: any) {
-                    console.error("[PlaylistStore] deletePlaylist failed:", error);
+                    Sentry.captureException(error);
                     throw error;
                 }
             },

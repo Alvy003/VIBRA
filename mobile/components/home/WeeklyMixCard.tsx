@@ -22,7 +22,6 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export const WeeklyMixCard = React.memo(({ index = 0 }: { index?: number }) => {
     if (__DEV__) {
-        console.log('[WeeklyMixCard] Render');
     }
     const weeklyMix = useStreamStore(s => s.weeklyMix);
     const fetchWeeklyMix = useStreamStore(s => s.fetchWeeklyMix);

@@ -1,5 +1,6 @@
 import { useOAuth } from '@clerk/clerk-expo';
 import React, { useEffect, useRef, useState } from 'react';
+import * as Sentry from '@sentry/react-native';
 import {
   Text,
   View,
@@ -157,7 +158,7 @@ export default function LoginScreen() {
         setLoginSyncState('idle');
       }
     } catch (err) {
-      console.error('OAuth error', err);
+      Sentry.captureException(err);
       setIsLoading(false);
       setLoginSyncState('idle');
     }

@@ -5,6 +5,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { axiosInstance } from '@/lib/axios';
 import { useToastStore } from './useToastStore';
+import { captureEvent } from '@/lib/analytics';
+import * as Sentry from '@sentry/react-native';
 
 // Workaround for typing issues in some environments
 const FS = FileSystem as any;
@@ -55,13 +57,15 @@ const ensureDir = async () => {
     try {
         const dirInfo = await FileSystem.getInfoAsync(DOWNLOAD_DIR);
         if (!dirInfo.exists) {
-            console.log(`[DownloadStore] Creating downloads directory: ${DOWNLOAD_DIR}`);
+            if (__DEV__) {
+                console.log(`[DownloadStore] Creating downloads directory: ${DOWNLOAD_DIR}`);
+            }
             await FileSystem.makeDirectoryAsync(DOWNLOAD_DIR, { recursive: true } as any);
         } else {
             // console.log(`[DownloadStore] Downloads directory exists: ${DOWNLOAD_DIR}`);
         }
     } catch (e) {
-        console.error("[DownloadStore] ensureDir failed", e);
+        Sentry.captureException(e);
     }
 };
 
@@ -76,6 +80,8 @@ export const useDownloadStore = create<DownloadStore>()(
             downloadTrack: async (song, context) => {
                 const songId = song.id || song.externalId || song._id;
                 if (!songId || (get().downloadedSongs[songId] && !context) || get().isDownloading[songId]) return;
+
+                captureEvent('download_started', { type: 'track', source: song.source || 'unknown' });
 
                 set((state) => ({
                     isDownloading: { ...state.isDownloading, [songId]: true }
@@ -120,7 +126,9 @@ export const useDownloadStore = create<DownloadStore>()(
                     const fileName = `${songId}${fileExt}`;
                     const localUri = `${DOWNLOAD_DIR}${fileName}`;
 
-                    console.log(`[DownloadStore] Starting download for: ${song.title}`, { url, localUri });
+                    if (__DEV__) {
+                        console.log(`[DownloadStore] Starting download for: ${song.title}`, { url, localUri });
+                    }
                     const downloadRes = await FileSystem.downloadAsync(url, localUri, {
                         headers: {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -129,11 +137,15 @@ export const useDownloadStore = create<DownloadStore>()(
                     });
 
                     if (downloadRes.status !== 200) {
-                        console.error(`[DownloadStore] Download failed with status: ${downloadRes.status}`, downloadRes);
+                        if (__DEV__) {
+                            console.error(`[DownloadStore] Download failed with status: ${downloadRes.status}`, downloadRes);
+                        }
                         throw new Error(`Download failed with status ${downloadRes.status}`);
                     }
 
-                    console.log(`[DownloadStore] Audio download complete: ${downloadRes.uri}`);
+                    if (__DEV__) {
+                        console.log(`[DownloadStore] Audio download complete: ${downloadRes.uri}`);
+                    }
 
                     // Also download artwork if it exists to keep it offline
                     let localArtwork = song.artwork || song.imageUrl;
@@ -141,16 +153,22 @@ export const useDownloadStore = create<DownloadStore>()(
                         try {
                             const artworkName = `art_${songId}.jpg`;
                             const artworkUri = `${DOWNLOAD_DIR}${artworkName}`;
-                            console.log(`[DownloadStore] Downloading artwork: ${localArtwork} -> ${artworkUri}`);
+                            if (__DEV__) {
+                                console.log(`[DownloadStore] Downloading artwork: ${localArtwork} -> ${artworkUri}`);
+                            }
                             const artRes = await FileSystem.downloadAsync(localArtwork, artworkUri);
                             if (artRes.status === 200) {
                                 localArtwork = artworkUri;
-                                console.log(`[DownloadStore] Artwork download complete: ${artworkUri}`);
+                                if (__DEV__) {
+                                    console.log(`[DownloadStore] Artwork download complete: ${artworkUri}`);
+                                }
                             } else {
                                 console.warn(`[DownloadStore] Artwork download failed with status: ${artRes.status}`);
                             }
                         } catch (e) {
-                            console.log("[DownloadStore] Artwork download error", e);
+                            if (__DEV__) {
+                                console.log("[DownloadStore] Artwork download error", e);
+                            }
                         }
                     }
 
@@ -176,9 +194,10 @@ export const useDownloadStore = create<DownloadStore>()(
                             message: "Downloaded",
                             duration: 3000
                         });
+                        captureEvent('download_completed', { type: 'track' });
                     }
                 } catch (error) {
-                    console.error("[DownloadStore] Download error", error);
+                    Sentry.captureException(error);
                     set((state) => ({
                         isDownloading: { ...state.isDownloading, [songId]: false }
                     }));
@@ -193,6 +212,8 @@ export const useDownloadStore = create<DownloadStore>()(
                     message: "Downloading playlist...",
                     duration: 2000
                 });
+                
+                captureEvent('download_started', { type: 'playlist' });
 
                 // Download all songs in the playlist
                 for (const song of songs) {
@@ -216,6 +237,7 @@ export const useDownloadStore = create<DownloadStore>()(
                     message: "Playlist downloaded",
                     duration: 3000
                 });
+                captureEvent('download_completed', { type: 'playlist' });
             },
 
             downloadAlbum: async (album, songs) => {
@@ -226,6 +248,8 @@ export const useDownloadStore = create<DownloadStore>()(
                     message: "Downloading album...",
                     duration: 2000
                 });
+                
+                captureEvent('download_started', { type: 'album' });
 
                 for (const song of songs) {
                     await get().downloadTrack(song, { albumId });
@@ -248,6 +272,7 @@ export const useDownloadStore = create<DownloadStore>()(
                     message: "Album downloaded",
                     duration: 3000
                 });
+                captureEvent('download_completed', { type: 'album' });
             },
 
             removeDownload: async (songId, isBatch = false) => {
@@ -271,7 +296,7 @@ export const useDownloadStore = create<DownloadStore>()(
                         });
                     }
                 } catch (error) {
-                    console.error("[DownloadStore] Remove error", error);
+                    Sentry.captureException(error);
                 }
             },
 
@@ -340,7 +365,7 @@ export const useDownloadStore = create<DownloadStore>()(
                     }
                     return total;
                 } catch (e) {
-                    console.error("[DownloadStore] getStorageSize error", e);
+                    Sentry.captureException(e);
                     return 0;
                 }
             },

@@ -1,6 +1,7 @@
 // components/ai-playlist/PlaylistResult.tsx
 import { TrackListItem } from '@/components/TrackListItem';
 import { useAIPlaylistStore } from '@/stores/useAIPlaylistStore';
+import * as Sentry from '@sentry/react-native';
 import { usePlayerStore } from '@/stores/usePlayerStore';
 import { useSavedItemsStore } from '@/stores/useSavedItemsStore';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
@@ -92,7 +93,7 @@ export const PlaylistResult = React.memo(({
       }
       onSave?.(nextSaved);
     } catch (err) {
-      console.error('Save error:', err);
+      Sentry.captureException(err);
       setIsSaved(!nextSaved);
     }
   };

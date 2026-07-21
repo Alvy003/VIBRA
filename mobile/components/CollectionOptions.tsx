@@ -1,5 +1,6 @@
 // components/CollectionOptions.tsx
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
+import * as Sentry from '@sentry/react-native';
 import EditPlaylistModal from '@/components/modals/EditPlaylistModal';
 import Colors from '@/constants/Colors';
 import { useDownloadStore } from '@/stores/useDownloadStore';
@@ -87,7 +88,7 @@ const CollectionOptions = React.forwardRef<CollectionOptionsRef, CollectionOptio
                 title: currentItem.title || currentItem.name,
             });
         } catch (error) {
-            console.error('Error sharing collection:', error);
+            Sentry.captureException(error);
         }
     };
 

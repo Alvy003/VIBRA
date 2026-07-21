@@ -3,6 +3,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { axiosInstance } from '@/lib/axios';
 import { mmkvStorage } from '@/lib/mmkvStorage';
 import { migrateStoreToMMKV } from '@/lib/mmkvMigration';
+import { captureEvent } from '@/lib/analytics';
+import * as Sentry from '@sentry/react-native';
 
 interface SearchSuggestions {
   songs: any[];
@@ -91,7 +93,7 @@ export const useSearchStore = create<SearchStore>()(
           }
         } catch (e: any) {
           if (e.name === 'CanceledError') return;
-          console.error('[SearchStore] fetchSuggestions failed:', e);
+          Sentry.captureException(e);
         } finally {
           if (get().query.trim() !== '') {
             set({ isSuggesting: false });
@@ -101,6 +103,8 @@ export const useSearchStore = create<SearchStore>()(
 
       fetchResults: async (q) => {
         if (!q.trim()) return;
+
+        captureEvent('search_used');
 
         resultAbortController?.abort();
         resultAbortController = new AbortController();
@@ -114,7 +118,7 @@ export const useSearchStore = create<SearchStore>()(
           set({ results: res.data });
         } catch (e: any) {
           if (e.name === 'CanceledError') return;
-          console.error('[SearchStore] fetchResults failed:', e);
+          Sentry.captureException(e);
           const isNetworkError = !e.response && (e.request || e.message === 'Network Error');
           set({ results: null, searchError: isNetworkError ? 'network_error' : 'server_error' });
         } finally {

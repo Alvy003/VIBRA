@@ -1,6 +1,7 @@
 // components/AddTrackBottomSheet.tsx
 import Colors from '@/constants/Colors';
 import { resolveAssetUrl } from '@/lib/url';
+import * as Sentry from '@sentry/react-native';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerUIStore } from '@/stores/usePlayerUIStore';
 import { usePlaylistStore } from '@/stores/usePlaylistStore';
@@ -132,7 +133,7 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                     await addTrackToPlaylist(playlist._id, targetTrack);
                 }
             } catch (error) {
-                console.error("Failed to toggle playlist membership", error);
+                Sentry.captureException(error);
             }
         };
 
@@ -142,7 +143,7 @@ const AddTrackBottomSheet = forwardRef<AddTrackBottomSheetRef, AddTrackBottomShe
                 const newPlaylist = await createPlaylist(name);
                 await addTrackToPlaylist(newPlaylist._id, targetTrack);
             } catch (error) {
-                console.error("Failed to create and add to playlist", error);
+                Sentry.captureException(error);
             }
         };
 

@@ -15,7 +15,6 @@ const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const TopChartsSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     if (__DEV__) {
-        console.log('[TopChartsSection] Render');
     }
     const router = useRouter();
     const charts = useStreamStore(s => s.homepageData?.charts);

@@ -8,7 +8,6 @@ import Colors from '@/constants/Colors';
 
 export const MixSection = React.memo(() => {
     if (__DEV__) {
-        console.log('[MixSection] Render');
     }
     
     const fetchDailyMix = useStreamStore(s => s.fetchDailyMix);

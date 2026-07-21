@@ -14,7 +14,6 @@ const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const FeaturedPlaylistsSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     if (__DEV__) {
-        console.log('[FeaturedPlaylistsSection] Render');
     }
     const router = useRouter();
     const topPlaylists = useStreamStore(s => s.homepageData?.topPlaylists);

@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { useAuth, useUser } from '@clerk/clerk-expo';
+import { usePostHog } from 'posthog-react-native';
 import { axiosInstance, setAuthToken } from '@/lib/axios';
+import * as Sentry from '@sentry/react-native';
 import { useOnboardingStore } from '@/stores/useOnboardingStore';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { useStreamStore } from '@/stores/useStreamStore';
@@ -16,7 +18,18 @@ import { useNetworkStore } from '@/stores/useNetworkStore';
 export const ClerkAuthHandler: React.FC = () => {
     const { getToken, isSignedIn, isLoaded } = useAuth();
     const { user } = useUser();
+    const posthog = usePostHog();
     const hasSyncedRef = React.useRef(false);
+
+    const hashString = (str: string) => {
+        let hash = 0;
+        for (let i = 0, len = str.length; i < len; i++) {
+            let chr = str.charCodeAt(i);
+            hash = (hash << 5) - hash + chr;
+            hash |= 0; // Convert to 32bit integer
+        }
+        return Math.abs(hash).toString(16);
+    };
 
     useEffect(() => {
         const updateAxiosToken = async () => {
@@ -51,7 +64,9 @@ export const ClerkAuthHandler: React.FC = () => {
                         }
 
                         if (useNetworkStore.getState().isOnline) {
-                            console.log("[ClerkAuthHandler] Initial sign-in sync starting...");
+                            if (__DEV__) {
+                                console.log("[ClerkAuthHandler] Initial sign-in sync starting...");
+                            }
 
                             // 1. First, ensure user exists in backend via sync
                             await axiosInstance.post("/auth/callback", {
@@ -59,22 +74,30 @@ export const ClerkAuthHandler: React.FC = () => {
                                 firstName: user?.firstName,
                                 lastName: user?.lastName,
                                 imageUrl: user?.imageUrl,
-                            }).catch(err => console.error("[ClerkAuthHandler] Auth sync failed:", err));
+                            }).catch(err => Sentry.captureException(err));
 
                             // Get the current languages before fetching new preferences
                             const oldLanguages = useOnboardingStore.getState().getLanguageString();
 
                             // 2. Fetch user preferences first
                             await useOnboardingStore.getState().fetchPreferences().catch(err => 
-                                console.error("[ClerkAuthHandler] Preferences fetch failed:", err)
+                                Sentry.captureException(err)
                             );
 
                             // Determine if user is new or existing and update presentation state
                             const completedOnboarding = useOnboardingStore.getState().preferences.completedOnboarding;
+                            
+                            // Track in PostHog
+                            if (user?.id) {
+                                posthog?.identify(hashString(user.id));
+                            }
+
                             if (!completedOnboarding) {
                                 bootstrapStore.setLoginSyncState('preparing_account');
+                                posthog?.capture('signup');
                             } else {
                                 bootstrapStore.setLoginSyncState('syncing_library');
+                                posthog?.capture('login');
                             }
 
                             const newLanguages = useOnboardingStore.getState().getLanguageString();
@@ -87,7 +110,7 @@ export const ClerkAuthHandler: React.FC = () => {
                             // 3. Fetch core homepage data
                             await Promise.all([
                                 useStreamStore.getState().fetchHomepage(shouldForceHomepage),
-                            ]).catch(err => console.error("[ClerkAuthHandler] Data sync error:", err));
+                            ]).catch(err => Sentry.captureException(err));
 
                             // 4. Trigger reactive component-level fetches asynchronously (independent loading architecture)
                             useStreamStore.getState().triggerRefresh();
@@ -95,7 +118,9 @@ export const ClerkAuthHandler: React.FC = () => {
 
                             hasSyncedRef.current = true;
                             bootstrapStore.setLoginSyncState('complete');
-                            console.log("[ClerkAuthHandler] Initial sync complete.");
+                            if (__DEV__) {
+                                console.log("[ClerkAuthHandler] Initial sync complete.");
+                            }
                         } else {
                             // Offline - just consider it synced so we don't block
                             hasSyncedRef.current = true;
@@ -103,7 +128,7 @@ export const ClerkAuthHandler: React.FC = () => {
                         }
                     }
                 } catch (error: any) {
-                    console.error('[ClerkAuthHandler] Error fetching JWT:', error);
+                    Sentry.captureException(error);
                     useAuthBootstrapStore.getState().setLoginSyncState('complete');
                     const isNetworkError = !useNetworkStore.getState().isOnline ||
                         error?.message?.includes('Network') ||
@@ -111,7 +136,9 @@ export const ClerkAuthHandler: React.FC = () => {
                         error?.message?.includes('offline');
 
                     if (isNetworkError) {
-                        console.log('[ClerkAuthHandler] Network error while fetching JWT, preserving offline state.');
+                        if (__DEV__) {
+                            console.log('[ClerkAuthHandler] Network error while fetching JWT, preserving offline state.');
+                        }
                         useMusicStore.getState().setAuthReady(true);
                     } else {
                         // Real auth failure
@@ -129,9 +156,12 @@ export const ClerkAuthHandler: React.FC = () => {
                     useMusicStore.getState().setAuthReady(false);
                     hasSyncedRef.current = false; // Reset sync on sign out
                     useAuthBootstrapStore.getState().setHasValidSession(false);
+                    posthog?.reset(); // Clear analytics session
                 } else {
                     // Clerk dropped session due to offline. Ignore and keep our offline state.
-                    console.log('[ClerkAuthHandler] Offline session drop ignored.');
+                    if (__DEV__) {
+                        console.log('[ClerkAuthHandler] Offline session drop ignored.');
+                    }
                     useMusicStore.getState().setAuthReady(true);
                 }
             }
@@ -149,14 +179,16 @@ export const ClerkAuthHandler: React.FC = () => {
         const unsubscribe = useNetworkStore.subscribe((state, prevState) => {
             // If transitioned from offline to online
             if (!prevState.isOnline && state.isOnline && isSignedIn) {
-                console.log("[ClerkAuthHandler] Network restored, refreshing token and stale data...");
+                if (__DEV__) {
+                    console.log("[ClerkAuthHandler] Network restored, refreshing token and stale data...");
+                }
                 getToken({ skipCache: true }).then(token => {
                     setAuthToken(token);
                     // Fetch only stale data
                     useStreamStore.getState().fetchHomepage(false);
                     useMusicStore.getState().fetchQuickPicks(false);
                 }).catch(err => {
-                    console.error("[ClerkAuthHandler] Recovery sync failed:", err);
+                    Sentry.captureException(err);
                 });
             }
         });

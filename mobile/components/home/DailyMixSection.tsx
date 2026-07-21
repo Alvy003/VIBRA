@@ -14,7 +14,6 @@ const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const DailyMixSection = React.memo(() => {
     if (__DEV__) {
-        console.log('[DailyMixSection] Render');
     }
     const dailyMix = useStreamStore(s => s.dailyMix);
     const isLoading = useStreamStore(s => s.isLoadingDailyMix);

@@ -1,5 +1,6 @@
 // components/home/HomeFooter.tsx
 import Colors from '@/constants/Colors';
+import * as Sentry from '@sentry/react-native';
 import { COLORS } from '@/constants/design';
 import { Github, Instagram, Twitter, Youtube } from 'lucide-react-native';
 import React from 'react';
@@ -24,7 +25,7 @@ export const HomeFooter = React.memo(() => {
 
   const handlePress = (url: string) => {
     if (url === '#') return;
-    Linking.openURL(url).catch(err => console.error("Couldn't load page", err));
+    Linking.openURL(url).catch(err => Sentry.captureException(err));
   };
 
   return (

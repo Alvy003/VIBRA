@@ -20,7 +20,6 @@ const getFallbackIcon = (type: string) => {
 
 export const FrequentGridSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     if (__DEV__) {
-        console.log('[FrequentGridSection] Render');
     }
     const router = useRouter();
     const frequentCollections = useStreamStore(s => s.frequentCollectionsData);

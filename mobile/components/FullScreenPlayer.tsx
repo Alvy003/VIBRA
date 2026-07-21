@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useMemo, useCallback, useState } from 'react';
+import * as Sentry from '@sentry/react-native';
 import {
   View,
   Text,
@@ -463,7 +464,7 @@ export default function FullScreenPlayer({
         title: track.title,
       });
     } catch (error) {
-      console.error('Error sharing song:', error);
+      Sentry.captureException(error);
     }
   }, []);
 
@@ -824,6 +825,9 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     backgroundColor: Colors.background,
     zIndex: 200,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
   },
   scrollContent: {},
   artistCardWrapper: {

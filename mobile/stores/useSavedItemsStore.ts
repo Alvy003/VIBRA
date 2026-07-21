@@ -4,6 +4,7 @@ import { axiosInstance } from "@/lib/axios";
 import { mmkvStorage } from "@/lib/mmkvStorage";
 import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
 import { useToastStore } from "./useToastStore";
+import * as Sentry from '@sentry/react-native';
 
 export interface SavedItem {
     _id: string;
@@ -40,7 +41,7 @@ export const useSavedItemsStore = create<SavedItemsStore>()(
                     const { data } = await axiosInstance.get("/library/saved");
                     set({ savedItems: data });
                 } catch (err) {
-                    console.error("Failed to fetch saved items:", err);
+                    Sentry.captureException(err);
                 } finally {
                     set({ isLoading: false });
                 }
@@ -78,7 +79,7 @@ export const useSavedItemsStore = create<SavedItemsStore>()(
                         return true;
                     }
                 } catch (err) {
-                    console.error("Failed to toggle save item:", err);
+                    Sentry.captureException(err);
                     return isSaved;
                 }
             },

@@ -4,6 +4,7 @@ import TrackPlayer, {
   Capability,
   RepeatMode
 } from 'react-native-track-player';
+import * as Sentry from '@sentry/react-native';
 
 let isSetup = false;
 
@@ -61,10 +62,12 @@ export async function setupPlayer(): Promise<boolean> {
     await TrackPlayer.setRepeatMode(RepeatMode.Off);
 
     isSetup = true;
-    console.log('[TrackPlayer] Setup complete');
+    if (__DEV__) {
+      console.log('[TrackPlayer] Setup complete');
+    }
     return true;
   } catch (error) {
-    console.error('[TrackPlayer] Setup failed:', error);
+    Sentry.captureException(error);
     return false;
   }
 }
@@ -73,7 +76,7 @@ export async function resetPlayer(): Promise<void> {
   try {
     await TrackPlayer.reset();
   } catch (error) {
-    console.error('[TrackPlayer] Reset failed:', error);
+    Sentry.captureException(error);
   }
 }
 

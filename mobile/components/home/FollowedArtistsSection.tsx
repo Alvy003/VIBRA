@@ -59,7 +59,6 @@ const getDailyRotationIndex = (userId: string | null | undefined, count: number)
 
 export const FollowedArtistsSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
   if (__DEV__) {
-    console.log('[FollowedArtistsSection] Render');
   }
   const groups = useStreamStore(s => s.followedArtistsData) as FollowedArtistGroup[] || [];
   const isLoading = useStreamStore(s => s.isLoadingFollowedArtists);

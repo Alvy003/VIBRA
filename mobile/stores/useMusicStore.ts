@@ -4,6 +4,7 @@ import { axiosInstance, setAuthToken } from "@/lib/axios";
 import * as Haptics from 'expo-haptics';
 import { mmkvStorage } from "@/lib/mmkvStorage";
 import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
+import * as Sentry from '@sentry/react-native';
 import { useToastStore } from './useToastStore';
 import { usePlayerUIStore } from './usePlayerUIStore';
 import { useNetworkStore } from './useNetworkStore';
@@ -101,16 +102,20 @@ export const useMusicStore = create<MusicStore>()(
             setAuthReady: (ready) => set({ isAuthReady: ready }),
 
             fetchAlbums: async () => {
-                console.log("[MusicStore] Fetching albums from:", axiosInstance.defaults.baseURL + "/albums");
+                if (__DEV__) {
+                    console.log("[MusicStore] Fetching albums from:", axiosInstance.defaults.baseURL + "/albums");
+                }
                 set({ isLoading: true, musicError: null });
 
                 try {
                     const response = await axiosInstance.get("/albums");
                     const data = Array.isArray(response.data) ? response.data : [];
-                    console.log("[MusicStore] Albums received:", data.length);
+                    if (__DEV__) {
+                        console.log("[MusicStore] Albums received:", data.length);
+                    }
                     set({ albums: data });
                 } catch (error: any) {
-                    console.error("[MusicStore] Fetch error:", error.message);
+                    Sentry.captureException(error);
                     const message = error.response?.data?.message || error.message || "Failed to fetch albums";
                     set({ musicError: message });
 
@@ -166,7 +171,7 @@ export const useMusicStore = create<MusicStore>()(
                         set({ featuredSongsFetchedAt: Date.now() });
                     }
                 } catch (error: any) {
-                    console.error("[MusicStore] Fetch error:", error.message);
+                    Sentry.captureException(error);
                     const message = error.response?.data?.message || error.message || "Failed to fetch featured songs";
                     set({ musicError: message });
                 } finally {
@@ -177,14 +182,18 @@ export const useMusicStore = create<MusicStore>()(
             },
 
             fetchTrendingSongs: async () => {
-                console.log("[MusicStore] Fetching trending songs from:", axiosInstance.defaults.baseURL + "/songs/trending");
+                if (__DEV__) {
+                    console.log("[MusicStore] Fetching trending songs from:", axiosInstance.defaults.baseURL + "/songs/trending");
+                }
                 try {
                     const response = await axiosInstance.get("/songs/trending");
                     const data = Array.isArray(response.data) ? response.data : [];
-                    console.log("[MusicStore] Trending songs received:", data.length);
+                    if (__DEV__) {
+                        console.log("[MusicStore] Trending songs received:", data.length);
+                    }
                     set({ trendingSongs: data });
                 } catch (error: any) {
-                    console.error("[MusicStore] Fetch error:", error.message);
+                    Sentry.captureException(error);
                     const message = error.response?.data?.message || error.message || "Failed to fetch trending songs";
                     set({ musicError: message });
                 }
@@ -198,7 +207,7 @@ export const useMusicStore = create<MusicStore>()(
                     const response = await axiosInstance.get(`/albums/${id}`);
                     set({ currentAlbum: response.data });
                 } catch (error: any) {
-                    console.error("[MusicStore] Fetch album error:", error.message);
+                    Sentry.captureException(error);
                     const message = error.response?.data?.message || error.message || "Failed to fetch album";
                     set({ musicError: message });
                 } finally {
@@ -212,7 +221,7 @@ export const useMusicStore = create<MusicStore>()(
                     const res = await axiosInstance.get("/users/me/liked-songs");
                     set({ likedSongs: Array.isArray(res.data) ? res.data : [] });
                 } catch (err: any) {
-                    console.error("[MusicStore] Liked songs error:", err.message);
+                    Sentry.captureException(err);
                 }
             },
 
@@ -221,7 +230,7 @@ export const useMusicStore = create<MusicStore>()(
                     const response = await axiosInstance.get("/history/recently-played?limit=6");
                     set({ recentlyPlayed: Array.isArray(response.data) ? response.data : [] });
                 } catch (error: any) {
-                    console.error("[MusicStore] Failed to fetch recently played:", error.message);
+                    Sentry.captureException(error);
                 }
             },
 
@@ -265,7 +274,7 @@ export const useMusicStore = create<MusicStore>()(
                         set({ quickPicksFetchedAt: Date.now() });
                     }
                 } catch (error: any) {
-                    console.error("[MusicStore] Failed to fetch quick picks:", error.message);
+                    Sentry.captureException(error);
                 }
             },
 
@@ -274,7 +283,7 @@ export const useMusicStore = create<MusicStore>()(
                     const response = await axiosInstance.get("/history/recent-collections");
                     set({ recentCollections: Array.isArray(response.data) ? response.data : [] });
                 } catch (error: any) {
-                    console.error("[MusicStore] Failed to fetch recent collections:", error.message);
+                    Sentry.captureException(error);
                 }
             },
             toggleLikeSong: async (track: any) => {
@@ -383,8 +392,7 @@ export const useMusicStore = create<MusicStore>()(
 
                     return !isLiked;
                 } catch (err: any) {
-                    const errorMsg = err.response?.data?.message || err.message;
-                    console.error("[MusicStore] toggleLikeSong error:", errorMsg);
+                    Sentry.captureException(err);
                     // Revert on error
                     set({ likedSongs: prevState });
                     return isLiked;

@@ -1,6 +1,7 @@
 import { migrateStoreToMMKV } from '@/lib/mmkvMigration';
 import { mmkvStorage, storage } from '@/lib/mmkvStorage';
 import { setupPlayer } from '@/lib/trackPlayerSetup';
+import { captureEvent } from '@/lib/analytics';
 import {
     DUMMY_URL,
     buildPlayableQueue,
@@ -238,7 +239,7 @@ const updateWidgetState = async (passedState?: any) => {
             await syncWidget('Not Playing', 'Open Vibra to play music', '', false);
         }
     } catch (e) {
-        console.error('[PlayerStore] Error updating widget state:', e);
+        Sentry.captureException(e);
     }
 };
 
@@ -301,7 +302,7 @@ const flushUnsyncedProgress = async () => {
             }
         }
     } catch (e) {
-        console.error('[PlayerStore] Failed to flush unsynced progress:', e);
+        Sentry.captureException(e);
     }
 };
 
@@ -455,7 +456,7 @@ export const usePlayerStore = create<PlayerStore>()(
 
                     // Stop progress loop for previous track and sync its final position
                     stopProgressLoop();
-                    get().syncProgress().catch(err => console.error('[PlayerStore] syncProgress error:', err));
+                    get().syncProgress().catch(err => Sentry.captureException(err));
 
                     // Reset sync variables for new track
                     lastPostedPosition = -1;
@@ -481,6 +482,11 @@ export const usePlayerStore = create<PlayerStore>()(
                         // Trigger history tracking and preloading
                         await get().trackHistory(track);
                         
+                        captureEvent('playback_started', {
+                            source: get().currentContext?.type || 'unknown',
+                            provider: (track as any).source || 'unknown'
+                        });
+                        
                         // Start progress loop if we are playing
                         const playbackState = await TrackPlayer.getPlaybackState();
                         if (playbackState.state === State.Playing) {
@@ -499,7 +505,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 // create redundant concurrent native calls that race each other.
                 let _lastWidgetIsPlaying: boolean | null = null;
                 TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackState, async (event) => {
-                    const isPausedOrStopped = event.state === State.Paused || event.state === State.Stopped || event.state === State.None;
+                    const isPausedOrStopped = event.state === State.Paused || event.state === State.Stopped || event.state === State.None || event.state === State.Ready;
                     
                     let isPlayingNow = get().isPlaying;
                     if (event.state === State.Playing || event.state === State.Buffering || event.state === State.Loading) {
@@ -533,6 +539,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 // Queue Ended — widget state is already correct via PlaybackState above.
                 TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackQueueEnded, () => {
                     set({ isPlaying: false });
+                    captureEvent('playback_completed');
                     // No updateWidgetState() call: PlaybackState:Paused/Stopped fires
                     // immediately after and handles the icon flip via the boundary check.
                 });
@@ -540,8 +547,6 @@ export const usePlayerStore = create<PlayerStore>()(
 
                 // Playback Error (Spiral Breaker)
                 TrackPlayer.addEventListener(TrackPlayerEvent.PlaybackError, async (error: any) => {
-                    console.error('[PlayerStore] Native Playback Error:', error);
-
                     const state = get();
 
                     // Capture playback error in Sentry with full context (without sensitive URL)
@@ -563,6 +568,11 @@ export const usePlayerStore = create<PlayerStore>()(
                         }
                     });
 
+                    captureEvent('playback_error', {
+                        error_code: error.code || 'unknown',
+                        provider: (state.currentTrack as any)?.source || 'unknown'
+                    });
+
                     // Check if it's a redirector failure (meaning backend is down)
                     const isRedirectorUrl = state.currentTrack?.url?.includes('/api/stream/play/');
                     if (isRedirectorUrl) {
@@ -571,7 +581,9 @@ export const usePlayerStore = create<PlayerStore>()(
 
                     // If backend circuit breaker is triggered, stop retries and pause
                     if (get().consecutiveBackendFailures >= 3) {
-                        console.error('[PlayerStore] Circuit breaker active. Stopping retries.');
+                        if (__DEV__) {
+                            console.log('[PlayerStore] Circuit breaker active. Stopping retries.');
+                        }
                         await TrackPlayer.pause();
                         set({ isPlaying: false });
                         return;
@@ -583,12 +595,16 @@ export const usePlayerStore = create<PlayerStore>()(
                                   (error.code === 'android-io-bad-http-status' && !is404);
 
                     if (is404) {
-                        console.log('[PlayerStore] HTTP 404 detected. Skipping immediately.');
+                        if (__DEV__) {
+                            console.log('[PlayerStore] HTTP 404 detected. Skipping immediately.');
+                        }
                         const newFailureCount = state.skipFailureCount + 1;
                         set({ skipFailureCount: newFailureCount });
                         
                         if (newFailureCount >= 3) {
-                            console.error('[PlayerStore] Skip failure limit reached. Stopping playback.');
+                            if (__DEV__) {
+                                console.log('[PlayerStore] Skip failure limit reached. Stopping playback.');
+                            }
                             set({ isPlaying: false, skipFailureCount: 0 });
                             return;
                         }
@@ -601,14 +617,18 @@ export const usePlayerStore = create<PlayerStore>()(
                     set({ skipFailureCount: newFailureCount });
 
                     if (newFailureCount >= 3) {
-                        console.error('[PlayerStore] Skip failure limit reached. Stopping playback.');
+                        if (__DEV__) {
+                            console.log('[PlayerStore] Skip failure limit reached. Stopping playback.');
+                        }
                         set({ isPlaying: false, skipFailureCount: 0 });
                         return;
                     }
 
                     // --- REFRESH LOGIC ---
                     if (is403 && state.currentTrack && (state.currentTrack as any).source !== 'local') {
-                        console.log('[PlayerStore] Attempting to refresh expired URL...');
+                        if (__DEV__) {
+                            console.log('[PlayerStore] Attempting to refresh expired URL...');
+                        }
                         const freshUrl = await get().resolveAudioUrl(state.currentTrack, true);
                         
                         if (freshUrl && freshUrl !== state.currentTrack.url) {
@@ -645,7 +665,9 @@ export const usePlayerStore = create<PlayerStore>()(
                 const nativeQueue = await TrackPlayer.getQueue();
                 
                 if (nativeQueue.length === 0 && state.queue.length > 0) {
-                    console.log('[PlayerStore] Restoring persisted queue:', state.queue.length, 'tracks');
+                    if (__DEV__) {
+                        console.log('[PlayerStore] Restoring persisted queue:', state.queue.length, 'tracks');
+                    }
 
                     const { axiosInstance } = await import('@/lib/axios');
                     const baseURL = axiosInstance.defaults.baseURL ?? null;
@@ -657,7 +679,7 @@ export const usePlayerStore = create<PlayerStore>()(
                     try {
                         restoredQueue = await buildPlayableQueue(state.queue, { baseURL });
                     } catch (buildErr) {
-                        console.error('[PlayerStore] buildPlayableQueue failed during restoration:', buildErr);
+                        Sentry.captureException(buildErr);
                         restoredQueue = [];
                     }
 
@@ -695,7 +717,6 @@ export const usePlayerStore = create<PlayerStore>()(
                             if (state.repeatMode === 'queue') tpMode = RepeatMode.Queue;
                             await TrackPlayer.setRepeatMode(tpMode);
                         } catch (e) {
-                            console.error('[PlayerStore] Restore skip/refresh failed:', e);
                             Sentry.captureException(e, {
                                 tags: {
                                     operation: 'queue_restoration',
@@ -717,7 +738,6 @@ export const usePlayerStore = create<PlayerStore>()(
                 flushUnsyncedProgress();
             }
         } catch (error) {
-            console.error('[PlayerStore] Init failed:', error);
             Sentry.captureException(error, {
                 tags: { operation: 'player_init' }
             });
@@ -743,7 +763,7 @@ export const usePlayerStore = create<PlayerStore>()(
             // Sync Android Auto catalog
             syncAutoCache(mappedQueue);
         } catch (error) {
-            console.error('[PlayerStore] Sync failed:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -800,7 +820,6 @@ export const usePlayerStore = create<PlayerStore>()(
                 return track.url;
             }
         } catch (error) {
-            console.error('[PlayerStore] resolveAudioUrl error:', error);
             Sentry.captureException(error, {
                 tags: {
                     operation: 'resolveAudioUrl',
@@ -832,7 +851,6 @@ export const usePlayerStore = create<PlayerStore>()(
 
             const res = await buildPlayableTrack(track, { baseURL });
             if (!res.ok) {
-                console.error('[PlayerStore] Could not resolve playable track for:', track.title, 'Reason:', res.reason);
                 Sentry.captureMessage(`Stream resolution returned null: ${track.title}`, {
                     level: 'error',
                     tags: {
@@ -868,7 +886,6 @@ export const usePlayerStore = create<PlayerStore>()(
                 currentContext: context || null,
             });
         } catch (error) {
-            console.error('[PlayerStore] playTrack error:', error);
             Sentry.captureException(error, {
                 tags: {
                     operation: 'playTrack',
@@ -888,7 +905,7 @@ export const usePlayerStore = create<PlayerStore>()(
             await TrackPlayer.pause();
             set({ isPlaying: false });
         } catch (error) {
-            console.error('[PlayerStore] pause error:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -897,7 +914,7 @@ export const usePlayerStore = create<PlayerStore>()(
             await TrackPlayer.play();
             set({ isPlaying: true });
         } catch (error) {
-            console.error('[PlayerStore] resume error:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -914,7 +931,7 @@ export const usePlayerStore = create<PlayerStore>()(
         try {
             await TrackPlayer.seekTo(position);
         } catch (error) {
-            console.error('[PlayerStore] seekTo error:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -958,7 +975,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 }
 
             } catch (error) {
-                console.error('[PlayerStore] playNext error:', error);
+                Sentry.captureException(error);
             }
         });
     },
@@ -984,7 +1001,7 @@ export const usePlayerStore = create<PlayerStore>()(
                     await TrackPlayer.seekTo(0);
                 }
             } catch (error) {
-                console.error('[PlayerStore] playPrevious error:', error);
+                Sentry.captureException(error);
             }
         });
     },
@@ -1062,7 +1079,6 @@ export const usePlayerStore = create<PlayerStore>()(
             return true;
 
         } catch (error) {
-            console.error('[PlayerStore] initializeQueue error:', error);
             Sentry.captureException(error, {
                 tags: {
                     operation: 'initializeQueue',
@@ -1182,7 +1198,7 @@ export const usePlayerStore = create<PlayerStore>()(
 
             // console.log(`[PlayerStore] Added to queue: ${track.title}`);
         } catch (error) {
-            console.error('[PlayerStore] addToQueue error:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1229,7 +1245,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 });
             }
         } catch (error) {
-            console.error('[PlayerStore] setPlayNext error:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1253,12 +1269,12 @@ export const usePlayerStore = create<PlayerStore>()(
 
             // 2. Async native removal (don't await to avoid UI lag)
             TrackPlayer.remove(index).catch(err => {
-                console.error('[PlayerStore] Background removal failed:', err);
+                Sentry.captureException(err);
                 // Sync back if it fails significantly
                 get().syncWithTrackPlayer();
             });
         } catch (error) {
-            console.error('[PlayerStore] removeFromQueue error:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1273,7 +1289,7 @@ export const usePlayerStore = create<PlayerStore>()(
             });
             updateWidgetState();
         } catch (error) {
-            console.error('[PlayerStore] clearQueue error:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1350,7 +1366,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 }
             }
         } catch (error) {
-            console.error("[PlayerStore] toggleShuffle error:", error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1400,7 +1416,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 set({ currentIndex: nativeIndex });
             }
         } catch (error) {
-            console.error('[PlayerStore] reorderQueue error:', error);
+            Sentry.captureException(error);
             // Re-sync if it fails
             await get().syncWithTrackPlayer();
         }
@@ -1593,7 +1609,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 }
             }
         } catch (error) {
-            console.error('[PlayerStore] autoRefillQueue critical error:', error);
+            Sentry.captureException(error);
         } finally {
             set({ _isRefilling: false });
         }
@@ -1650,7 +1666,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 set({ activeHistoryId: res.data.historyId });
             }
         } catch (error) {
-            console.error('[PlayerStore] Failed to track history:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1693,7 +1709,7 @@ export const usePlayerStore = create<PlayerStore>()(
             // Clean up MMKV pending sync on success
             storage.delete('pending_progress_sync');
         } catch (error) {
-            console.error('[PlayerStore] Failed to sync progress:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1714,7 +1730,9 @@ export const usePlayerStore = create<PlayerStore>()(
                                })());
 
         if (currentFailures >= 3 && !isOfflineTrack) {
-            console.error('[PlayerStore] Circuit breaker triggered: 3 consecutive backend failures.');
+            if (__DEV__) {
+                console.log('[PlayerStore] Circuit breaker triggered: 3 consecutive backend failures.');
+            }
             TrackPlayer.pause();
             set({ 
                 isPlaying: false, 
@@ -1748,12 +1766,12 @@ export const usePlayerStore = create<PlayerStore>()(
                     await TrackPlayer.seekTo(position || 0);
                     await TrackPlayer.play();
                 } catch (seekError) {
-                    console.error('[PlayerStore] Error seeking during resume:', seekError);
+                    Sentry.captureException(seekError);
                 }
             }
 
         } catch (error) {
-            console.error('[PlayerStore] Failed to resume playback:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1772,7 +1790,7 @@ export const usePlayerStore = create<PlayerStore>()(
                 activeHistoryId: null,
             });
         } catch (error) {
-            console.error('[PlayerStore] Reset failed:', error);
+            Sentry.captureException(error);
         }
     },
 
@@ -1806,7 +1824,6 @@ export const usePlayerStore = create<PlayerStore>()(
     }),
     onRehydrateStorage: () => (state, error) => {
         if (error) {
-            console.error('[PlayerStore] Hydration failed:', error);
             Sentry.captureException(error, {
                 tags: { operation: 'store_hydration' }
             });

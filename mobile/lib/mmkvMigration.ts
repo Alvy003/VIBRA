@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { mmkvStorage } from './mmkvStorage';
+import * as Sentry from '@sentry/react-native';
 
 /**
  * Safely migrates a Zustand store's persistence from AsyncStorage to MMKV.
@@ -19,7 +20,9 @@ export async function migrateStoreToMMKV(asyncKey: string): Promise<boolean> {
         // Check if legacy data exists in AsyncStorage
         const legacyData = await AsyncStorage.getItem(asyncKey);
         if (legacyData) {
-            console.log(`[MMKV Migration] Migrating ${asyncKey} from AsyncStorage to MMKV...`);
+            if (__DEV__) {
+                console.log(`[MMKV Migration] Migrating ${asyncKey} from AsyncStorage to MMKV...`);
+            }
             
             // 1. Write to MMKV
             mmkvStorage.setItem(asyncKey, legacyData);
@@ -29,17 +32,19 @@ export async function migrateStoreToMMKV(asyncKey: string): Promise<boolean> {
             if (verification === legacyData) {
                 // 3. Remove legacy data ONLY after successful migration verification
                 await AsyncStorage.removeItem(asyncKey);
-                console.log(`[MMKV Migration] ${asyncKey} successfully migrated.`);
+                if (__DEV__) {
+                    console.log(`[MMKV Migration] ${asyncKey} successfully migrated.`);
+                }
                 return true;
             } else {
-                console.error(`[MMKV Migration] Verification failed for ${asyncKey}. Aborting deletion.`);
+                Sentry.captureException(new Error(`[MMKV Migration] Verification failed for ${asyncKey}. Aborting deletion.`));
                 return false;
             }
         }
         
         return false; // No legacy data found
     } catch (error) {
-        console.error(`[MMKV Migration] Failed to migrate ${asyncKey}:`, error);
+        Sentry.captureException(error);
         return false;
     }
 }

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { axiosInstance } from '@/lib/axios';
 import Constants from 'expo-constants';
+import * as Sentry from '@sentry/react-native';
 
 interface UpdateStore {
     currentVersion: string | null;
@@ -36,7 +37,7 @@ export const useUpdateStore = create<UpdateStore>((set) => ({
                 isLoading: false,
             });
         } catch (error) {
-            console.error('[UpdateStore] Failed to check for updates:', error);
+            Sentry.captureException(error);
             set({ isLoading: false });
         }
     },

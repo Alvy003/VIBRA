@@ -17,7 +17,6 @@ interface DiscoveryMixCardProps {
 
 export const DiscoveryMixCard = React.memo(({ type }: DiscoveryMixCardProps) => {
     if (__DEV__) {
-        console.log(`[DiscoveryMixCard] Render (type: ${type})`);
     }
     const router = useRouter();
     const dailyMix = useStreamStore(s => s.dailyMix);

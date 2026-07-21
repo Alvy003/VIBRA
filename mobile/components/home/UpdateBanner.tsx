@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import * as Sentry from '@sentry/react-native';
 import { View, Text, StyleSheet, TouchableOpacity, Linking, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Colors from '@/constants/Colors';
@@ -14,7 +15,7 @@ export const UpdateBanner = ({ apkLink, version }: UpdateBannerProps) => {
 
     const handleUpdate = () => {
         Linking.openURL(apkLink).catch(err => {
-            console.error('Failed to open update link:', err);
+            Sentry.captureException(err);
         });
         setVisible(false);
     };

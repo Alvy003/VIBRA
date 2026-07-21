@@ -15,7 +15,6 @@ const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const NewReleasesSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     if (__DEV__) {
-        console.log('[NewReleasesSection] Render');
     }
     const router = useRouter();
     const newAlbums = useStreamStore(s => s.homepageData?.newAlbums);

@@ -48,9 +48,7 @@ import CollectionOptions, { CollectionOptionsRef } from '@/components/Collection
 const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
 
 export default function HomeScreen() {
-  if (__DEV__) {
-    console.log('[HomeScreen] Render');
-  }
+
   const { user, isLoaded } = useUser();
   const { isSignedIn } = useAuth();
   const { isOnline } = useNetworkStore();

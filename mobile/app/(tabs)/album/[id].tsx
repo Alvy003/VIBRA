@@ -1,5 +1,6 @@
 import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { DownloadStateIcon } from '@/components/DownloadedIcon';
+import * as Sentry from '@sentry/react-native';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import SaveStateIcon from '@/components/SaveStateIcon';
 import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
@@ -16,6 +17,7 @@ import { FlashList as OriginalFlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useNetInfo } from '@react-native-community/netinfo';
 import {
     ArrowLeft,
     MoreVertical,
@@ -208,12 +210,17 @@ export default function AlbumScreen() {
     const artworkUrl = useMemo(() => resolveAssetUrl(currentAlbum?.imageUrl), [currentAlbum?.imageUrl]);
     const colors = useDynamicColors(artworkUrl);
 
+    const netInfo = useNetInfo();
+    const isOffline = netInfo.isConnected === false;
+
     useEffect(() => {
         if (id) {
             setIsInitialLoading(true);
-            fetchAlbumById(id as string);
+            if (!isOffline) {
+                fetchAlbumById(id as string);
+            }
         }
-    }, [id]);
+    }, [id, isOffline]);
 
     useEffect(() => {
         if (!isLoading && currentAlbum) {
@@ -351,7 +358,7 @@ export default function AlbumScreen() {
             const message = `Check out this album "${currentAlbum.title}" on Vibra!\n\nListen here: https://vibra-969f.onrender.com/album/${cleanId}`;
             await Share.share({ message, title: currentAlbum.title });
         } catch (error) {
-            console.error('Error sharing album:', error);
+            Sentry.captureException(error);
         }
     }, [currentAlbum, id]);
 

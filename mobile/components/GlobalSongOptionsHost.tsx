@@ -4,6 +4,7 @@
 // which sets state here. This eliminates per-row BottomSheet instantiation.
 //
 import Colors from '@/constants/Colors';
+import * as Sentry from '@sentry/react-native';
 import { useDownloadStore } from '@/stores/useDownloadStore';
 import { useMusicStore } from '@/stores/useMusicStore';
 import { usePlayerStore } from '@/stores/usePlayerStore';
@@ -56,7 +57,7 @@ export const GlobalSongOptionsHost = React.memo(() => {
             const message = `Check out "${song.title}" by ${song.artist} on Vibra!\n\nListen here: https://vibra-969f.onrender.com/track/${cleanId}`;
             await Share.share({ message, title: song.title });
         } catch (error) {
-            console.error('[GlobalSongOptionsHost] Share error:', error);
+            Sentry.captureException(error);
         }
     }, [song, handleClose]);
 

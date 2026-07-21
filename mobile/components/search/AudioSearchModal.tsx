@@ -1,5 +1,6 @@
 // components/search/AudioSearchModal.tsx
 import Colors from '@/constants/Colors';
+import * as Sentry from '@sentry/react-native';
 import { useSearchStore } from '@/stores/useSearchStore';
 import {
   RecordingPresets,
@@ -181,7 +182,7 @@ export const AudioSearchModal = ({ visible, onClose, onResult }: AudioSearchModa
             setErrorText("Couldn't identify the song");
           }
         } catch (err) {
-          console.error('[AudioSearch] Error:', err);
+          Sentry.captureException(err);
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
           setState('error');
           setErrorText('Something went wrong');

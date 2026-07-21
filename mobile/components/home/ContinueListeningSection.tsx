@@ -16,7 +16,6 @@ const ITEM_SIZE = CARD_WIDTH + CARD_MARGIN;
 
 export const ContinueListeningSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
     if (__DEV__) {
-        console.log('[ContinueListeningSection] Render');
     }
     
     const { isSignedIn, isLoaded } = useAuth();

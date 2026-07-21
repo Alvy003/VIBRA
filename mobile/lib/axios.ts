@@ -13,7 +13,9 @@ export const getAuthToken = () => authToken;
 
 export const incrementSessionVersion = () => {
     sessionVersion++;
-    console.log(`[Axios] Session version incremented to: ${sessionVersion}`);
+    if (__DEV__) {
+        console.log(`[Axios] Session version incremented to: ${sessionVersion}`);
+    }
 };
 
 export const getSessionVersion = () => sessionVersion;
@@ -21,14 +23,18 @@ export const getSessionVersion = () => sessionVersion;
 const API_URL_FROM_CONFIG = Constants.expoConfig?.extra?.apiUrl;
 const API_URL_FROM_ENV = process.env.EXPO_PUBLIC_API_URL;
 
-console.log("[Axios] Config API URL:", API_URL_FROM_CONFIG);
-console.log("[Axios] Env API URL:", API_URL_FROM_ENV);
-console.log("[Axios] App Variant:", process.env.APP_VARIANT);
-console.log("[Axios] Node Env:", process.env.NODE_ENV);
+if (__DEV__) {
+    console.log("[Axios] Config API URL:", API_URL_FROM_CONFIG);
+    console.log("[Axios] Env API URL:", API_URL_FROM_ENV);
+    console.log("[Axios] App Variant:", process.env.APP_VARIANT);
+    console.log("[Axios] Node Env:", process.env.NODE_ENV);
+}
 
 const BASE_URL = API_URL_FROM_CONFIG || API_URL_FROM_ENV;
 
-console.log("[Axios] Base URL being used:", BASE_URL);
+if (__DEV__) {
+    console.log("[Axios] Base URL being used:", BASE_URL);
+}
 
 export const axiosInstance = axios.create({
     baseURL: BASE_URL + "/api",
@@ -58,7 +64,9 @@ axiosInstance.interceptors.response.use(
         // Discard stale responses if session version changed
         const reqSessionVersion = (response.config as any)?.sessionVersion;
         if (reqSessionVersion !== undefined && reqSessionVersion !== sessionVersion) {
-            console.log(`[Axios] Discarding response from stale session (req: ${reqSessionVersion}, current: ${sessionVersion})`);
+            if (__DEV__) {
+                console.log(`[Axios] Discarding response from stale session (req: ${reqSessionVersion}, current: ${sessionVersion})`);
+            }
             return Promise.reject(new Error("STALE_SESSION"));
         }
 
@@ -78,7 +86,9 @@ axiosInstance.interceptors.response.use(
         // Discard stale errors if session version changed
         const reqSessionVersion = (error.config as any)?.sessionVersion;
         if (reqSessionVersion !== undefined && reqSessionVersion !== sessionVersion) {
-            console.log(`[Axios] Discarding error from stale session (req: ${reqSessionVersion}, current: ${sessionVersion})`);
+            if (__DEV__) {
+                console.log(`[Axios] Discarding error from stale session (req: ${reqSessionVersion}, current: ${sessionVersion})`);
+            }
             return Promise.reject(new Error("STALE_SESSION"));
         }
 
@@ -135,10 +145,12 @@ axiosInstance.interceptors.response.use(
 
         if (status === 401) {
             if (authToken) {
-                console.warn("[Axios] 401 Unauthorized error - Token might be expired or invalid", {
-                    url: configUrl,
-                    hasToken: true
-                });
+                if (__DEV__) {
+                    console.warn("[Axios] 401 Unauthorized error - Token might be expired or invalid", {
+                        url: configUrl,
+                        hasToken: true
+                    });
+                }
             } else {
                 // Expected during early startup before ClerkAuthHandler syncs
                 // console.debug("[Axios] 401 (Expected) - No token synced yet for:", error.config?.url);

@@ -14,7 +14,6 @@ export const HomeHeroSection = React.memo(({
   heroParallaxStyle 
 }: HomeHeroSectionProps) => {
   if (__DEV__) {
-    console.log('[HomeHeroSection] Render');
   }
   const insets = useSafeAreaInsets();
 

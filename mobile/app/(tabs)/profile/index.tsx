@@ -1,4 +1,5 @@
 import React, { useCallback, useRef } from 'react';
+import * as Sentry from '@sentry/react-native';
 import {
   View,
   Text,
@@ -46,7 +47,7 @@ export default function ProfileScreen() {
       await signOut();
       router.replace('/(auth)/login' as any);
     } catch (error) {
-      console.error('Logout error:', error);
+      Sentry.captureException(error);
     }
   }, [signOut, router, resetAllStores]);
 

@@ -4,6 +4,7 @@ import { mmkvStorage } from "@/lib/mmkvStorage";
 import { axiosInstance } from "@/lib/axios";
 import { useOnboardingStore } from "./useOnboardingStore";
 import { useMusicStore } from "./useMusicStore";
+import * as Sentry from '@sentry/react-native';
 
 // Mobile does not have CORS restrictions, so we can stream directly from CDNs!
 function proxyAudioUrl(originalUrl: string): string {
@@ -149,7 +150,7 @@ export const useStreamStore = create<StreamStore>()(
                 searchResults: res.data.songs || [],
             });
         } catch (error) {
-            console.error("[StreamStore] Search all failed:", error);
+            Sentry.captureException(error);
             set({ searchAllResults: null, searchResults: [] });
         } finally {
             if (get().searchQuery === query) {
@@ -175,14 +176,18 @@ export const useStreamStore = create<StreamStore>()(
         if (get().isLoadingHomepage) return;
 
         const ageSec = hasCache ? Math.round((now - fetchedAt) / 1000) : 0;
-        console.log(`[StreamStore] fetchHomepage called. forceRefresh: ${forceRefresh}, hasCache: ${hasCache}, cacheAge: ${ageSec}s, isExpired: ${isExpired}`);
+        if (__DEV__) {
+            console.log(`[StreamStore] fetchHomepage called. forceRefresh: ${forceRefresh}, hasCache: ${hasCache}, cacheAge: ${ageSec}s, isExpired: ${isExpired}`);
+        }
 
         if (hasCache) {
-            console.log(`[StreamStore] Homepage loaded from MMKV (Age: ${ageSec}s)`);
-            if (isExpired) {
-                console.log(`[StreamStore] Cache expired (Age: ${ageSec}s > 86400s)`);
-            } else {
-                console.log(`[StreamStore] Cache valid (Age: ${ageSec}s <= 86400s)`);
+            if (__DEV__) {
+                console.log(`[StreamStore] Homepage loaded from MMKV (Age: ${ageSec}s)`);
+                if (isExpired) {
+                    console.log(`[StreamStore] Cache expired (Age: ${ageSec}s > 86400s)`);
+                } else {
+                    console.log(`[StreamStore] Cache valid (Age: ${ageSec}s <= 86400s)`);
+                }
             }
             if (!forceRefresh && !isExpired) {
                 return;
@@ -194,7 +199,9 @@ export const useStreamStore = create<StreamStore>()(
         if (shouldShowSkeleton) {
             set({ isLoadingHomepage: true });
         } else {
-            console.log(`[StreamStore] Silent refresh started`);
+            if (__DEV__) {
+                console.log(`[StreamStore] Silent refresh started`);
+            }
         }
 
         try {
@@ -210,20 +217,26 @@ export const useStreamStore = create<StreamStore>()(
             const newDataStr = JSON.stringify(res.data);
             
             if (prevDataStr !== newDataStr) {
-                console.log("[StreamStore] Homepage updated");
+                if (__DEV__) {
+                    console.log("[StreamStore] Homepage updated");
+                }
                 set({ 
                     homepageData: res.data,
                     homepageFetchedAt: Date.now()
                 });
             } else {
-                console.log("[StreamStore] Homepage unchanged");
+                if (__DEV__) {
+                    console.log("[StreamStore] Homepage unchanged");
+                }
                 set({
                     homepageFetchedAt: Date.now()
                 });
             }
-            console.log("[StreamStore] Cache persisted");
+            if (__DEV__) {
+                console.log("[StreamStore] Cache persisted");
+            }
         } catch (error) {
-            console.error("[StreamStore] Failed to fetch homepage:", error);
+            Sentry.captureException(error);
         } finally {
             if (shouldShowSkeleton) {
                 set({ isLoadingHomepage: false });
@@ -232,7 +245,9 @@ export const useStreamStore = create<StreamStore>()(
     },
 
     invalidateHomepageCache: () => {
-        console.log("[StreamStore] Invalidate homepage cache");
+        if (__DEV__) {
+            console.log("[StreamStore] Invalidate homepage cache");
+        }
         set({ homepageData: null, homepageFetchedAt: null });
     },
 
@@ -275,7 +290,7 @@ export const useStreamStore = create<StreamStore>()(
                 set({ dailyMixFetchedAt: Date.now(), dailyMixDate: todayStr });
             }
         } catch (error) {
-            console.error("[StreamStore] Failed to fetch daily mix:", error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingDailyMix: false });
         }
@@ -326,7 +341,7 @@ export const useStreamStore = create<StreamStore>()(
                 set({ weeklyMixFetchedAt: Date.now(), weeklyMixWeek: currentWeek });
             }
         } catch (error) {
-            console.error("[StreamStore] Failed to fetch weekly mix:", error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingWeeklyMix: false });
         }
@@ -372,7 +387,7 @@ export const useStreamStore = create<StreamStore>()(
                 }
             }
         } catch (error) {
-            console.error('[StreamStore] Failed to fetch because-you-played recommendations:', error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingBecauseYouPlayed: false });
         }
@@ -422,7 +437,7 @@ export const useStreamStore = create<StreamStore>()(
                 }
             }
         } catch (error) {
-            console.error('[StreamStore] Failed to fetch rediscover-favorites recommendations:', error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingRediscoverFavorites: false });
         }
@@ -470,7 +485,7 @@ export const useStreamStore = create<StreamStore>()(
                 }
             }
         } catch (error) {
-            console.error('[StreamStore] Failed to fetch followed-artists recommendations:', error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingFollowedArtists: false });
         }
@@ -518,7 +533,7 @@ export const useStreamStore = create<StreamStore>()(
             }
         } catch (error: any) {
             if (error.response?.status !== 401) {
-                console.error('[StreamStore] Failed to fetch continue-listening:', error);
+                Sentry.captureException(error);
             }
         } finally {
             set({ isLoadingContinueListening: false });
@@ -567,7 +582,7 @@ export const useStreamStore = create<StreamStore>()(
             }
         } catch (error: any) {
             if (error.response?.status !== 401) {
-                console.error('[StreamStore] Failed to fetch frequent-collections:', error);
+                Sentry.captureException(error);
             }
         } finally {
             set({ isLoadingFrequentCollections: false });
@@ -580,7 +595,7 @@ export const useStreamStore = create<StreamStore>()(
             const res = await axiosInstance.get(`/stream/albums/${source}/${id}`);
             set({ currentExternalAlbum: res.data });
         } catch (error) {
-            console.error("[StreamStore] Failed to fetch external album:", error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingDetail: false });
         }
@@ -592,7 +607,7 @@ export const useStreamStore = create<StreamStore>()(
             const res = await axiosInstance.get(`/stream/playlists/${source}/${id}`);
             set({ currentExternalPlaylist: res.data });
         } catch (error) {
-            console.error("[StreamStore] Failed to fetch external playlist:", error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingDetail: false });
         }
@@ -604,7 +619,7 @@ export const useStreamStore = create<StreamStore>()(
             const res = await axiosInstance.get(`/stream/artists/${source}/${id}`);
             set({ currentExternalArtist: res.data });
         } catch (error) {
-            console.error("[StreamStore] Failed to fetch external artist:", error);
+            Sentry.captureException(error);
         } finally {
             set({ isLoadingDetail: false });
         }

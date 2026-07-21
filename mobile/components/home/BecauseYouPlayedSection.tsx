@@ -26,7 +26,6 @@ interface BecauseYouPlayedData {
 
 export const BecauseYouPlayedSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
   if (__DEV__) {
-    console.log('[BecauseYouPlayedSection] Render');
   }
   const data = useStreamStore(s => s.becauseYouPlayedData) as BecauseYouPlayedData | null;
   const isLoading = useStreamStore(s => s.isLoadingBecauseYouPlayed);

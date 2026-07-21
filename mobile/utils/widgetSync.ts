@@ -1,6 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
 import { State } from 'react-native-track-player';
+import * as Sentry from '@sentry/react-native';
 
 const FS = FileSystem as any;
 
@@ -79,7 +80,7 @@ async function _doSyncWidget(
             downloadPromise = FileSystem.downloadAsync(artworkUrl, localUri)
               .then((result) => result.uri.replace('file://', ''))
               .catch((err) => {
-                console.error('[widgetSync] Artwork download failed:', err);
+                Sentry.captureException(err);
                 return null;
               })
               .finally(() => {
@@ -97,7 +98,9 @@ async function _doSyncWidget(
               const latestState = usePlayerStore.getState();
               
               if (latestState.currentTrack?.artwork !== artworkUrl) {
-                console.log('[widgetSync] Discarded stale artwork for:', title);
+                if (__DEV__) {
+                  console.log('[widgetSync] Discarded stale artwork for:', title);
+                }
                 return;
               }
               
@@ -113,7 +116,7 @@ async function _doSyncWidget(
                 .then(() => VibraWidget.updateWidget(currentTitle, currentArtist, downloadedPath, currentIsPlaying))
                 .catch(() => {});
             } catch (err) {
-              console.error('[widgetSync] Phase 2 post-download error:', err);
+              Sentry.captureException(err);
             }
           });
 
@@ -124,6 +127,6 @@ async function _doSyncWidget(
 
     VibraWidget.updateWidget(title, artist, localPath, isPlaying);
   } catch (error) {
-    console.error('[widgetSync] Error updating widget:', error);
+    Sentry.captureException(error);
   }
 }

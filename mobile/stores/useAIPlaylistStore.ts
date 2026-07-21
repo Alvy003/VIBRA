@@ -1,6 +1,7 @@
 import { axiosInstance, setAuthToken } from '@/lib/axios';
 import * as Haptics from 'expo-haptics';
 import { create } from 'zustand';
+import * as Sentry from '@sentry/react-native';
 
 interface AIPlaylistTrack {
   externalId: string;
@@ -227,7 +228,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         });
       }
     } catch (error: any) {
-      console.error('[AI] Analysis error:', error);
+      Sentry.captureException(error);
       set({
         error: error.response?.data?.message || 'Failed to analyze. Please try again.',
         generationStage: 'error',
@@ -310,12 +311,12 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
           usePlaylistStore.getState().fetchUserPlaylists();
           useSavedItemsStore.getState().fetchSavedItems();
         } catch (e) {
-          console.error('[AI] Auto-save failed:', e);
+          Sentry.captureException(e);
         }
       }
     } catch (error: any) {
       clearInterval(progressInterval);
-      console.error('[AI] Generation error:', error);
+      Sentry.captureException(error);
 
       set({
         error: error.response?.data?.message || 'Failed to generate playlist. Please try again.',
@@ -340,7 +341,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         isGenerating: false,
       });
     } catch (error: any) {
-      console.error('[AI] Fetch error:', error);
+      Sentry.captureException(error);
       set({
         error: 'Failed to load playlist',
         generationStage: 'error',
@@ -356,7 +357,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
     try {
       await axiosInstance.post(`/ai-playlists/${id}/play`);
     } catch (error) {
-      console.error('[AI] Play increment error:', error);
+      Sentry.captureException(error);
     }
   },
 
@@ -384,7 +385,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         return state;
       });
     } catch (error) {
-      console.error('[AI] Save toggle error:', error);
+      Sentry.captureException(error);
     }
   },
 
@@ -452,7 +453,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
         }));
       }
     } catch (error: any) {
-      console.error('[AI] analyzeAndGenerate error:', error);
+      Sentry.captureException(error);
       set({
         error: error.response?.data?.message || 'Something went wrong.',
         generationStage: 'error',
@@ -551,7 +552,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
             return true;
           }
         } catch (e) {
-          console.error('[SpotifyImport] Poll error:', e);
+          Sentry.captureException(e);
         }
         return false;
       };
@@ -595,7 +596,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error: any) {
       clearInterval(progressInterval);
-      console.error('[SpotifyImport] Store error:', error);
+      Sentry.captureException(error);
       set({
         error: error.response?.data?.message || 'Failed to import Spotify playlist. Check the URL and try again.',
         isGenerating: false,
@@ -688,7 +689,7 @@ export const useAIPlaylistStore = create<AIPlaylistStore>((set, get) => ({
             return true;
           }
         } catch (e) {
-          console.error('[YoutubeImport] Poll error:', e);
+          Sentry.captureException(e);
         }
         return false;
       };

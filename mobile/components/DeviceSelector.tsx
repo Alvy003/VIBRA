@@ -223,7 +223,7 @@ const DeviceSelector = React.forwardRef<DeviceSelectorRef, DeviceSelectorProps>(
           >
             <DeviceIcon
               type={currentDevice?.type || 'local'}
-              size={compact ? 20 : 16}
+              size={compact ? 18 : 16}
               color={currentDevice?.type === 'local' || !currentDevice ? 'rgba(218, 214, 214, 1)' : ACCENT_COLOR}
             />
             {currentDevice?.type !== 'local' && currentDevice && (
@@ -321,7 +321,7 @@ const styles = StyleSheet.create({
     maxWidth: 200,
   },
   pillCompact: {
-    gap: 6,
+    gap: 4,
     paddingVertical: 6,
   },
   pillText: {
@@ -330,7 +330,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   pillTextCompact: {
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '500',
   },
   header: {
     flexDirection: 'row',

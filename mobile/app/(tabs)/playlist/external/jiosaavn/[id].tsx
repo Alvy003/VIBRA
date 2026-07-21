@@ -1,5 +1,6 @@
 import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { DownloadStateIcon } from '@/components/DownloadedIcon';
+import * as Sentry from '@sentry/react-native';
 import ConfirmationModal from '@/components/modals/ConfirmationModal';
 import SaveStateIcon from '@/components/SaveStateIcon';
 import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
@@ -16,6 +17,7 @@ import { FlashList as OriginalFlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
+import { useNetInfo } from '@react-native-community/netinfo';
 import {
     ArrowLeft,
     MoreVertical
@@ -256,16 +258,21 @@ export default function ExternalPlaylistScreen() {
     const artworkUrl = useMemo(() => resolveAssetUrl(playlist?.imageUrl), [playlist?.imageUrl]);
     const colors = useDynamicColors(artworkUrl);
 
+    const netInfo = useNetInfo();
+    const isOffline = netInfo.isConnected === false;
+
     useEffect(() => {
         if (id) {
             // Reset scroll position on ID change
             listRef.current?.scrollToOffset({ offset: 0, animated: false });
             
             setIsInitialLoading(true);
-            fetchExternalPlaylist('jiosaavn', id as string);
+            if (!isOffline) {
+                fetchExternalPlaylist('jiosaavn', id as string);
+            }
         }
         return () => clearDetail();
-    }, [id]);
+    }, [id, isOffline]);
 
     // Handle system back gesture
     useEffect(() => {
@@ -421,7 +428,7 @@ export default function ExternalPlaylistScreen() {
             const message = `Check out this playlist "${displayPlaylist.title}" on Vibra!\n\nListen here: https://vibra-969f.onrender.com/playlist/external/jiosaavn/${cleanId}`;
             await Share.share({ message, title: displayPlaylist.title });
         } catch (error) {
-            console.error('Error sharing playlist:', error);
+            Sentry.captureException(error);
         }
     }, [displayPlaylist, id]);
 

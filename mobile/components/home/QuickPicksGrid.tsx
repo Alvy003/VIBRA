@@ -59,7 +59,6 @@ const QuickPickCard = React.memo(({
   }
 
   if (__DEV__ && item) {
-    console.log(`[QuickPickCard] Render (title: ${item.title})`);
   }
   const scale = useSharedValue(1);
   const playOpacity = useSharedValue(0);

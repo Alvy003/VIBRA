@@ -11,7 +11,9 @@ import 'react-native-reanimated';
 import '../global.css';
 
 import * as SecureStore from 'expo-secure-store';
-
+import { useNetInfo } from '@react-native-community/netinfo';
+import { PostHogProvider } from 'posthog-react-native';
+import { initAnalytics } from '@/lib/analytics';
 import Colors from '@/constants/Colors'; // Added Colors import
 import * as Sentry from '@sentry/react-native';
 
@@ -112,11 +114,13 @@ const tokenCache = {
       if (item) {
         // console.log(`${key} was used 🔐 \n`);
       } else {
-        console.log('No values stored under key: ' + key);
+        if (__DEV__) {
+          console.log('No values stored under key: ' + key);
+        }
       }
       return item;
     } catch (error) {
-      console.error('SecureStore get item error: ', error);
+      Sentry.captureException(error);
       await SecureStore.deleteItemAsync(key);
       return null;
     }
@@ -183,7 +187,10 @@ function InitialLayout({ onReady }: { onReady: () => void }) {
     bootstrapAuth();
   }, [hasValidSession, setBootstrapped]);
 
-  const isEffectivelySignedIn = isLoaded ? isSignedIn : (isSignedIn || bootAuthenticated);
+  const netInfo = useNetInfo();
+  const isOffline = netInfo.isConnected === false;
+
+  const isEffectivelySignedIn = (isLoaded && !isOffline) ? isSignedIn : (isSignedIn || bootAuthenticated);
 
   useEffect(() => {
     // Fail-safe: if Clerk doesn't load in 2.5 seconds (likely offline/stuck), 
@@ -275,14 +282,16 @@ function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor: Colors.background }}>
-      <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
-        <ClerkAuthHandler />
-        <BottomSheetModalProvider>
-          <ThemeProvider value={DarkTheme}>
-            <InitialLayout onReady={() => setIsAppReady(true)} />
-          </ThemeProvider>
-        </BottomSheetModalProvider>
-      </ClerkProvider>
+      <PostHogProvider client={initAnalytics()}>
+        <ClerkProvider tokenCache={tokenCache} publishableKey={publishableKey}>
+          <ClerkAuthHandler />
+          <BottomSheetModalProvider>
+            <ThemeProvider value={DarkTheme}>
+              <InitialLayout onReady={() => setIsAppReady(true)} />
+            </ThemeProvider>
+          </BottomSheetModalProvider>
+        </ClerkProvider>
+      </PostHogProvider>
     </GestureHandlerRootView>
   );
 }

@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { axiosInstance } from "@/lib/axios";
 import { mmkvStorage } from "@/lib/mmkvStorage";
 import { migrateStoreToMMKV } from "@/lib/mmkvMigration";
+import * as Sentry from '@sentry/react-native';
 
 export interface UserMusicPreferences {
   languages: string[];
@@ -135,8 +136,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
           if (error.response?.status === 401) {
             return;
           }
-          console.error(`[OnboardingStore] Failed to fetch preferences (404/Error) from: ${axiosInstance.defaults.baseURL}/users/me/preferences`,
-            error.response?.status || error.message);
+          Sentry.captureException(error);
           set({ isPreferencesLoaded: true });
         }
       },
@@ -145,8 +145,7 @@ export const useOnboardingStore = create<OnboardingStore>()(
         try {
           await axiosInstance.post("/users/me/preferences", prefs);
         } catch (error: any) {
-          console.error(`[OnboardingStore] Failed to sync preferences to: ${axiosInstance.defaults.baseURL}/users/me/preferences`,
-            error.response?.status || error.message);
+          Sentry.captureException(error);
         }
       },
 

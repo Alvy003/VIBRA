@@ -1,5 +1,6 @@
 import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { DownloadStateIcon } from '@/components/DownloadedIcon';
+import * as Sentry from '@sentry/react-native';
 import SaveStateIcon from '@/components/SaveStateIcon';
 import { SharpPause, SharpPlay, SharpShuffle } from '@/components/SharpIcons';
 import { MediaListSkeleton } from '@/components/Skeleton';
@@ -20,6 +21,7 @@ import { FlashList as OriginalFlashList } from '@shopify/flash-list';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useGlobalSearchParams, useLocalSearchParams, useRouter } from 'expo-router';
+import { useNetInfo } from '@react-native-community/netinfo';
 import {
     ArrowLeft,
     MoreVertical,
@@ -335,15 +337,20 @@ export default function PlaylistScreen() {
         allSongs = (playlist?.songs || (playlist as any)?.tracks || []) as any[];
     }
 
+    const netInfo = useNetInfo();
+    const isOffline = netInfo.isConnected === false;
+
     useEffect(() => {
         if (id && !isDiscovery) {
             // Reset scroll position on ID change
             listRef.current?.scrollToOffset({ offset: 0, animated: false });
             
             setIsInitialLoading(true);
-            fetchPlaylistById(id as string);
+            if (!isOffline) {
+                fetchPlaylistById(id as string);
+            }
         }
-    }, [id, isDiscovery]);
+    }, [id, isDiscovery, isOffline]);
 
     // Handle system back gesture
     useEffect(() => {
@@ -515,7 +522,7 @@ export default function PlaylistScreen() {
             const message = `Check out this playlist "${playlist.name}" on Vibra!\n\nListen here: https://vibra-969f.onrender.com/playlist/${cleanId}`;
             await Share.share({ message, title: playlist.name });
         } catch (error) {
-            console.error('Error sharing playlist:', error);
+            Sentry.captureException(error);
         }
     }, [playlist, id]);
 

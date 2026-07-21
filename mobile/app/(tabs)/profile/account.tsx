@@ -1,4 +1,5 @@
 import React, { useCallback } from 'react';
+import * as Sentry from '@sentry/react-native';
 import {
   View,
   Text,
@@ -27,7 +28,7 @@ export default function AccountScreen() {
     try {
       await WebBrowser.openBrowserAsync('https://vibra-969f.onrender.com/profile');
     } catch (error) {
-      console.error('Error opening user profile:', error);
+      Sentry.captureException(error);
     }
   };
 

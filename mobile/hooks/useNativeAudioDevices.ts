@@ -51,7 +51,9 @@ export const useNativeAudioDevices = () => {
         isActive: true,
       };
     } catch (error) {
-      console.log('Error getting audio output:', error);
+      if (__DEV__) {
+        console.log('Error getting audio output:', error);
+      }
       return {
         id: 'local',
         name: Device.deviceName || Device.modelName || 'This Device',
@@ -82,7 +84,9 @@ export const useNativeAudioDevices = () => {
         isActive: d.id?.toString() === current.id,
       }));
     } catch (error) {
-      console.log('Error getting devices:', error);
+      if (__DEV__) {
+        console.log('Error getting devices:', error);
+      }
       const local = await getCurrentOutput();
       return [local];
     }
@@ -102,7 +106,9 @@ export const useNativeAudioDevices = () => {
       setCurrentDevice(current);
       setAllDevices(all);
     } catch (error) {
-      console.log('Scan error:', error);
+      if (__DEV__) {
+        console.log('Scan error:', error);
+      }
     } finally {
       setIsScanning(false);
     }
@@ -120,7 +126,9 @@ export const useNativeAudioDevices = () => {
       setTimeout(() => scanForDevices(), 1000);
       return result;
     } catch (error) {
-      console.log('Error showing picker:', error);
+      if (__DEV__) {
+        console.log('Error showing picker:', error);
+      }
       return false;
     }
   }, [scanForDevices]);

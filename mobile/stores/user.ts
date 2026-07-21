@@ -5,6 +5,7 @@ import { useOnboardingStore } from "./useOnboardingStore";
 import { usePlayerUIStore } from "./usePlayerUIStore";
 import { useDownloadStore } from "./useDownloadStore";
 import { useAuthBootstrapStore } from "./useAuthBootstrapStore";
+import * as Sentry from '@sentry/react-native';
 import { incrementSessionVersion, setAuthToken } from "../lib/axios";
 
 /**
@@ -13,7 +14,9 @@ import { incrementSessionVersion, setAuthToken } from "../lib/axios";
  */
 export const resetAllStores = async () => {
     try {
-        console.log("[Auth] Resetting all stores...");
+        if (__DEV__) {
+            console.log("[Auth] Resetting all stores...");
+        }
 
         // 1. Terminate session immediately to discard in-flight requests and force stack unmounting
         incrementSessionVersion();
@@ -38,8 +41,10 @@ export const resetAllStores = async () => {
         // 5. Clear download index (does not delete physical files)
         await useDownloadStore.getState().reset();
 
-        console.log("[Auth] All stores reset successfully.");
+        if (__DEV__) {
+            console.log("[Auth] All stores reset successfully.");
+        }
     } catch (error) {
-        console.error("[Auth] Error resetting stores:", error);
+        Sentry.captureException(error);
     }
 };

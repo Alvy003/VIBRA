@@ -1,5 +1,6 @@
 import CollectionOptions, { CollectionOptionsRef } from '@/components/CollectionOptions';
 import { DownloadedIcon } from '@/components/DownloadedIcon';
+import * as Sentry from '@sentry/react-native';
 import { UserProfileIcon } from '@/components/UserProfileIcon';
 import { CreatePlaylistModal } from '@/components/library/CreatePlaylistModal';
 import { LibraryPlusMenu } from '@/components/library/LibraryPlusMenu';
@@ -76,7 +77,7 @@ export default function LibraryScreen() {
                     type: 'special',
                     title: 'Downloads',
                     subtitle: `${downloadCount} tracks available offline`,
-                    icon: ArrowDown,
+                    icon: DownloadedIcon,
                     gradient: ['#0f172a', '#1e293b', '#334155'],
                     onPress: () => router.push('/(tabs)/downloads?from=library' as any)
                 });
@@ -98,7 +99,7 @@ export default function LibraryScreen() {
                         type: 'special',
                         title: 'Downloads',
                         subtitle: `${downloadCount} tracks available offline`,
-                        icon: ArrowDown,
+                        icon: DownloadedIcon,
                         gradient: ['#0f172a', '#1e293b', '#334155'],
                         onPress: () => router.push('/(tabs)/downloads?from=library' as any)
                     });
@@ -373,7 +374,7 @@ export default function LibraryScreen() {
                         const newPlaylist = await createPlaylist(name);
                         router.push(`/(tabs)/playlist/${newPlaylist._id}?from=library` as any);
                     } catch (err) {
-                        console.error("Failed to create playlist:", err);
+                        Sentry.captureException(err);
                     }
                 }}
             />
@@ -422,12 +423,16 @@ const LibraryListItem = React.memo(({ item, onPress, onLongPress }: any) => {
                         colors={item.gradient}
                         style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <item.icon
-                            size={28}
-                            color={Colors.textPrimary}
-                            strokeWidth={2}
-                            {...(item.icon === Heart ? { fill: Colors.textPrimary } : {})}
-                        />
+                        {item.id === 'downloads' ? (
+                            <DownloadedIcon variant="medium" status="idle" color={Colors.textPrimary} />
+                        ) : (
+                            <item.icon
+                                size={28}
+                                color={Colors.textPrimary}
+                                strokeWidth={2}
+                                {...(item.icon === Heart ? { fill: Colors.textPrimary } : {})}
+                            />
+                        )}
                     </LinearGradient>
                 ) : (
                     <View className="w-full h-full items-center justify-center">
@@ -490,7 +495,11 @@ const LibraryGridItem = React.memo(({ item, onPress, onLongPress }: any) => {
                         colors={item.gradient}
                         style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
                     >
-                        <item.icon size={28} color={Colors.textPrimary} fill={Colors.textPrimary} />
+                        {item.id === 'downloads' ? (
+                            <DownloadedIcon status='idle' size={36} color={Colors.textPrimary} />
+                        ) : (
+                            <item.icon size={28} color={Colors.textPrimary} fill={Colors.textPrimary} />
+                        )}
                     </LinearGradient>
                 ) : (
                     <View className="w-full h-full items-center justify-center">

@@ -13,7 +13,7 @@ export default {
   expo: {
     name: IS_DEV ? 'Vibra (Dev)' : 'Vibra',
     slug: 'vibra-mobile',
-    version: '1.1.0',
+    version: '1.1.1',
     orientation: 'portrait',
     icon: './assets/images/vibra-foreground.png',
     scheme: 'vibra',
@@ -40,7 +40,7 @@ export default {
       package: IS_DEV ? 'com.vibra.mobile.dev' : 'com.vibra.mobile',
       adaptiveIcon: {
         foregroundImage: './assets/images/vibra-foreground.png',
-        backgroundColor: '#121212',
+        backgroundColor: '#09090b',
         monochromeImage: './assets/images/vibra-monochrome.png'
       },
       edgeToEdgeEnabled: true,
@@ -83,6 +83,7 @@ export default {
       './plugins/withAndroidAuto.js',
       // Using our local manual plugin instead of the broken library plugin
       './plugins/withTrackPlayer.js',
+      'expo-localization',
       './plugins/withAudioDeviceModule.js',
       './plugins/withAndroidWidget.js',
       [

@@ -29,7 +29,6 @@ interface RediscoverTrack {
 
 export const RediscoverFavoritesSection = React.memo(({ onOptions }: { onOptions?: (item: any, type: string) => void }) => {
   if (__DEV__) {
-    console.log('[RediscoverFavoritesSection] Render');
   }
   const tracks = useStreamStore(s => s.rediscoverFavoritesData) as RediscoverTrack[] || [];
   const isLoading = useStreamStore(s => s.isLoadingRediscoverFavorites);
