@@ -136,7 +136,7 @@ export const redirectStream = async (req, res) => {
       const song = await jiosaavn.getSong(cleanId, validatedBitrate);
       if (song && song.streamUrl) {
         const isFallback = song.streamResolvedBitrate && song.streamResolvedBitrate !== validatedBitrate;
-        console.log(`\n[Stream]\nSong: ${song.title}\nRequested: ${validatedBitrate}\nResolved: ${song.streamResolvedBitrate || "unknown"}\nCache: ${song.streamCache}${isFallback ? " (Fallback Used)" : ""}\n`);
+        // console.log(`\n[Stream]\nSong: ${song.title}\nRequested: ${validatedBitrate}\nResolved: ${song.streamResolvedBitrate || "unknown"}\nCache: ${song.streamCache}${isFallback ? " (Fallback Used)" : ""}\n`);
 
         // Use our robust proxy to bypass CDN blocks
         return res.redirect(`/api/stream/proxy/audio?url=${encodeURIComponent(song.streamUrl)}`);

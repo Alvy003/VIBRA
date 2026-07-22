@@ -905,7 +905,8 @@ export const jiosaavn = {
       // console.log("[JioSaavn] Building homepage via search for:", langList.join(", "));
 
       // Build search queries per language
-      const albumQueries = langList.map(lang => `${lang} new songs 2025`);
+      const currentYear = new Date().getFullYear();
+      const albumQueries = langList.map(lang => `${lang} new songs ${currentYear}`);
       const playlistQueries = langList.map(lang => `${lang} top playlist`);
       const trendingQueries = langList.map(lang => `${lang} trending`);
 
