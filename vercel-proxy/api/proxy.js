@@ -68,6 +68,10 @@ export default async function handler(req, res) {
       headers['Origin'] = req.headers['origin'];
     }
 
+    if (req.headers['cookie']) {
+      headers['Cookie'] = req.headers['cookie'];
+    }
+
     // ─── Timeout Management ───
     // Vercel Hobby plan has a strict 10s timeout. We abort at 8.5s to return a clean error response.
     const controller = new AbortController();
