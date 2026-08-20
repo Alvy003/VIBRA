@@ -354,9 +354,52 @@ export const jiosaavn = {
       const url = `https://www.jiosaavn.com/api.php?__call=content.getAlbumDetails&_format=json&cc=in&_marker=0%3F_marker%3D0&albumid=${id}`;
 
       const data = await jiosaavnFetch(url);
-      if (!data) return null;
 
-      const rawSongs = data.songs || data.list || [];
+      let rawSongs = [];
+      if (data && typeof data === "object" && !Array.isArray(data)) {
+        rawSongs = data.songs || data.list || [];
+      }
+
+      const isTrailerOrEmpty =
+        !rawSongs ||
+        rawSongs.length === 0 ||
+        rawSongs[0]?.song === "This is a sample trailer - testing" ||
+        rawSongs[0]?.title === "This is a sample trailer - testing";
+
+      // If album details returned dummy trailer data or 0 songs, check if ID is a single song / token
+      if (isTrailerOrEmpty) {
+        try {
+          const singleSong = await jiosaavn.getSong(id);
+          if (singleSong && singleSong.title) {
+            const cleanId = String(singleSong.externalId || singleSong._songId || id).replace(/^(jiosaavn_track_|jiosaavn_album_|jiosaavn_playlist_|jiosaavn_|yt_|youtube_)/, "");
+            const redirectUrl = `/api/stream/play/jiosaavn/${cleanId}`;
+            const songObj = {
+              ...singleSong,
+              externalId: `jiosaavn_${cleanId}`,
+              streamUrl: redirectUrl,
+              audioUrl: redirectUrl,
+              _encUrl: undefined,
+            };
+
+            return {
+              externalId: `jiosaavn_album_${id}`,
+              source: "jiosaavn",
+              type: "album",
+              title: singleSong.album || singleSong.title,
+              artist: singleSong.artist || "",
+              imageUrl: fixImageQuality(singleSong.imageUrl || ""),
+              year: singleSong.year || "",
+              songCount: 1,
+              language: capitalizeFirst(singleSong.language || ""),
+              songs: [songObj],
+            };
+          }
+        } catch (err) {
+          console.warn("[JioSaavn] getAlbum fallback getSong error:", err.message);
+        }
+        if (!data || isTrailerOrEmpty) return null;
+      }
+
       const mapped = rawSongs.map(mapJioSaavnSong).filter(Boolean);
       const songs = mapped.map(song => {
         const rawId = song.externalId || song._id || song.id;
@@ -759,23 +802,26 @@ export const jiosaavn = {
       if (!data) return null;
 
       // New albums
-      const rawNewAlbums = (data.new_albums || []).map((album) => ({
-        externalId: `jiosaavn_album_${album.id}`,
-        source: "jiosaavn",
-        type: "album",
-        title: cleanHtml(album.title || album.name || ""),
-        artist: cleanHtml(
-          album.artist || album.music || album.subtitle || ""
-        ),
-        imageUrl: fixImageQuality(album.image || ""),
-        year: album.year || "",
-        songCount: parseInt(album.song_count) || 0,
-        language: capitalizeFirst(album.language || ""),
-        _id: album.id,
-        // Helpers for filtering
-        releaseDate: album.more_info?.release_date || "",
-        rawSubtitle: album.subtitle || "",
-      }));
+      const rawNewAlbums = (data.new_albums || []).map((album) => {
+        const albumId = album.more_info?.album_id || album.id;
+        return {
+          externalId: `jiosaavn_album_${albumId}`,
+          source: "jiosaavn",
+          type: "album",
+          title: cleanHtml(album.title || album.name || ""),
+          artist: cleanHtml(
+            album.artist || album.music || album.subtitle || ""
+          ),
+          imageUrl: fixImageQuality(album.image || ""),
+          year: album.year || "",
+          songCount: parseInt(album.song_count) || 0,
+          language: capitalizeFirst(album.language || ""),
+          _id: albumId,
+          // Helpers for filtering
+          releaseDate: album.more_info?.release_date || "",
+          rawSubtitle: album.subtitle || "",
+        };
+      });
 
       // Apply strict filtering rules for New Releases
       const EXCLUDED_KEYWORDS = [
