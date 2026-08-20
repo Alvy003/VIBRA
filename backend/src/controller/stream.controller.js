@@ -126,7 +126,7 @@ export const getStreamUrl = async (req, res) => {
 export const redirectStream = async (req, res) => {
   try {
     const { source, id } = req.params;
-    const { bitrate } = req.query;
+    const { bitrate, proxy } = req.query;
 
     const allowedBitrates = ["320", "160", "96", "48"];
     const validatedBitrate = allowedBitrates.includes(bitrate) ? bitrate : "320";
@@ -136,10 +136,16 @@ export const redirectStream = async (req, res) => {
       const song = await jiosaavn.getSong(cleanId, validatedBitrate);
       if (song && song.streamUrl) {
         const isFallback = song.streamResolvedBitrate && song.streamResolvedBitrate !== validatedBitrate;
-        // console.log(`\n[Stream]\nSong: ${song.title}\nRequested: ${validatedBitrate}\nResolved: ${song.streamResolvedBitrate || "unknown"}\nCache: ${song.streamCache}${isFallback ? " (Fallback Used)" : ""}\n`);
 
-        // Use our robust proxy to bypass CDN blocks
-        return res.redirect(`/api/stream/proxy/audio?url=${encodeURIComponent(song.streamUrl)}`);
+        // Optional fallback: force Express proxying if ?proxy=true is explicitly requested
+        if (proxy === "true") {
+          // console.log(`[Stream Redirect] Song: "${song.title}" -> Proxying via Express fallback`);
+          return res.redirect(`/api/stream/proxy/audio?url=${encodeURIComponent(song.streamUrl)}`);
+        }
+
+        // Direct CDN redirect (eliminates Render outbound audio bandwidth)
+          // console.log(`[Stream Redirect] Song: "${song.title}" -> Direct 302 to CDN (${song.streamUrl.substring(0, 45)}...)`);
+        return res.redirect(song.streamUrl);
       }
     }
 
