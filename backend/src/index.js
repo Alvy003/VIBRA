@@ -178,6 +178,11 @@ app.use("/api/library/saved", savedItemRoutes);
 app.use('/api/ai-playlists', aiRateLimiter, aiPlaylistRoutes);
 app.use("/api/config", configRoutes);
 
+// Health check endpoint for uptime monitors & Render
+app.get(["/health", "/api/health"], (req, res) => {
+  res.status(200).json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
 // Production static (place AFTER /uploads so SPA doesn’t eat /uploads/voice)
 if (process.env.NODE_ENV === "production") {
 app.use(express.static(path.join(__dirname, "../../frontend/dist")));
